@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Palette, Globe, Loader2, Wand2, Save, AlertCircle, ExternalLink,
-  ChevronDown, ChevronUp, Trash2, Sparkles, Plug, Type, RefreshCw, Monitor,
+  ChevronDown, ChevronUp, Trash2, Sparkles, Plug, Type,
   PanelTop, PanelBottom, Check,
 } from 'lucide-react'
 import { saveTheme, deleteTheme, type ThemeData } from '@/lib/actions/theme'
@@ -99,9 +99,6 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
   const [tokens, setTokens] = useState<DesignTokens>({ ...DEFAULT_TOKENS, ...(initialTheme?.design_tokens ?? {}) })
 
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [previewHtml, setPreviewHtml] = useState('')
-  const [previewLoading, setPreviewLoading] = useState(!!initialTheme)
-  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const hasTheme = !!initialTheme
   const grabbed = !!extractedHeader || !!extractedFooter || !!extractedHead || hasTheme
@@ -121,61 +118,6 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
     detected_hosting: detectedHosting,
     design_tokens: tokens,
   })
-
-  const refreshPreview = useCallback(async (theme: ThemeData) => {
-    setPreviewLoading(true)
-    setPreviewError(null)
-    try {
-      const res = await fetch('/api/theme/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteId, theme }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setPreviewError(data.error ?? 'Error generant la vista prèvia'); return }
-      setPreviewHtml(data.html)
-    } catch {
-      setPreviewError('Error de xarxa generant la vista prèvia')
-    } finally {
-      setPreviewLoading(false)
-    }
-  }, [siteId])
-
-  // Render an initial preview for already-configured themes, built from the
-  // stable initialTheme prop. State is only set inside async callbacks (never
-  // synchronously in the effect body).
-  useEffect(() => {
-    if (!initialTheme) return
-    let active = true
-    const theme: ThemeData = {
-      reference_url: initialTheme.reference_url ?? null,
-      extracted_head: initialTheme.extracted_head ?? null,
-      extracted_header: initialTheme.extracted_header ?? null,
-      extracted_footer: initialTheme.extracted_footer ?? null,
-      extracted_scripts: initialTheme.extracted_scripts ?? null,
-      external_styles: initialTheme.external_styles ?? [],
-      external_scripts: initialTheme.external_scripts ?? [],
-      font_links: initialTheme.font_links ?? [],
-      base_url: initialTheme.base_url ?? null,
-      detected_framework: initialTheme.detected_framework ?? null,
-      detected_hosting: initialTheme.detected_hosting ?? null,
-      design_tokens: { ...DEFAULT_TOKENS, ...(initialTheme.design_tokens ?? {}) },
-    }
-    fetch('/api/theme/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ siteId, theme }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (!active) return
-        if (data?.html) setPreviewHtml(data.html)
-        else if (data?.error) setPreviewError(data.error)
-      })
-      .catch(() => { if (active) setPreviewError('Error de xarxa generant la vista prèvia') })
-      .finally(() => { if (active) setPreviewLoading(false) })
-    return () => { active = false }
-  }, [initialTheme, siteId])
 
   const handleGrab = async () => {
     const target = url.trim()
@@ -205,20 +147,6 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
       setTokens(newTokens)
 
       toast('Tema capturat correctament')
-      void refreshPreview({
-        reference_url: target,
-        extracted_head: data.extracted_head || null,
-        extracted_header: data.extracted_header || null,
-        extracted_footer: data.extracted_footer || null,
-        extracted_scripts: data.extracted_scripts || null,
-        external_styles: data.external_styles ?? [],
-        external_scripts: data.external_scripts ?? [],
-        font_links: data.font_links ?? [],
-        base_url: data.base_url || null,
-        detected_framework: data.detection?.framework ?? null,
-        detected_hosting: data.detection?.hosting ?? null,
-        design_tokens: newTokens,
-      })
     } catch {
       setError('Error de xarxa')
     } finally {
@@ -446,44 +374,6 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
                 <CodeArea label={`<script> · ${extractedScripts.length.toLocaleString()} chars`} value={extractedScripts} onChange={setExtractedScripts} rows={8} />
               </div>
             )}
-          </div>
-
-          {/* Preview canvas */}
-          <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
-              <div className="flex items-center gap-2">
-                <Monitor className="w-4 h-4 text-neutral-400" />
-                <h4 className="text-sm font-bold text-neutral-900">Vista prèvia de la integració</h4>
-              </div>
-              <button
-                onClick={() => refreshPreview(buildThemeData())}
-                disabled={previewLoading}
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-neutral-600 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {previewLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Actualitzar
-              </button>
-            </div>
-            <p className="text-[11px] text-neutral-500 px-6 pt-3">
-              Header i footer clonats + el feed amb les nostres plantilles vestides amb els teus tokens, amb els articles publicats reals d&apos;aquest lloc.
-            </p>
-            <div className="p-4">
-              {previewError ? (
-                <div className="flex items-center justify-center h-64 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 font-medium">{previewError}</div>
-              ) : previewHtml ? (
-                <iframe
-                  title="Vista prèvia del tema"
-                  srcDoc={previewHtml}
-                  sandbox="allow-scripts allow-same-origin allow-popups"
-                  className="w-full h-[620px] bg-white border border-neutral-200 rounded-xl"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-64 bg-neutral-50 border border-dashed border-neutral-200 rounded-xl text-sm text-neutral-400 gap-2">
-                  {previewLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Monitor className="w-6 h-6" />}
-                  {previewLoading ? 'Generant vista prèvia…' : 'Captura un tema per veure la vista prèvia'}
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Save bar */}
