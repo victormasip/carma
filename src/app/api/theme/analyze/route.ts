@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { parse, type HTMLElement } from 'node-html-parser'
 import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText } from '@/lib/scrape/http'
 import { extractTokens } from '@/lib/scrape/tokens'
+import { sanitizeStructural } from '@/lib/scrape/sanitize'
 
 const MAX_STYLESHEETS = 8
 
@@ -267,16 +268,16 @@ export async function POST(request: NextRequest) {
   const { headHtml, externalStyles, fontLinks, inlineCss } = extractHead(root, baseUrl)
   const { scriptsHtml, externalScripts } = extractScripts(root, baseUrl)
 
-  const headerHtml = extractRegion(root, baseUrl, [
+  const headerHtml = sanitizeStructural(extractRegion(root, baseUrl, [
     'header[role="banner"]', 'body > header', 'header.site-header', 'header#header',
     '.site-header', '.main-header', '.page-header', 'header',
     'nav[role="navigation"]', '.navbar', '.navigation',
-  ])
+  ]))
 
-  const footerHtml = extractRegion(root, baseUrl, [
+  const footerHtml = sanitizeStructural(extractRegion(root, baseUrl, [
     'footer[role="contentinfo"]', 'body > footer', 'footer.site-footer', 'footer#footer',
     '.site-footer', '.main-footer', '.page-footer', 'footer',
-  ])
+  ]))
 
   const detection = detectFramework(fetched.body, fetched.headers)
 
@@ -294,7 +295,10 @@ export async function POST(request: NextRequest) {
     extracted_head: headHtml,
     extracted_header: headerHtml,
     extracted_footer: footerHtml,
-    extracted_scripts: scriptsHtml,
+    // Scripts are intentionally excluded from the render output: client scripts
+    // that reference DOM elements from the original site cause blank pages and
+    // other breakage. Visual fidelity comes from CSS alone.
+    extracted_scripts: '',
     external_styles: [...new Set(externalStyles)],
     external_scripts: [...new Set(externalScripts)],
     font_links: [...new Set(fontLinks)],

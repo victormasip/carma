@@ -9,6 +9,7 @@
 //     global rules and the feed stays on-brand but consistently OUR layout.
 
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import { sanitizeHead, sanitizeStructural, stripScripts } from '@/lib/scrape/sanitize'
 
 type Theme = {
   extracted_head?: string | null
@@ -170,7 +171,7 @@ function buildHead(theme: Theme, title: string, tokens: DesignTokens): string {
   ]
   // Client head FIRST (fonts + stylesheets) so the cloned header/footer render
   // with the original look…
-  if (theme?.extracted_head) parts.push(theme.extracted_head)
+  if (theme?.extracted_head) parts.push(sanitizeHead(theme.extracted_head))
   // …then OUR token template CSS LAST so it wins for the feed.
   parts.push(`<style>${buildTemplateCss(tokens)}</style>`)
   return parts.join('\n')
@@ -222,9 +223,9 @@ function buildEmptyState(siteName: string): string {
 export function buildListingPage(theme: Theme, siteName: string, siteId: string, posts: Post[]): string {
   const tokens = tokensOf(theme)
   const head = buildHead(theme, siteName, tokens)
-  const header = theme?.extracted_header ?? ''
-  const footer = theme?.extracted_footer ?? ''
-  const scripts = theme?.extracted_scripts ?? ''
+  const header = sanitizeStructural(theme?.extracted_header ?? '')
+  const footer = sanitizeStructural(theme?.extracted_footer ?? '')
+  const scripts = stripScripts(theme?.extracted_scripts ?? '')
 
   let feed: string
   if (posts.length === 0) {
@@ -258,9 +259,9 @@ ${scripts}
 export function buildArticlePage(theme: Theme, siteName: string, siteId: string, post: Post): string {
   const tokens = tokensOf(theme)
   const head = buildHead(theme, `${post.title} · ${siteName}`, tokens)
-  const header = theme?.extracted_header ?? ''
-  const footer = theme?.extracted_footer ?? ''
-  const scripts = theme?.extracted_scripts ?? ''
+  const header = sanitizeStructural(theme?.extracted_header ?? '')
+  const footer = sanitizeStructural(theme?.extracted_footer ?? '')
+  const scripts = stripScripts(theme?.extracted_scripts ?? '')
 
   const contentHtml = getContentHtml(post)
   const featured = post.featured_image
