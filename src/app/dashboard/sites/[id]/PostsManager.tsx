@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { deletePost, togglePublish, togglePublishBulk, deletePostsBulk } from '@/lib/actions/posts'
 import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/Modal'
 
 type Post = { id: string; title: string; slug: string; is_published: boolean; created_at: string }
 type Filter = 'all' | 'published' | 'draft'
@@ -31,6 +32,7 @@ export default function PostsManager({
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const { toast } = useToast()
+  const confirm = useConfirm()
 
   const filtered = useMemo(() => initialPosts.filter(p => {
     const matchSearch = p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -67,8 +69,14 @@ export default function PostsManager({
     setSelected(new Set(filtered.map(p => p.id)))
   }
 
-  const handleDelete = (postId: string, title: string) => {
-    if (!confirm(`Estàs segur que vols eliminar "${title}"?`)) return
+  const handleDelete = async (postId: string, title: string) => {
+    const ok = await confirm({
+      title: 'Eliminar article',
+      message: `Segur que vols eliminar "${title}"? Aquesta acció no es pot desfer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    })
+    if (!ok) return
     startTransition(async () => {
       const result = await deletePost(postId, siteId)
       if (result.error) toast(result.error, 'error')
@@ -97,10 +105,16 @@ export default function PostsManager({
     })
   }
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const ids = [...selected]
     if (ids.length === 0) return
-    if (!confirm(`Eliminar ${ids.length} article${ids.length !== 1 ? 's' : ''}? Aquesta acció no es pot desfer.`)) return
+    const ok = await confirm({
+      title: `Eliminar ${ids.length} article${ids.length !== 1 ? 's' : ''}`,
+      message: 'Aquesta acció no es pot desfer.',
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    })
+    if (!ok) return
     startTransition(async () => {
       const result = await deletePostsBulk(siteId, ids)
       if (result.error) { toast(result.error, 'error'); return }
