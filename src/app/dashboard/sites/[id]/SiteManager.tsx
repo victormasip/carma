@@ -40,8 +40,8 @@ function EditNameModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-sm">
-      <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-premium p-10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-sm" style={{ animation: 'modal-fade 0.18s ease' }}>
+      <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-premium p-10" style={{ animation: 'modal-in 0.2s cubic-bezier(0.16,1,0.3,1)' }}>
         <button onClick={onClose} className="cursor-pointer absolute top-6 right-6 p-2 text-neutral-400 hover:text-neutral-900 bg-neutral-50 rounded-full transition-colors">
           <X className="w-5 h-5" />
         </button>
@@ -56,7 +56,7 @@ function EditNameModal({
         </div>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest pl-1">Nom del Lloc</label>
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">Nom del Lloc</label>
             <input
               type="text"
               value={name}
@@ -106,8 +106,8 @@ function DeleteSiteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-sm">
-      <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-premium p-10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-sm" style={{ animation: 'modal-fade 0.18s ease' }}>
+      <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-premium p-10" style={{ animation: 'modal-in 0.2s cubic-bezier(0.16,1,0.3,1)' }}>
         <button onClick={onClose} className="cursor-pointer absolute top-6 right-6 p-2 text-neutral-400 hover:text-neutral-900 bg-neutral-50 rounded-full transition-colors">
           <X className="w-5 h-5" />
         </button>
@@ -143,12 +143,12 @@ export function SiteAdminActions({ siteId, siteName }: { siteId: string; siteNam
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <button onClick={() => setShowEdit(true)} className="cursor-pointer flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors">
-          <Pencil className="w-3.5 h-3.5" />Editar nom
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setShowEdit(true)} title="Editar nom" className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-neutral-600 bg-white border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 rounded-lg shadow-sm transition-all">
+          <Pencil className="w-3.5 h-3.5" />Editar
         </button>
-        <button onClick={() => setShowDelete(true)} className="cursor-pointer flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-          <Trash2 className="w-3.5 h-3.5" />Eliminar
+        <button onClick={() => setShowDelete(true)} title="Eliminar lloc" className="cursor-pointer flex items-center justify-center w-8 h-8 text-neutral-400 bg-white border border-neutral-200 hover:border-red-200 hover:text-red-600 hover:bg-red-50 rounded-lg shadow-sm transition-all">
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
       {showEdit   && <EditNameModal   siteId={siteId} currentName={siteName} onClose={() => setShowEdit(false)} />}
@@ -238,7 +238,7 @@ export function SiteUsersManager({
 
       {unassigned.length > 0 && (
         <div className="border-t border-neutral-100 pt-4 space-y-3">
-          <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">Afegir clients</p>
+          <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Afegir clients</p>
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />

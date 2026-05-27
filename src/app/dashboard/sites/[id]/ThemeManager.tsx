@@ -1,48 +1,23 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Palette, Globe, Loader2, Wand2, Save, AlertCircle, ExternalLink,
-  ChevronDown, ChevronUp, Trash2, Sparkles, Plug, Type,
-  PanelTop, PanelBottom, Check,
+  Palette, Globe, Loader2, Wand2, AlertCircle,
+  Trash2, Sparkles, Plug, Type, PanelTop, PanelBottom,
+  Check, Cloud, CloudOff, LayoutGrid, Rows3, AlignLeft, AlignCenter, AlignRight,
+  Heading, Ruler, Crown,
 } from 'lucide-react'
-import { saveTheme, deleteTheme, type ThemeData } from '@/lib/actions/theme'
-import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import { useRef, useEffect, type ReactNode, type CSSProperties } from 'react'
+import { type DesignTokens, type BlogColumns } from '@/lib/scrape/tokens'
+import { LOCALE_META } from '@/lib/i18n/config'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
+import { useThemeStudio, type SaveStatus } from './ThemeStudioContext'
+import VisualChromeEditor from './VisualChromeEditor'
+import { PremiumLockOverlay } from './PremiumGate'
 
-export type Theme = {
-  site_id?: string
-  reference_url?: string | null
-  reference_url_home?: string | null
-  extracted_head?: string | null
-  extracted_header?: string | null
-  extracted_footer?: string | null
-  extracted_scripts?: string | null
-  external_styles?: string[] | null
-  external_scripts?: string[] | null
-  font_links?: string[] | null
-  base_url?: string | null
-  detected_framework?: string | null
-  detected_hosting?: string | null
-  design_tokens?: Partial<DesignTokens> | null
-}
-
-type AnalyzeResponse = {
-  extracted_head: string
-  extracted_header: string
-  extracted_footer: string
-  extracted_scripts: string
-  external_styles: string[]
-  external_scripts: string[]
-  font_links: string[]
-  detection: { framework: string; hosting: string | null }
-  base_url: string
-  tokens: DesignTokens
-  error?: string
-}
+// Re-export so existing imports (SiteDetailClient) keep resolving the type here.
+export type { Theme } from './ThemeStudioContext'
 
 const FRAMEWORK_LABELS: Record<string, string> = {
   wordpress: 'WordPress', nextjs: 'Next.js', astro: 'Astro', gatsby: 'Gatsby',
@@ -76,92 +51,56 @@ const SCALE_FIELDS: { key: keyof DesignTokens; label: string; placeholder: strin
 
 const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v.trim())
 
-export default function ThemeManager({ siteId, initialTheme }: { siteId: string; initialTheme: Theme | null }) {
-  const router = useRouter()
+const headingInput = "w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-medium transition-all"
+
+function HeadingField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-semibold text-neutral-500">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Section({
+  icon: Icon, title, desc, children,
+}: {
+  icon: typeof Palette
+  title: string
+  desc?: string
+  children: ReactNode
+}) {
+  return (
+    <section className="py-5 border-b border-neutral-100 last:border-0">
+      <div className="flex items-center gap-2">
+        <span className="w-7 h-7 rounded-lg bg-carma-50 text-carma-600 flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4" />
+        </span>
+        <h5 className="text-xs font-bold uppercase tracking-widest text-neutral-700">{title}</h5>
+      </div>
+      {desc && <p className="text-xs text-neutral-400 mt-1.5 ml-9">{desc}</p>}
+      <div className="mt-3.5 ml-9">{children}</div>
+    </section>
+  )
+}
+
+export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { toast } = useToast()
   const confirm = useConfirm()
-  const [isPending, startTransition] = useTransition()
+  const {
+    siteId, hasTheme, saveStatus,
+    url, setUrl, analyzing, error, grab, removeTheme,
+    tokens, setToken,
+    sectionTitle, setSectionTitle,
+    extractedHeader, setExtractedHeader,
+    extractedFooter, setExtractedFooter,
+    detectedFramework, detectedHosting,
+    externalStyles, externalScripts, fontLinks,
+    editLocale, setEditLocale, editLocales, chromeDefaultLocale,
+    canTranslateChrome, translatingChrome, translateChrome,
+  } = useThemeStudio()
 
-  const [url, setUrl] = useState(initialTheme?.reference_url ?? initialTheme?.reference_url_home ?? '')
-  const [analyzing, setAnalyzing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const [extractedHead, setExtractedHead] = useState(initialTheme?.extracted_head ?? '')
-  const [extractedHeader, setExtractedHeader] = useState(initialTheme?.extracted_header ?? '')
-  const [extractedFooter, setExtractedFooter] = useState(initialTheme?.extracted_footer ?? '')
-  const [extractedScripts, setExtractedScripts] = useState(initialTheme?.extracted_scripts ?? '')
-  const [externalStyles, setExternalStyles] = useState<string[]>(initialTheme?.external_styles ?? [])
-  const [externalScripts, setExternalScripts] = useState<string[]>(initialTheme?.external_scripts ?? [])
-  const [fontLinks, setFontLinks] = useState<string[]>(initialTheme?.font_links ?? [])
-  const [baseUrl, setBaseUrl] = useState(initialTheme?.base_url ?? '')
-  const [detectedFramework, setDetectedFramework] = useState<string | null>(initialTheme?.detected_framework ?? null)
-  const [detectedHosting, setDetectedHosting] = useState<string | null>(initialTheme?.detected_hosting ?? null)
-  const [tokens, setTokens] = useState<DesignTokens>({ ...DEFAULT_TOKENS, ...(initialTheme?.design_tokens ?? {}) })
-
-  const [showAdvanced, setShowAdvanced] = useState(false)
-
-  const hasTheme = !!initialTheme
-  const grabbed = !!extractedHeader || !!extractedFooter || !!extractedHead || hasTheme
-  const renderUrl = `/render/${siteId}`
-
-  const buildThemeData = (): ThemeData => ({
-    reference_url: url || null,
-    extracted_head: extractedHead || null,
-    extracted_header: extractedHeader || null,
-    extracted_footer: extractedFooter || null,
-    extracted_scripts: extractedScripts || null,
-    external_styles: externalStyles,
-    external_scripts: externalScripts,
-    font_links: fontLinks,
-    base_url: baseUrl || null,
-    detected_framework: detectedFramework,
-    detected_hosting: detectedHosting,
-    design_tokens: tokens,
-  })
-
-  const handleGrab = async () => {
-    const target = url.trim()
-    if (!target) return
-    setAnalyzing(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/theme/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: target }),
-      })
-      const data: AnalyzeResponse = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Error desconegut'); return }
-
-      setExtractedHead(data.extracted_head)
-      setExtractedHeader(data.extracted_header)
-      setExtractedFooter(data.extracted_footer)
-      setExtractedScripts(data.extracted_scripts ?? '')
-      setExternalStyles(data.external_styles ?? [])
-      setExternalScripts(data.external_scripts ?? [])
-      setFontLinks(data.font_links ?? [])
-      setBaseUrl(data.base_url)
-      setDetectedFramework(data.detection?.framework ?? null)
-      setDetectedHosting(data.detection?.hosting ?? null)
-      const newTokens = { ...DEFAULT_TOKENS, ...(data.tokens ?? {}) }
-      setTokens(newTokens)
-
-      toast('Tema capturat correctament')
-    } catch {
-      setError('Error de xarxa')
-    } finally {
-      setAnalyzing(false)
-    }
-  }
-
-  const handleSave = () => {
-    startTransition(async () => {
-      const result = await saveTheme(siteId, buildThemeData())
-      if (result.error) { toast(result.error, 'error'); return }
-      toast('Tema desat correctament')
-      router.refresh()
-    })
-  }
+  const componentKb = Math.round(((extractedHeader.length + extractedFooter.length) / 1024) * 10) / 10
 
   const handleDelete = async () => {
     const ok = await confirm({
@@ -171,15 +110,26 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
       tone: 'danger',
     })
     if (!ok) return
-    startTransition(async () => {
-      const result = await deleteTheme(siteId)
-      if (result.error) { toast(result.error, 'error'); return }
-      toast('Tema eliminat')
-      router.refresh()
-    })
+    await removeTheme()
+    toast('Tema eliminat')
   }
 
-  const setToken = (key: keyof DesignTokens, value: string) => setTokens(t => ({ ...t, [key]: value }))
+  const handleTranslateChrome = async () => {
+    if (translatingChrome || editLocale === chromeDefaultLocale) return
+    if (!canTranslateChrome) {
+      toast('La traducció automàtica del header/footer és una funció Premium.', 'info')
+      return
+    }
+    const ok = await confirm({
+      title: `Traduir el header i footer a ${LOCALE_META[editLocale].native}`,
+      message: `La IA traduirà el header, el footer i el títol des de ${LOCALE_META[chromeDefaultLocale].native}, conservant el disseny. Substituirà el contingut actual d'aquest idioma.`,
+      confirmLabel: 'Tradueix',
+    })
+    if (!ok) return
+    const res = await translateChrome(editLocale)
+    if (res.error) toast(res.error, 'error')
+    else toast(`Header i footer traduïts a ${LOCALE_META[editLocale].native}`, 'success')
+  }
 
   return (
     <div className="space-y-5">
@@ -192,26 +142,20 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
               <Palette className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold text-white">Theme Grabber</h3>
+              <h3 className="text-lg font-extrabold text-white">Theme Studio · Magic Wand</h3>
               <p className="text-xs font-medium text-neutral-400 mt-1 max-w-md">
-                Enganxa la URL del lloc del client. Carma replica el header i footer originals i n&apos;extreu els colors i tipografies per vestir el blog amb la seva identitat.
+                Enganxa la URL del client. La IA reconstrueix el header i footer com a components natius totalment aïllats, i pots editar-los visualment clicant-hi. Tot es desa sol.
               </p>
             </div>
           </div>
-          {hasTheme && (
-            <Link
-              href={renderUrl}
-              target="_blank"
-              className="cursor-pointer flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors shrink-0"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Veure render
-            </Link>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {hasTheme && <SaveIndicator status={saveStatus} />}
+          </div>
         </div>
       </div>
 
-      {/* URL grabber */}
+      {/* URL grabber — re-capturing the source site is a Premium action. */}
+      <PremiumLockOverlay locked={!isSuperAdmin} label="Re-capturar el lloc web">
       <div className="bg-white border border-neutral-100 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
           <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">1</span>
@@ -224,19 +168,19 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
               type="url"
               value={url}
               onChange={e => setUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleGrab()}
+              onKeyDown={e => e.key === 'Enter' && grab()}
               placeholder="https://www.elmeuclient.com"
               disabled={analyzing}
               className="w-full pl-9 pr-3 py-2.5 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-carma-500 text-sm font-medium transition-all disabled:opacity-60"
             />
           </div>
           <button
-            onClick={handleGrab}
+            onClick={grab}
             disabled={!url.trim() || analyzing}
             className="cursor-pointer px-5 py-2.5 bg-carma-500 hover:bg-carma-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {grabbed ? 'Tornar a capturar' : 'Capturar tema'}
+            {hasTheme ? 'Tornar a capturar' : 'Capturar tema'}
           </button>
         </div>
         {error && (
@@ -245,7 +189,14 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
             <p className="text-xs text-red-700 font-medium">{error}</p>
           </div>
         )}
+        {analyzing && (
+          <div className="mt-3 flex items-start gap-2 p-2.5 bg-carma-50 border border-carma-100 rounded-lg">
+            <Sparkles className="w-4 h-4 text-carma-500 shrink-0 mt-0.5 animate-pulse" />
+            <p className="text-xs text-carma-700 font-medium">La IA reconstrueix el header i el footer com a components natius i aïllats, amb estats :hover i menús desplegables en CSS pur. Pot trigar entre 15 i 40 segons…</p>
+          </div>
+        )}
       </div>
+      </PremiumLockOverlay>
 
       {/* Detected framework banner */}
       {detectedFramework && (
@@ -254,7 +205,7 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
             <Sparkles className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-green-700">Framework detectat</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-green-700">Framework detectat</span>
             <p className="text-sm font-bold text-neutral-900 mt-0.5">
               {FRAMEWORK_LABELS[detectedFramework] ?? detectedFramework}
               {detectedHosting && (
@@ -272,138 +223,365 @@ export default function ThemeManager({ siteId, initialTheme }: { siteId: string;
         </div>
       )}
 
-      {grabbed && (
+      {hasTheme && (
         <>
-          {/* Design tokens editor */}
-          <div className="bg-white border border-neutral-100 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">2</span>
-              <h4 className="text-sm font-bold text-neutral-900">Design tokens</h4>
+          {/* Theme language switcher — edit header/footer/heading per language */}
+          {editLocales.length > 1 && (
+            <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm p-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-bold text-neutral-400 uppercase tracking-widest">
+                <Globe className="w-3.5 h-3.5" /> Idioma del tema
+              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {editLocales.map(loc => {
+                  const isActive = loc === editLocale
+                  return (
+                    <button
+                      key={loc}
+                      type="button"
+                      onClick={() => setEditLocale(loc)}
+                      className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive ? 'bg-carma-500 text-white shadow-sm' : 'text-neutral-500 hover:bg-neutral-100'}`}
+                      title={LOCALE_META[loc].label}
+                    >
+                      <span>{LOCALE_META[loc].flag}</span>
+                      <span>{LOCALE_META[loc].native}</span>
+                      {loc === chromeDefaultLocale && (
+                        <span className={`text-[10px] font-extrabold uppercase ${isActive ? 'text-white/80' : 'text-neutral-300'}`}>·&nbsp;base</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {editLocale !== chromeDefaultLocale && (
+                <button
+                  type="button"
+                  onClick={() => void handleTranslateChrome()}
+                  disabled={translatingChrome}
+                  className={`cursor-pointer ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                    canTranslateChrome
+                      ? 'text-carma-700 bg-carma-50 border border-carma-100 hover:bg-carma-100'
+                      : 'text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100'
+                  }`}
+                  title={canTranslateChrome ? `Traduir des de ${LOCALE_META[chromeDefaultLocale].native} amb IA` : 'Funció Premium'}
+                >
+                  {translatingChrome
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : canTranslateChrome ? <Sparkles className="w-3.5 h-3.5" /> : <Crown className="w-3.5 h-3.5" />}
+                  {translatingChrome ? 'Traduint…' : `Traduir de ${LOCALE_META[chromeDefaultLocale].native}`}
+                </button>
+              )}
+              <p className="w-full text-xs text-neutral-400 pl-1">
+                {editLocale === chromeDefaultLocale
+                  ? 'Idioma base — el header i footer capturats. Canvia d’idioma per editar-ne o traduir-ne les versions.'
+                  : `Editant la versió en ${LOCALE_META[editLocale].native}. Tradueix-la des de la base amb IA o edita-la manualment.`}
+              </p>
             </div>
-            <p className="text-xs text-neutral-500 mb-4 ml-8">Colors i tipografies aplicats a les nostres plantilles de blog. Ajusta&apos;ls si la detecció no és perfecta.</p>
+          )}
 
-            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
-              {COLOR_FIELDS.map(({ key, label }) => {
-                const value = String(tokens[key] ?? '')
-                return (
-                  <div key={key} className="flex items-center gap-3">
-                    <label className="text-xs font-semibold text-neutral-500 w-32 shrink-0">{label}</label>
-                    <span
-                      className="w-7 h-7 rounded-lg border border-neutral-200 shrink-0"
-                      style={{ background: value }}
-                      aria-hidden
+          {/* Design tokens + layout */}
+          <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-neutral-100 bg-gradient-to-r from-carma-50/40 to-white">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">2</span>
+                <h4 className="text-sm font-bold text-neutral-900">Disseny del blog</h4>
+              </div>
+              <p className="text-xs text-neutral-500 mt-1 ml-8">Personalitza l&apos;encapçalament, els colors, la tipografia i la disposició. Tot s&apos;aplica i es desa en temps real.</p>
+            </div>
+
+            <div className="px-6">
+            <Section icon={Heading} title="Encapçalament" desc="El títol principal del llistat. Clica per editar-ne el text i ajusta l'estil.">
+              <InlineHeading
+                value={sectionTitle}
+                onChange={setSectionTitle}
+                fontHeading={String(tokens.fontHeading ?? '')}
+                color={String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')}
+                size={String(tokens.sectionTitleSize ?? '1.6rem')}
+                weight={String(tokens.sectionTitleWeight ?? '800')}
+                align={tokens.sectionTitleAlign ?? 'left'}
+                background={String(tokens.headingImage ? '#1c1917' : (tokens.colorBg ?? '#ffffff'))}
+              />
+
+              {/* Heading style controls */}
+              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                <HeadingField label="Color">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={isHex(String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')) ? String(tokens.sectionTitleColor ?? tokens.colorText) : '#111111'}
+                      onChange={e => setToken('sectionTitleColor', e.target.value)}
+                      className="w-7 h-7 rounded cursor-pointer border border-neutral-200 bg-white p-0 shrink-0"
+                      aria-label="Color del títol"
                     />
-                    {isHex(value) && (
-                      <input
-                        type="color"
-                        value={value}
-                        onChange={e => setToken(key, e.target.value)}
-                        className="w-7 h-7 rounded cursor-pointer border border-neutral-200 bg-white p-0"
-                        aria-label={label}
-                      />
-                    )}
                     <input
                       type="text"
-                      value={value}
+                      value={String(tokens.sectionTitleColor ?? '')}
+                      onChange={e => setToken('sectionTitleColor', e.target.value)}
+                      placeholder={String(tokens.colorText ?? '#111')}
+                      className={headingInput}
+                    />
+                  </div>
+                </HeadingField>
+
+                <HeadingField label="Mida (rem/px)">
+                  <input
+                    type="text"
+                    value={String(tokens.sectionTitleSize ?? '')}
+                    onChange={e => setToken('sectionTitleSize', e.target.value)}
+                    placeholder="1.6rem"
+                    className={headingInput}
+                  />
+                </HeadingField>
+
+                <HeadingField label="Pes">
+                  <select
+                    value={String(tokens.sectionTitleWeight ?? '800')}
+                    onChange={e => setToken('sectionTitleWeight', e.target.value)}
+                    className={headingInput}
+                  >
+                    {['400', '500', '600', '700', '800', '900'].map(w => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </HeadingField>
+
+                <HeadingField label="Alineació">
+                  <div className="flex gap-1">
+                    {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => setToken('sectionTitleAlign', a)}
+                        className={`cursor-pointer flex-1 flex items-center justify-center py-1.5 rounded-lg border transition-all ${(tokens.sectionTitleAlign ?? 'left') === a ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'}`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    ))}
+                  </div>
+                </HeadingField>
+
+                <HeadingField label="Amplada">
+                  <input
+                    type="text"
+                    value={String(tokens.sectionTitleWidth ?? '')}
+                    onChange={e => setToken('sectionTitleWidth', e.target.value)}
+                    placeholder="100% / 720px"
+                    className={headingInput}
+                  />
+                </HeadingField>
+
+                <HeadingField label="Alçada mín.">
+                  <input
+                    type="text"
+                    value={String(tokens.sectionTitleHeight ?? '')}
+                    onChange={e => setToken('sectionTitleHeight', e.target.value)}
+                    placeholder="auto / 120px"
+                    className={headingInput}
+                  />
+                </HeadingField>
+
+                <div className="col-span-2">
+                  <HeadingField label="Imatge de fons (URL, opcional)">
+                    <input
+                      type="url"
+                      value={String(tokens.headingImage ?? '')}
+                      onChange={e => setToken('headingImage', e.target.value)}
+                      placeholder="https://example.com/banner.jpg"
+                      className={headingInput}
+                    />
+                  </HeadingField>
+                </div>
+
+                <div className="col-span-2 flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+                  <span className="text-xs font-semibold text-neutral-600">Mostrar fil d&apos;Ariadna (breadcrumb)</span>
+                  <button
+                    type="button"
+                    onClick={() => setToken('showBreadcrumb', !tokens.showBreadcrumb)}
+                    role="switch"
+                    aria-checked={!!tokens.showBreadcrumb}
+                    className={`cursor-pointer relative w-11 h-6 rounded-full transition-colors ${tokens.showBreadcrumb ? 'bg-carma-500' : 'bg-neutral-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${tokens.showBreadcrumb ? 'translate-x-5' : ''}`} />
+                  </button>
+                </div>
+              </div>
+            </Section>
+
+            <Section icon={LayoutGrid} title="Disposició del llistat" desc="Com es presenten les targetes d'articles al llistat.">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex gap-1.5">
+                  <LayoutOption active={tokens.layout === 'grid'} icon={LayoutGrid} label="Graella" onClick={() => setToken('layout', 'grid')} />
+                  <LayoutOption active={tokens.layout === 'list'} icon={Rows3} label="Llista" onClick={() => setToken('layout', 'list')} />
+                </div>
+                {tokens.layout === 'grid' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-neutral-400">Columnes</span>
+                    {(['2', '3', '4'] as BlogColumns[]).map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setToken('columns', c)}
+                        className={`cursor-pointer w-8 h-8 rounded-lg text-xs font-bold border transition-all ${tokens.columns === c ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'}`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section icon={Palette} title="Colors">
+              <div className="grid sm:grid-cols-2 gap-2.5">
+                {COLOR_FIELDS.map(({ key, label }) => {
+                  const value = String(tokens[key] ?? '')
+                  return (
+                    <div key={key} className="flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-2.5 py-2 transition-colors hover:border-neutral-300">
+                      {isHex(value) ? (
+                        <input
+                          type="color"
+                          value={value}
+                          onChange={e => setToken(key, e.target.value)}
+                          className="w-8 h-8 rounded-lg cursor-pointer border border-neutral-200 bg-white p-0 shrink-0"
+                          aria-label={label}
+                        />
+                      ) : (
+                        <span className="w-8 h-8 rounded-lg border border-neutral-200 shrink-0" style={{ background: value }} aria-hidden />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-neutral-600 truncate">{label}</p>
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={e => setToken(key, e.target.value)}
+                          className="w-full bg-transparent outline-none text-xs font-mono text-neutral-400 focus:text-neutral-700"
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Section>
+
+            <Section icon={Type} title="Tipografia" desc="Famílies tipogràfiques (CSS font-family).">
+              <div className="space-y-2.5">
+                {FONT_FIELDS.map(({ key, label }) => (
+                  <div key={key} className="flex items-center gap-2.5">
+                    <span className="w-28 shrink-0 text-xs font-semibold text-neutral-500">{label}</span>
+                    <input
+                      type="text"
+                      value={String(tokens[key] ?? '')}
                       onChange={e => setToken(key, e.target.value)}
                       className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
                     />
                   </div>
-                )
-              })}
-            </div>
+                ))}
+              </div>
+            </Section>
 
-            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 mt-5 pt-5 border-t border-neutral-100">
-              {FONT_FIELDS.map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <Type className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-                  <label className="text-xs font-semibold text-neutral-500 w-28 shrink-0">{label}</label>
-                  <input
-                    type="text"
-                    value={String(tokens[key] ?? '')}
-                    onChange={e => setToken(key, e.target.value)}
-                    className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
-                  />
-                </div>
-              ))}
-              {SCALE_FIELDS.map(({ key, label, placeholder }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <label className="text-xs font-semibold text-neutral-500 w-28 shrink-0 pl-5">{label}</label>
-                  <input
-                    type="text"
-                    value={String(tokens[key] ?? '')}
-                    onChange={e => setToken(key, e.target.value)}
-                    placeholder={placeholder}
-                    className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
-                  />
-                </div>
-              ))}
+            <Section icon={Ruler} title="Mides i forma" desc="Mida base del text, radis de cantonada i amplada màxima.">
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                {SCALE_FIELDS.map(({ key, label, placeholder }) => (
+                  <div key={key} className="flex items-center gap-2.5">
+                    <span className="w-24 shrink-0 text-xs font-semibold text-neutral-500">{label}</span>
+                    <input
+                      type="text"
+                      value={String(tokens[key] ?? '')}
+                      onChange={e => setToken(key, e.target.value)}
+                      placeholder={placeholder}
+                      className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
+                    />
+                  </div>
+                ))}
+              </div>
+            </Section>
             </div>
           </div>
 
-          {/* Structure: header/footer + resources + advanced */}
+          {/* Visual editor */}
           <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-6 pb-4">
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">3</span>
-                <h4 className="text-sm font-bold text-neutral-900">Estructura replicada</h4>
+                <h4 className="text-sm font-bold text-neutral-900">Editor visual del header i footer</h4>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
-                <StructureChip icon={PanelTop} label="Header" ok={!!extractedHeader} detail={extractedHeader ? `${extractedHeader.length.toLocaleString()} chars` : 'No detectat'} />
-                <StructureChip icon={PanelBottom} label="Footer" ok={!!extractedFooter} detail={extractedFooter ? `${extractedFooter.length.toLocaleString()} chars` : 'No detectat'} />
+                <StructureChip icon={PanelTop} label="Header" ok={!!extractedHeader} detail={extractedHeader ? 'Reconstruït amb IA (natiu)' : 'No detectat'} />
+                <StructureChip icon={PanelBottom} label="Footer" ok={!!extractedFooter} detail={extractedFooter ? 'Reconstruït amb IA (natiu)' : 'No detectat'} />
               </div>
               <div className="flex flex-wrap gap-2 mt-3">
+                <ResourcePill label={`${componentKb} KB natiu`} active={componentKb > 0} />
                 <ResourcePill label={`${externalStyles.length} fulls CSS`} active={externalStyles.length > 0} />
                 <ResourcePill label={`${externalScripts.length} scripts`} active={externalScripts.length > 0} />
                 <ResourcePill label={`${fontLinks.length} tipografies`} active={fontLinks.length > 0} />
               </div>
             </div>
 
-            <button
-              onClick={() => setShowAdvanced(v => !v)}
-              className="cursor-pointer w-full flex items-center justify-between px-6 py-3.5 border-t border-neutral-100 hover:bg-neutral-50 transition-colors"
-            >
-              <span className="text-xs font-bold text-neutral-600">Editar HTML extret (avançat)</span>
-              {showAdvanced ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
-            </button>
-            {showAdvanced && (
-              <div className="px-6 pb-6 space-y-4 border-t border-neutral-100 pt-5">
-                <CodeArea label={`<head> · ${extractedHead.length.toLocaleString()} chars`} value={extractedHead} onChange={setExtractedHead} rows={10} />
-                <CodeArea label={`<header> · ${extractedHeader.length.toLocaleString()} chars`} value={extractedHeader} onChange={setExtractedHeader} rows={8} />
-                <CodeArea label={`<footer> · ${extractedFooter.length.toLocaleString()} chars`} value={extractedFooter} onChange={setExtractedFooter} rows={8} />
-                <CodeArea label={`<script> · ${extractedScripts.length.toLocaleString()} chars`} value={extractedScripts} onChange={setExtractedScripts} rows={8} />
-              </div>
-            )}
+            <div className="px-6 pb-6 border-t border-neutral-100 pt-5">
+              <p className="text-xs font-bold text-neutral-600 mb-1">Edició visual</p>
+              <p className="text-xs text-neutral-400 mb-4">Clica qualsevol element de la previsualització per editar-ne el text, l&apos;enllaç, els colors i l&apos;espaiat. O usa el codi avançat. Tot es desa automàticament.</p>
+              <VisualChromeEditor
+                header={extractedHeader}
+                footer={extractedFooter}
+                onHeaderChange={setExtractedHeader}
+                onFooterChange={setExtractedFooter}
+              />
+            </div>
           </div>
 
-          {/* Save bar */}
-          <div className="sticky bottom-0 bg-white/90 backdrop-blur border border-neutral-200 rounded-2xl p-4 shadow-lg flex items-center gap-3 z-10">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
-              <Check className="w-4 h-4" /> Tema actiu en desar
-            </div>
-            <div className="flex-1" />
-            {hasTheme && (
+          {/* Danger zone — destructive, superadmin only */}
+          {isSuperAdmin && (
+            <div className="flex justify-end">
               <button
                 onClick={handleDelete}
-                disabled={isPending}
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-2.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="cursor-pointer flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Eliminar
+                Eliminar tema
               </button>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={isPending}
-              className="cursor-pointer flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-carma-600 via-carma-500 to-carma-600 hover:from-carma-500 hover:to-carma-400 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
-            >
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Desar tema
-            </button>
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>
+  )
+}
+
+function SaveIndicator({ status }: { status: SaveStatus }) {
+  if (status === 'saving') {
+    return (
+      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-carma-200 bg-white/5 rounded-lg">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Desant…
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-300 bg-red-500/10 rounded-lg">
+        <CloudOff className="w-3.5 h-3.5" /> Error en desar
+      </span>
+    )
+  }
+  if (status === 'saved') {
+    return (
+      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-green-300 bg-green-500/10 rounded-lg">
+        <Check className="w-3.5 h-3.5" /> Desat
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-400 bg-white/5 rounded-lg">
+      <Cloud className="w-3.5 h-3.5" /> Desat automàtic
+    </span>
+  )
+}
+
+function LayoutOption({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof LayoutGrid; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`cursor-pointer flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${active ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'}`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
   )
 }
 
@@ -415,7 +593,7 @@ function StructureChip({ icon: Icon, label, ok, detail }: { icon: typeof PanelTo
       </div>
       <div className="min-w-0">
         <p className="text-xs font-bold text-neutral-900">{label}</p>
-        <p className={`text-[11px] font-medium ${ok ? 'text-green-700' : 'text-neutral-400'}`}>{detail}</p>
+        <p className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-neutral-400'}`}>{detail}</p>
       </div>
     </div>
   )
@@ -423,24 +601,66 @@ function StructureChip({ icon: Icon, label, ok, detail }: { icon: typeof PanelTo
 
 function ResourcePill({ label, active }: { label: string; active: boolean }) {
   return (
-    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${active ? 'bg-carma-50 text-carma-700 border-carma-100' : 'bg-neutral-50 text-neutral-400 border-neutral-200'}`}>
+    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${active ? 'bg-carma-50 text-carma-700 border-carma-100' : 'bg-neutral-50 text-neutral-400 border-neutral-200'}`}>
       {label}
     </span>
   )
 }
 
-function CodeArea({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
+// Inline, click-to-edit heading that previews the blog's main title using the
+// live theme tokens (font + colors). Uncontrolled contentEditable: the DOM is
+// only re-synced from `value` while unfocused, so the caret never jumps.
+function InlineHeading({
+  value, onChange, fontHeading, color, background, size, weight, align,
+}: {
+  value: string
+  onChange: (v: string) => void
+  fontHeading: string
+  color: string
+  background: string
+  size: string
+  weight: string
+  align: 'left' | 'center' | 'right'
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (el && document.activeElement !== el && el.innerText !== value) el.innerText = value
+  }, [value])
+
+  const headingStyle: CSSProperties = {
+    fontFamily: fontHeading || undefined,
+    color,
+    fontSize: size || undefined,
+    fontWeight: (weight as CSSProperties['fontWeight']) || undefined,
+    textAlign: align,
+  }
+
   return (
-    <div className="space-y-1.5">
-      <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest">{label}</label>
-      <textarea
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        rows={rows}
-        spellCheck={false}
-        className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg focus:outline-none focus:border-carma-500 text-[11px] font-mono text-neutral-200 resize-y transition-all leading-relaxed"
-        placeholder="(buit)"
+    <div
+      className="relative rounded-xl border border-dashed border-neutral-300 hover:border-carma-300 focus-within:border-carma-400 transition-colors px-5 py-4"
+      style={{ background }}
+    >
+      <div
+        ref={ref}
+        role="textbox"
+        tabIndex={0}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={e => onChange((e.currentTarget.textContent ?? '').replace(/\s+/g, ' '))}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+        className="outline-none leading-tight break-words"
+        style={headingStyle}
       />
+      {!value && (
+        <span
+          className="pointer-events-none absolute left-5 top-4 leading-tight opacity-30"
+          style={headingStyle}
+        >
+          Articles
+        </span>
+      )}
     </div>
   )
 }

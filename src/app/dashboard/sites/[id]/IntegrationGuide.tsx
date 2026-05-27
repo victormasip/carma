@@ -100,7 +100,7 @@ export default function IntegrationGuide({
             <Zap className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-carma-700">Detectat al tema</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-carma-700">Detectat al tema</p>
             <p className="text-sm font-bold text-neutral-900 mt-0.5">
               {fwLabel}
               {hostLabel && <span className="font-normal text-neutral-500"> · hosting {hostLabel}</span>}
@@ -176,7 +176,7 @@ function PathCard({
       }`}
     >
       {recommended && (
-        <span className="absolute -top-2 left-4 text-[10px] font-bold uppercase tracking-widest bg-green-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+        <span className="absolute -top-2 left-4 text-xs font-bold uppercase tracking-widest bg-green-500 text-white px-2 py-0.5 rounded-full shadow-sm">
           Recomanat
         </span>
       )}
@@ -184,13 +184,13 @@ function PathCard({
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-carma-500 text-white' : 'bg-neutral-100 text-neutral-500'}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${active ? 'bg-carma-100 text-carma-700' : 'bg-neutral-100 text-neutral-500'}`}>{badge}</span>
+        <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded ${active ? 'bg-carma-100 text-carma-700' : 'bg-neutral-100 text-neutral-500'}`}>{badge}</span>
       </div>
       <h4 className="text-sm font-bold text-neutral-900 mb-1">{title}</h4>
       <p className="text-xs text-neutral-500 mb-3">{subtitle}</p>
       <ul className="space-y-1">
         {features.map(f => (
-          <li key={f} className="text-[11px] text-neutral-600 flex items-start gap-1.5">
+          <li key={f} className="text-xs text-neutral-600 flex items-start gap-1.5">
             <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${active ? 'bg-carma-500' : 'bg-neutral-400'}`} />
             {f}
           </li>
@@ -229,20 +229,20 @@ function RenderInstructions({
       <div className="bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-2xl p-5 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-48 h-48 bg-carma-500/10 blur-[60px] pointer-events-none rounded-full" />
         <div className="relative z-10">
-          <p className="text-[11px] font-bold text-carma-300 uppercase tracking-widest mb-2">URL de render del client</p>
+          <p className="text-xs font-bold text-carma-300 uppercase tracking-widest mb-2">URL de render del client</p>
           <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-2 border border-neutral-700">
             <code className="text-xs font-mono text-neutral-200 truncate flex-1">{renderUrl}</code>
             <InlineCopy text={renderUrl} dark />
           </div>
           <p className="text-xs text-neutral-400 mt-3 leading-relaxed">
-            Aquesta URL serveix els articles del client amb el seu look. <strong className="text-white">L&apos;objectiu</strong> és que apareguin a <code className="bg-white/10 px-1.5 py-0.5 rounded text-[11px]">la-seva-web.cat/noticies</code> (o el path que prefereixis).
+            Aquesta URL serveix els articles del client amb el seu look. <strong className="text-white">L&apos;objectiu</strong> és que apareguin a <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs">la-seva-web.cat/noticies</code> (o el path que prefereixis).
           </p>
         </div>
       </div>
 
       {/* Method picker */}
       <div>
-        <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el mètode</p>
+        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el mètode</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
           {METHODS.map(m => {
             const isRec = recommendedMethod === m.key
@@ -269,7 +269,7 @@ function RenderInstructions({
                     ))}
                   </span>
                 </div>
-                <p className={`text-[10px] font-medium leading-tight ${method === m.key ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                <p className={`text-xs font-medium leading-tight ${method === m.key ? 'text-neutral-300' : 'text-neutral-500'}`}>
                   {m.description}
                 </p>
               </button>
@@ -278,7 +278,7 @@ function RenderInstructions({
         </div>
       </div>
 
-      <div className="text-[11px] font-bold text-neutral-500 uppercase tracking-widest border-l-4 border-carma-500 pl-3 py-1">
+      <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest border-l-4 border-carma-500 pl-3 py-1">
         Instruccions per a {selected.label}
       </div>
 
@@ -486,7 +486,7 @@ function NetlifyGuide({ renderUrl }: { renderUrl: string }) {
       <Step n={1} title="Crear o editar el fitxer _redirects">
         <ol className="space-y-2 list-none">
           <Li><Strong>1.1.</Strong> Identifica on van els fitxers estàtics del projecte:</Li>
-          <ul className="ml-6 mt-1 space-y-1 text-[11px] text-neutral-600 list-disc">
+          <ul className="ml-6 mt-1 space-y-1 text-xs text-neutral-600 list-disc">
             <li>Next.js / React (CRA): <Code>/public</Code></li>
             <li>Vite: <Code>/public</Code></li>
             <li>Astro: <Code>/public</Code></li>
@@ -790,7 +790,7 @@ function ApiInstructions({
       </div>
 
       <div>
-        <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el stack del client</p>
+        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el stack del client</p>
         <div className="flex gap-1.5 flex-wrap">
           {PLATFORMS.map(p => {
             const isRec = recommendedPlatform === p.key
@@ -1440,12 +1440,12 @@ function Step({ n, title, subtitle, children }: { n: number; title: string; subt
         onClick={() => setOpen(v => !v)}
         className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-neutral-50 transition-colors text-left"
       >
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold ${n === 0 ? 'bg-amber-100 text-amber-700' : 'bg-neutral-900 text-white'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${n === 0 ? 'bg-amber-100 text-amber-700' : 'bg-neutral-900 text-white'}`}>
           {n === 0 ? '!' : n}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-neutral-900 leading-tight">{title}</p>
-          {subtitle && <p className="text-[11px] text-neutral-500 mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-neutral-500 mt-0.5">{subtitle}</p>}
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-neutral-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-neutral-400 shrink-0" />}
       </button>
@@ -1470,7 +1470,7 @@ function Strong({ children }: { children: ReactNode }) {
 }
 
 function Btn({ children }: { children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-900 text-white font-mono text-[10px] font-bold border border-neutral-700">
+  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-900 text-white font-mono text-xs font-bold border border-neutral-700">
     <MousePointerClick className="w-2.5 h-2.5" />{children}
   </span>
 }
@@ -1479,10 +1479,10 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   return (
     <div className="relative bg-neutral-900 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
-        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">{language}</span>
+        <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">{language}</span>
         <InlineCopy text={code} dark />
       </div>
-      <pre className="p-3 text-[11px] font-mono text-neutral-200 overflow-x-auto leading-relaxed">{code}</pre>
+      <pre className="p-3 text-xs font-mono text-neutral-200 overflow-x-auto leading-relaxed">{code}</pre>
     </div>
   )
 }
@@ -1499,7 +1499,7 @@ function InlineCopy({ text, dark = false }: { text: string; dark?: boolean }) {
   return (
     <button
       onClick={copy}
-      className={`cursor-pointer flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-colors ${
+      className={`cursor-pointer flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-colors ${
         dark
           ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
           : 'bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-600'
@@ -1511,7 +1511,7 @@ function InlineCopy({ text, dark = false }: { text: string; dark?: boolean }) {
 }
 
 function Code({ children }: { children: ReactNode }) {
-  return <code className="bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded text-[11px] font-mono">{children}</code>
+  return <code className="bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
 }
 
 function ExtLink({ href, children }: { href: string; children: ReactNode }) {
@@ -1526,7 +1526,7 @@ function Warning({ children, small = false }: { children: ReactNode; small?: boo
   return (
     <div className={`bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 ${small ? 'p-3' : 'p-4'}`}>
       <AlertTriangle className={`text-amber-600 shrink-0 ${small ? 'w-3.5 h-3.5 mt-0.5' : 'w-4 h-4 mt-0.5'}`} />
-      <div className={`text-amber-800 ${small ? 'text-[11px]' : 'text-xs'} leading-relaxed`}>{children}</div>
+      <div className={`text-amber-800 ${small ? 'text-xs' : 'text-xs'} leading-relaxed`}>{children}</div>
     </div>
   )
 }
@@ -1535,7 +1535,7 @@ function Note({ children }: { children: ReactNode }) {
   return (
     <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
       <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-      <div className="text-[11px] text-blue-800 leading-relaxed">{children}</div>
+      <div className="text-xs text-blue-800 leading-relaxed">{children}</div>
     </div>
   )
 }

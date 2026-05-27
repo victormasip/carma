@@ -1,0 +1,26 @@
+# Netlify deployment config for Carma (carma.cat)
+#
+# Next.js 16 (App Router, SSR + Route Handlers) is served via the official
+# Netlify Next.js runtime — NOT as a static SPA. Do NOT add a catch-all
+# `/* -> /index.html` redirect: that would break SSR pages, the /render and
+# /embed route handlers, and the /api endpoints. The plugin maps every route
+# (static, server-rendered, and API) to the correct Netlify primitive.
+#
+# Required environment variables (set in the Netlify UI → Site settings → Env):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SUPABASE_SERVICE_ROLE_KEY
+#   ANTHROPIC_API_KEY            (Theme Studio / Magic Wand)
+#   THEME_LLM_MODEL              (optional, defaults to claude-opus-4-7)
+
+[build]
+  command = "next build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Keep dev-only telemetry off in CI builds.
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

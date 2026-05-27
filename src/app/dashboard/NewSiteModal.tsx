@@ -89,7 +89,7 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
 
             <form onSubmit={handleCreate} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest pl-1">
+                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">
                   Nom del Lloc
                 </label>
                 <input
@@ -104,11 +104,11 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between pl-1">
-                  <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest">
+                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest">
                     Assignar Clients
                   </label>
                   {selectedIds.length > 0 && (
-                    <span className="text-[11px] font-bold text-carma-600 bg-carma-50 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-bold text-carma-600 bg-carma-50 px-2 py-0.5 rounded-full">
                       {selectedIds.length} seleccionat{selectedIds.length !== 1 ? 's' : ''}
                     </span>
                   )}

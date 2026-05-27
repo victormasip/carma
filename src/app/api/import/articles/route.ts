@@ -226,7 +226,11 @@ export async function POST(request: NextRequest) {
       let { data, error } = await tryInsert(post)
 
       if (error && (error.code === '42703' || error.message?.includes('column'))) {
-        const { excerpt: _e, featured_image: _f, categories: _c, tags: _t, seo_title: _st, seo_description: _sd, author_name: _an, ...basePost } = post
+        // Schema predates the extra columns — retry with only the base fields.
+        const basePost = { ...(post as Record<string, unknown>) }
+        for (const k of ['excerpt', 'featured_image', 'categories', 'tags', 'seo_title', 'seo_description', 'author_name']) {
+          delete basePost[k]
+        }
         const retry = await tryInsert(basePost)
         data = retry.data
         error = retry.error

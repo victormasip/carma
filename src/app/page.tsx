@@ -76,7 +76,7 @@ export default function LoginPage() {
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="space-y-6">
           
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest pl-1">
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">
               Correu electrònic
             </label>
             <input
@@ -90,7 +90,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest pl-1">
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">
               Contrasenya
             </label>
             <input

@@ -9,6 +9,9 @@
 
 import type { HTMLElement } from 'node-html-parser'
 
+export type BlogLayout = 'grid' | 'list'
+export type BlogColumns = '2' | '3' | '4'
+
 export type DesignTokens = {
   colorPrimary: string
   colorAccent: string
@@ -23,6 +26,21 @@ export type DesignTokens = {
   radius: string
   radiusLg: string
   maxWidth: string
+  // Blog feed layout — driven by the visual editor, persisted in design_tokens,
+  // and overridable per-embed via query params. Not auto-detected from the
+  // source site (always seeded from the defaults below).
+  layout: BlogLayout
+  columns: BlogColumns
+  // Blog/news heading styling — all optional, edited from the Theme Studio.
+  // Fall back to sensible defaults in the render when unset.
+  sectionTitleColor?: string
+  sectionTitleSize?: string        // e.g. '1.75rem'
+  sectionTitleWeight?: string      // '400'..'900'
+  sectionTitleAlign?: 'left' | 'center' | 'right'
+  sectionTitleWidth?: string       // e.g. '100%' | '720px'
+  sectionTitleHeight?: string      // optional min-height, e.g. '120px'
+  showBreadcrumb?: boolean
+  headingImage?: string            // optional banner background URL
 }
 
 export const DEFAULT_TOKENS: DesignTokens = {
@@ -39,6 +57,8 @@ export const DEFAULT_TOKENS: DesignTokens = {
   radius: '10px',
   radiusLg: '16px',
   maxWidth: '1200px',
+  layout: 'grid',
+  columns: '3',
 }
 
 const GENERIC_FONTS = new Set([

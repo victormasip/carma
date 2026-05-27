@@ -1,30 +1,77 @@
-import { type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
+import { buildListingPage, buildListingFragment, buildErrorPage } from '@/lib/render/theme'
+import { applyParamsToTokens } from '@/lib/render/embedParams'
+import { FRAGMENT_CORS } from '@/lib/render/cors'
+import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import { normalizeLocale } from '@/lib/i18n/config'
 
-export const revalidate = 60 // ISR — re-render every 60 seconds at most
+// Reading the query string opts this handler out of static prerender (live
+// embeds carry token overrides per request). The CDN still caches per full URL
+// via the Cache-Control header below, so identical embeds are served from edge.
+export const dynamic = 'force-dynamic'
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ siteId: string }> }) {
+// Preflight for the cross-origin fragment fetch issued by the embed loader.
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: FRAGMENT_CORS })
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = await params
+  const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
+  const rawLang = request.nextUrl.searchParams.get('lang')
   const admin = createAdminClient()
 
   const { data: site } = await admin.from('sites').select('id, name').eq('id', siteId).single()
   if (!site) {
+    if (isFragment) {
+      return NextResponse.json({ error: 'Site no trobat' }, { status: 404, headers: FRAGMENT_CORS })
+    }
     const err = buildErrorPage('Site no trobat', 404)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
 
-  const [{ data: theme }, { data: posts }] = await Promise.all([
-    admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
+  const POST_COLS = 'id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
+  const fetchPosts = (cols: string) =>
     admin.from('posts')
-      .select('id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published')
+      .select(cols)
       .eq('site_id', siteId)
       .eq('is_published', true)
       .order('created_at', { ascending: false })
-      .limit(100),
-  ])
+      .limit(100)
 
-  const html = buildListingPage(theme, site.name, siteId, posts ?? [])
+  const [{ data: theme }, postsRes] = await Promise.all([
+    admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
+    fetchPosts(`${POST_COLS}, i18n, default_locale`),
+  ])
+  // Fall back if migration 008 (i18n columns) hasn't run yet. Cast because the
+  // dynamic column string makes Supabase widen the row type.
+  const posts = (postsRes.error?.code === '42703'
+    ? (await fetchPosts(POST_COLS)).data
+    : postsRes.data) as Parameters<typeof buildListingPage>[3] | null
+
+  // Effective locale: an explicit ?lang wins; otherwise fall back to the SITE's
+  // configured default (not the platform default), so a non-Catalan site renders
+  // in its own language with the right <html lang> and date formatting.
+  const siteDefaultLocale = (theme as { default_locale?: string } | null)?.default_locale
+  const locale = normalizeLocale(rawLang || siteDefaultLocale)
+
+  // Apply any live-embed token overrides (saved theme is the baseline).
+  const base: DesignTokens = { ...DEFAULT_TOKENS, ...((theme?.design_tokens as Partial<DesignTokens>) ?? {}) }
+  const themeForRender = {
+    ...(theme ?? {}),
+    design_tokens: applyParamsToTokens(base, request.nextUrl.searchParams),
+  }
+
+  if (isFragment) {
+    const fragment = buildListingFragment(themeForRender, site.name, siteId, posts ?? [], locale)
+    return NextResponse.json(fragment, {
+      status: 200,
+      headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+    })
+  }
+
+  const html = buildListingPage(themeForRender, site.name, siteId, posts ?? [], locale)
   return new Response(html, {
     status: 200,
     headers: {

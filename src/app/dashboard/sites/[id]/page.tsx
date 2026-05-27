@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import SiteDetailClient from './SiteDetailClient'
+import { listPosts } from '@/lib/actions/posts'
 
 export default async function SiteDetailsPage({
   params,
@@ -29,25 +30,20 @@ export default async function SiteDetailsPage({
 
   if (siteError || !site) redirect('/dashboard')
 
-  // Fetch all tab data in parallel — enables instant client-side tab switching
-  const [{ data: postsData }, suResult, clientsResult, themeResult] = await Promise.all([
-    admin
-      .from('posts')
-      .select('id, title, slug, is_published, created_at')
-      .eq('site_id', siteId)
-      .order('created_at', { ascending: false }),
+  // Fetch all tab data in parallel — enables instant client-side tab switching.
+  // Posts are paginated (first page only) so the full table is never loaded.
+  const [postsResult, suResult, clientsResult, themeResult] = await Promise.all([
+    listPosts(siteId, { page: 1, status: 'all' }),
     isSuperAdmin
       ? admin.from('site_users').select('user_id, profiles!inner(email)').eq('site_id', siteId)
       : Promise.resolve({ data: null }),
     isSuperAdmin
       ? admin.from('profiles').select('id, email').eq('role', 'client').order('email')
       : Promise.resolve({ data: null }),
-    isSuperAdmin
-      ? admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Theme is fetched for everyone: free clients can customize the design of
+    // their assigned sites (the Tema tab), only re-capture/delete are gated.
+    admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
   ])
-
-  const posts = (postsData ?? []) as { id: string; title: string; slug: string; is_published: boolean; created_at: string }[]
 
   const assignedUsers = isSuperAdmin
     ? (suResult.data ?? []).map((su) => {
@@ -61,7 +57,9 @@ export default async function SiteDetailsPage({
     ? ((clientsResult.data ?? []) as { id: string; email: string }[])
     : []
 
-  const validTabs = ['articles', ...(isSuperAdmin ? ['tema', 'connexio', 'usuaris'] : [])]
+  // All tabs are valid deep-link targets for everyone; locked ones render an
+  // upsell panel for free clients rather than the real content.
+  const validTabs = ['articles', 'tema', 'connexio', 'usuaris']
   const defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
     ? (qTab as 'articles' | 'tema' | 'connexio' | 'usuaris')
     : 'articles'
@@ -73,11 +71,20 @@ export default async function SiteDetailsPage({
       siteCreatedAt={site.created_at}
       apiKey={site.api_key}
       isSuperAdmin={isSuperAdmin}
-      initialPosts={posts}
+      initialPosts={postsResult.posts}
+      initialPostsMeta={{
+        page: postsResult.page,
+        pageCount: postsResult.pageCount,
+        filteredCount: postsResult.filteredCount,
+        total: postsResult.total,
+        published: postsResult.published,
+        drafts: postsResult.drafts,
+      }}
       assignedUsers={assignedUsers}
       availableClients={availableClients}
       initialTheme={themeResult.data ?? null}
       defaultTab={defaultTab}
+      siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
     />
   )
 }

@@ -20,11 +20,41 @@
 /* Forcem que tot el lloc web respiri amb el fons premium neutre */
 body {
   background-color: #F9F8F6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Global premium micro-interactions ──────────────────────────────────────
+   Subtle, app-wide touches that lift the feel without changing any layout. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Loading spinners convey STATE (not decoration) — they must always spin, even
+   under reduced-motion, and regardless of Tailwind's keyframe generation. */
+@keyframes carma-spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: carma-spin 0.8s linear infinite !important; }
+/* Accessible, on-brand keyboard focus ring (mouse clicks are unaffected). */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid rgba(212, 175, 55, 0.55);
+  outline-offset: 2px;
+}
+/* Tactile press feedback on interactive controls. */
+button:not(:disabled):active,
+a[role="button"]:active {
+  transform: scale(0.985);
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)    scale(1); }
+  from { opacity: 0; transform: translateX(28px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
 }
 
 @keyframes modal-fade {
@@ -37,31 +67,178 @@ body {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-/* ── TipTap / ProseMirror editor styles ─────────────────────────────────── */
+/* ── TipTap / ProseMirror editor styles — premium, distraction-free surface ── */
 .carma-editor .ProseMirror {
   outline: none;
-  min-height: 300px;
-  font-size: 0.9375rem;
-  line-height: 1.7;
-  color: #171717;
+  min-height: 440px;
+  max-width: 46rem;
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  color: #1c1917;
+  letter-spacing: -0.003em;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-.carma-editor .ProseMirror p { margin: 0.75em 0; }
+.carma-editor .ProseMirror ::selection { background: rgba(212, 175, 55, 0.22); }
+/* Elegant empty-node placeholder (Placeholder extension) */
+.carma-editor .ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  color: #cfcbc4;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.carma-editor .ProseMirror p { margin: 0.85em 0; }
 .carma-editor .ProseMirror p:first-child { margin-top: 0; }
-.carma-editor .ProseMirror h1 { font-size: 1.75rem; font-weight: 800; margin: 1.25em 0 0.5em; line-height: 1.2; }
-.carma-editor .ProseMirror h2 { font-size: 1.375rem; font-weight: 700; margin: 1.1em 0 0.4em; line-height: 1.3; }
-.carma-editor .ProseMirror h3 { font-size: 1.125rem; font-weight: 700; margin: 1em 0 0.35em; line-height: 1.35; }
+.carma-editor .ProseMirror > *:first-child { margin-top: 0; }
+.carma-editor .ProseMirror h1 { font-size: 2rem; font-weight: 800; margin: 1.4em 0 0.5em; line-height: 1.18; letter-spacing: -0.02em; }
+.carma-editor .ProseMirror h2 { font-size: 1.5rem; font-weight: 750; margin: 1.3em 0 0.45em; line-height: 1.25; letter-spacing: -0.015em; }
+.carma-editor .ProseMirror h3 { font-size: 1.2rem; font-weight: 700; margin: 1.15em 0 0.35em; line-height: 1.35; }
 .carma-editor .ProseMirror strong { font-weight: 700; }
 .carma-editor .ProseMirror em { font-style: italic; }
 .carma-editor .ProseMirror u { text-decoration: underline; }
 .carma-editor .ProseMirror s { text-decoration: line-through; }
-.carma-editor .ProseMirror a { color: #d4af37; text-decoration: underline; }
-.carma-editor .ProseMirror a:hover { color: #b58f27; }
+.carma-editor .ProseMirror a { color: #b58f27; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.carma-editor .ProseMirror a:hover { color: #906d1c; }
 .carma-editor .ProseMirror code { background: #f5f5f4; border-radius: 4px; padding: 0.1em 0.35em; font-family: ui-monospace, monospace; font-size: 0.85em; }
-.carma-editor .ProseMirror pre { background: #1e1e1e; color: #d4d4d4; border-radius: 0.75rem; padding: 1rem; overflow-x: auto; margin: 1em 0; }
-.carma-editor .ProseMirror pre code { background: none; padding: 0; font-size: 0.85em; color: inherit; }
-.carma-editor .ProseMirror blockquote { border-left: 3px solid #d4af37; margin: 1em 0; padding: 0.25em 0 0.25em 1.25em; color: #737373; font-style: italic; }
-.carma-editor .ProseMirror ul { list-style: disc; padding-left: 1.5em; margin: 0.75em 0; }
-.carma-editor .ProseMirror ol { list-style: decimal; padding-left: 1.5em; margin: 0.75em 0; }
-.carma-editor .ProseMirror li { margin: 0.25em 0; }
-.carma-editor .ProseMirror hr { border: none; border-top: 1px solid #e5e5e5; margin: 1.5em 0; }
-.carma-editor .ProseMirror img { max-width: 100%; border-radius: 0.5rem; margin: 1em 0; display: block; }
+.carma-editor .ProseMirror pre { background: #1e1e1e; color: #d4d4d4; border-radius: 0.75rem; padding: 1rem 1.15rem; overflow-x: auto; margin: 1.4em 0; font-size: 0.9em; line-height: 1.6; }
+.carma-editor .ProseMirror pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+.carma-editor .ProseMirror blockquote { border-left: 3px solid #d4af37; margin: 1.4em 0; padding: 0.15em 0 0.15em 1.25em; color: #57534e; font-style: italic; font-size: 1.15em; }
+.carma-editor .ProseMirror ul { list-style: disc; padding-left: 1.4em; margin: 0.85em 0; }
+.carma-editor .ProseMirror ol { list-style: decimal; padding-left: 1.4em; margin: 0.85em 0; }
+.carma-editor .ProseMirror li { margin: 0.35em 0; }
+.carma-editor .ProseMirror li p { margin: 0; }
+.carma-editor .ProseMirror hr { border: none; border-top: 2px solid #ececec; margin: 2em 0; }
+.carma-editor .ProseMirror img { max-width: 100%; border-radius: 0.75rem; margin: 1.5em 0; display: block; box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18); }
+.carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #d4af37; outline-offset: 2px; }
+
+/* Callout / highlight card */
+.carma-callout {
+  position: relative;
+  margin: 1.5em 0;
+  padding: 1.1em 1.25em 1.1em 3.1em;
+  border-radius: 0.9rem;
+  border: 1px solid;
+  font-size: 0.98em;
+  line-height: 1.65;
+}
+.carma-callout > *:first-child { margin-top: 0; }
+.carma-callout > *:last-child { margin-bottom: 0; }
+.carma-callout::before {
+  position: absolute;
+  left: 1.05em;
+  top: 1em;
+  font-size: 1.15em;
+  line-height: 1.4;
+}
+.carma-callout[data-variant="info"]    { background: #eff6ff; border-color: #bfdbfe; color: #1e3a8a; }
+.carma-callout[data-variant="info"]::before    { content: "💡"; }
+.carma-callout[data-variant="success"] { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+.carma-callout[data-variant="success"]::before { content: "✅"; }
+.carma-callout[data-variant="warning"] { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.carma-callout[data-variant="warning"]::before { content: "⚠️"; }
+.carma-callout[data-variant="danger"]  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.carma-callout[data-variant="danger"]::before  { content: "🚫"; }
+
+/* Image gallery — editor node view (horizontal carousel, 1:1 with the public view) */
+.carma-gallery-editor { margin: 1.5em 0; }
+.carma-gallery-editor.is-selected .carma-carousel { outline: 2px solid #d4af37; outline-offset: 4px; }
+.carma-carousel { position: relative; }
+.carma-carousel-track {
+  display: flex; gap: 0.6rem; overflow-x: auto; scroll-snap-type: x mandatory;
+  scroll-behavior: smooth; border-radius: 0.85rem; scrollbar-width: thin;
+}
+.carma-carousel-slide {
+  position: relative; flex: 0 0 86%; max-width: 100%; aspect-ratio: 16 / 9;
+  scroll-snap-align: center; cursor: zoom-in; border-radius: 0.85rem;
+  overflow: hidden; background: #f5f5f4;
+}
+.carma-carousel-slide img { width: 100%; height: 100%; object-fit: cover; margin: 0; border-radius: 0; box-shadow: none; }
+.carma-carousel-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 9999px; cursor: pointer;
+  background: #fff; color: #1c1917; border: 1px solid #e7e5e4;
+  box-shadow: 0 6px 18px -6px rgba(0,0,0,0.35);
+}
+.carma-carousel-arrow.prev { left: 8px; }
+.carma-carousel-arrow.next { right: 8px; }
+.carma-carousel-arrow:hover { background: #1c1917; color: #fff; }
+.carma-gallery-remove {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 9999px;
+  background: rgba(0,0,0,0.6); color: #fff; cursor: pointer;
+  opacity: 0; transition: opacity 0.15s;
+}
+.carma-carousel-slide:hover .carma-gallery-remove { opacity: 1; }
+.carma-gallery-zoom {
+  position: absolute; bottom: 8px; left: 8px;
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  background: rgba(0,0,0,0.55); color: #fff;
+  opacity: 0; transition: opacity 0.15s;
+}
+.carma-carousel-slide:hover .carma-gallery-zoom { opacity: 1; }
+.carma-gallery-add .upload { background: #fafaf9 !important; border: 1px solid #e7e5e4; color: #57534e !important; }
+
+/* Captioned image (figure) — editor node view */
+.carma-editor .ProseMirror figure.carma-figure { margin: 1.6em 0; }
+.carma-editor .ProseMirror figure.carma-figure.is-selected { outline: 2px solid #d4af37; outline-offset: 4px; border-radius: 0.5rem; }
+.carma-editor .ProseMirror figure.carma-figure img { margin: 0 0 0.5em; width: 100%; border-radius: 0.75rem; display: block; }
+.carma-editor .ProseMirror figure.carma-figure figcaption {
+  text-align: center; font-size: 0.85em; color: #78716c; font-style: italic; outline: none; min-height: 1.4em;
+}
+.carma-editor .ProseMirror figure.carma-figure figcaption:empty::before {
+  content: 'Afegeix un peu de foto…'; color: #cfcbc4; font-style: italic; pointer-events: none;
+}
+
+/* Two-column grid — editor */
+.carma-editor .ProseMirror .carma-columns {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.4em 0;
+}
+.carma-editor .ProseMirror .carma-column {
+  border: 1px dashed #e7e5e4; border-radius: 0.75rem; padding: 0.75rem 1rem; min-width: 0;
+}
+.carma-editor .ProseMirror .carma-column > *:first-child { margin-top: 0; }
+.carma-editor .ProseMirror .carma-column > *:last-child { margin-bottom: 0; }
+
+/* Toggle / accordion — editor (body always visible so it stays editable) */
+.carma-editor .ProseMirror details.carma-toggle { border: 1px solid #e7e5e4; border-radius: 0.75rem; padding: 0.5rem 1.1rem; margin: 1.4em 0; background: #fafaf9; }
+.carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary { cursor: text; font-weight: 700; list-style: none; padding: 0.3rem 0; outline: none; }
+.carma-editor .ProseMirror details.carma-toggle > summary::-webkit-details-marker { display: none; }
+.carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary::before { content: '▸'; display: inline-block; margin-right: 0.5rem; color: #a8a29e; }
+.carma-editor .ProseMirror details.carma-toggle > :not(summary) { display: block !important; }
+
+/* Table of contents — editor */
+.carma-toc-editor { margin: 1.5em 0; border: 1px solid #e7e5e4; border-left: 3px solid #d4af37; border-radius: 0.75rem; padding: 0.9rem 1.1rem; background: #fafaf9; }
+.carma-toc-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #a8a29e; margin-bottom: 0.5rem; }
+.carma-toc-editor ul { list-style: none; margin: 0; padding: 0; }
+.carma-toc-editor li { margin: 0.1rem 0; }
+.carma-toc-editor li button { cursor: pointer; background: none; border: none; padding: 0.15rem 0; font-size: 0.92rem; color: #57534e; text-align: left; }
+.carma-toc-editor li button:hover { color: #b58f27; text-decoration: underline; }
+.carma-toc-empty { font-size: 0.85rem; color: #a8a29e; margin: 0; }
+
+/* CTA button — editor */
+.carma-cta-block { margin: 1.4em 0; }
+.carma-cta-block .carma-button { display: inline-block; background: #d4af37; color: #fff !important; font-weight: 700; padding: 0.6rem 1.3rem; border-radius: 0.6rem; text-decoration: none !important; cursor: text; outline: none; }
+.carma-cta-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.carma-cta-href { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 200px; border: 1px solid #e7e5e4; border-radius: 0.5rem; padding: 0.25rem 0.6rem; background: #fff; }
+.carma-cta-href input { flex: 1; border: none; outline: none; font-size: 0.8rem; background: transparent; }
+.carma-cta-align { display: flex; gap: 0.25rem; }
+.carma-cta-align button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #e7e5e4; border-radius: 0.5rem; background: #fff; cursor: pointer; color: #78716c; }
+.carma-cta-align button.is-active { background: #d4af37; border-color: #d4af37; color: #fff; }
+.carma-gallery-empty {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 1.5rem; border: 1px dashed #d6d3d1; border-radius: 0.75rem;
+  color: #a8a29e; font-size: 0.9rem; font-weight: 600;
+}
+.carma-gallery-add { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.carma-gallery-add input {
+  flex: 1; padding: 0.5rem 0.75rem; font-size: 0.8rem;
+  border: 1px solid #e7e5e4; border-radius: 0.6rem; outline: none; background: #fafaf9;
+}
+.carma-gallery-add input:focus { border-color: #d4af37; background: #fff; }
+.carma-gallery-add button {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; border-radius: 0.6rem; background: #d4af37; color: #fff; cursor: pointer;
+}

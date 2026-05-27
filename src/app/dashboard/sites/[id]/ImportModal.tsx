@@ -86,13 +86,19 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
     const urls = filteredDiscovered.map(a => a.url)
     setSelected(prev => {
       const next = new Set(prev)
-      allFilteredSelected ? urls.forEach(u => next.delete(u)) : urls.forEach(u => next.add(u))
+      if (allFilteredSelected) urls.forEach(u => next.delete(u))
+      else urls.forEach(u => next.add(u))
       return next
     })
   }
 
   const toggleOne = (u: string) => {
-    setSelected(prev => { const next = new Set(prev); next.has(u) ? next.delete(u) : next.add(u); return next })
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(u)) next.delete(u)
+      else next.add(u)
+      return next
+    })
   }
 
   const handleDiscover = async () => {
@@ -240,7 +246,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
           <div className="bg-neutral-100 rounded-full h-1.5 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-carma-500 to-carma-400 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
           </div>
-          {progress.current && <p className="text-[10px] text-neutral-400 mt-1 truncate">{progress.current}</p>}
+          {progress.current && <p className="text-xs text-neutral-400 mt-1 truncate">{progress.current}</p>}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => setIsMinimized(false)} title="Tornar al primer pla" className="cursor-pointer p-1.5 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors">
@@ -294,7 +300,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
             <>
               {/* 1. Auto-discover */}
               <div className="space-y-3">
-                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest">
+                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest">
                   Descoberta automàtica (WordPress · Sitemap · RSS)
                 </label>
                 <div className="flex gap-2">
@@ -324,7 +330,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-neutral-100" />
-                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">o</span>
+                <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">o</span>
                 <div className="flex-1 h-px bg-neutral-100" />
               </div>
 
@@ -332,7 +338,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
               <div className="space-y-3 bg-neutral-50 border border-neutral-200 rounded-2xl p-4">
                 <div className="flex items-center gap-2">
                   <Newspaper className="w-4 h-4 text-neutral-500" />
-                  <label className="block text-[11px] font-bold text-neutral-500 uppercase tracking-widest">
+                  <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest">
                     Pàgina d&apos;articles · Rastreig per selector CSS
                   </label>
                 </div>
@@ -380,7 +386,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
                 {/* Selectors CSS per als camps (expandible) */}
                 <button
                   onClick={() => setShowCrawlSelectors(v => !v)}
-                  className="cursor-pointer flex items-center gap-2 text-[11px] font-bold text-neutral-400 hover:text-neutral-600 uppercase tracking-widest transition-colors"
+                  className="cursor-pointer flex items-center gap-2 text-xs font-bold text-neutral-400 hover:text-neutral-600 uppercase tracking-widest transition-colors"
                 >
                   {showCrawlSelectors ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   Selectors per camps (opcional)
@@ -406,13 +412,13 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-neutral-100" />
-                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">o</span>
+                <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">o</span>
                 <div className="flex-1 h-px bg-neutral-100" />
               </div>
 
               {/* 3. Manual URL */}
               <div className="space-y-3">
-                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest">
+                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest">
                   URL manual · Article únic
                 </label>
                 <div className="flex gap-2">
@@ -459,34 +465,34 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
                       <img src={previewData.image} alt="" className="w-full h-32 object-cover rounded-xl" />
                     )}
                     <div>
-                      <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Títol</p>
+                      <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">Títol</p>
                       {previewData.title ? <p className="text-sm font-bold text-neutral-900">{previewData.title}</p> : <p className="text-sm text-neutral-400 italic">No detectat</p>}
                     </div>
-                    {previewData.author && <div><p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Autor</p><p className="text-xs text-neutral-700">{previewData.author}</p></div>}
-                    {previewData.date && <div><p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Data</p><p className="text-xs text-neutral-700">{previewData.date}</p></div>}
+                    {previewData.author && <div><p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">Autor</p><p className="text-xs text-neutral-700">{previewData.author}</p></div>}
+                    {previewData.date && <div><p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">Data</p><p className="text-xs text-neutral-700">{previewData.date}</p></div>}
                     {previewData.categories.length > 0 && (
                       <div>
-                        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Categories</p>
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">Categories</p>
                         <div className="flex flex-wrap gap-1">{previewData.categories.map(c => <span key={c} className="px-2 py-0.5 bg-carma-100 text-carma-700 rounded text-xs font-semibold">{c}</span>)}</div>
                       </div>
                     )}
                     {previewData.contentPreview && (
                       <div>
-                        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Contingut ({previewData.contentLength} car.)</p>
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">Contingut ({previewData.contentLength} car.)</p>
                         <p className="text-xs text-neutral-600 line-clamp-3 leading-relaxed">{previewData.contentPreview}</p>
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-3">Selectors CSS</p>
+                    <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-3">Selectors CSS</p>
                     <div className="space-y-2.5">
                       {SELECTOR_FIELDS.map(({ key, label }) => (
                         <div key={key} className="space-y-1">
                           <div className="flex items-center justify-between gap-2">
                             <label className="text-xs font-semibold text-neutral-600 shrink-0">{label}</label>
                             {previewData.selectorsUsed[key] && (
-                              <span className="text-[10px] font-mono text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded truncate max-w-[220px]">{previewData.selectorsUsed[key]}</span>
+                              <span className="text-xs font-mono text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded truncate max-w-[220px]">{previewData.selectorsUsed[key]}</span>
                             )}
                           </div>
                           <input
@@ -524,7 +530,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
               {availableLangs.length > 1 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <Filter className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                  <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest shrink-0">Idioma:</span>
+                  <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest shrink-0">Idioma:</span>
                   <button onClick={() => { setLangFilter('all'); setSelected(new Set(discovered.map(a => a.url))) }}
                     className={`cursor-pointer px-3 py-1 rounded-lg text-xs font-bold transition-all ${langFilter === 'all' ? 'bg-neutral-800 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
                     Tots ({discovered.length})
@@ -576,7 +582,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
                       <p className="text-xs text-neutral-400 truncate font-mono mt-0.5">{article.url}</p>
                     </div>
                     {article.language && (
-                      <span className="text-[10px] font-bold uppercase bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded shrink-0 self-center">{article.language}</span>
+                      <span className="text-xs font-bold uppercase bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded shrink-0 self-center">{article.language}</span>
                     )}
                   </label>
                 ))}
@@ -624,7 +630,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
                     <div key={r.url} className={`flex items-center gap-3 px-4 py-2 ${i > 0 ? 'border-t border-neutral-50' : ''}`}>
                       {r.success ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" /> : r.skipped ? <AlertCircle className="w-4 h-4 text-neutral-400 shrink-0" /> : <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
                       <p className="text-xs font-medium text-neutral-700 truncate flex-1">{r.title ?? r.url}</p>
-                      {r.error && !r.skipped && <p className="text-[10px] text-red-400 shrink-0">{r.error}</p>}
+                      {r.error && !r.skipped && <p className="text-xs text-red-400 shrink-0">{r.error}</p>}
                     </div>
                   ))}
                 </div>
@@ -656,7 +662,7 @@ export default function ImportModal({ siteId, onClose }: { siteId: string; onClo
                       {r.success ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" /> : r.skipped ? <AlertCircle className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-neutral-700 truncate">{r.title ?? r.url}</p>
-                        {r.error && <p className="text-[10px] text-red-500 mt-0.5">{r.error}</p>}
+                        {r.error && <p className="text-xs text-red-500 mt-0.5">{r.error}</p>}
                       </div>
                     </div>
                   ))}

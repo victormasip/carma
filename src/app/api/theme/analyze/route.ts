@@ -1,11 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { parse, type HTMLElement } from 'node-html-parser'
+import { parse, HTMLElement } from 'node-html-parser'
 import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText } from '@/lib/scrape/http'
-import { extractTokens } from '@/lib/scrape/tokens'
+import { extractTokens, familiesFromFontLinks } from '@/lib/scrape/tokens'
 import { sanitizeStructural } from '@/lib/scrape/sanitize'
+import { absolutiseCssUrls as cssAbsUrls, splitImports } from '@/lib/scrape/clientCss'
+import { rebuildChrome, filterCssForRegion, trimPayload, type RebuiltRegion } from '@/lib/render/llmChrome'
+import { isLocale } from '@/lib/i18n/config'
 
-const MAX_STYLESHEETS = 8
+// node-html-parser requires the Node.js runtime.
+export const runtime = 'nodejs'
+// The LLM reconstruction (two parallel model calls) is slow — give the route
+// generous headroom. NOTE: values >60 require a Vercel Pro plan; on Hobby (60s
+// cap) set THEME_LLM_MODEL=claude-haiku-4-5 to stay under the limit.
+export const maxDuration = 120
+
+const MAX_STYLESHEETS = 24
+const MAX_CSS_BYTES = 900_000
+const FONT_SHEET_RE = /fonts\.(googleapis|gstatic)\.com|use\.typekit|typography\.com|cloud\.typography|fonts\.adobe|fonts\.bunny/i
 
 // ─── Framework + hosting detection ────────────────────────────────────────────
 
@@ -88,108 +100,103 @@ function absolutise(url: string | undefined, base: URL): string | undefined {
   try { return new URL(trimmed, base).toString() } catch { return trimmed }
 }
 
-function absolutiseCssUrls(css: string, base: URL): string {
-  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_match, quote, url) => {
-    const u = url.trim()
-    if (/^(https?:|data:|#)/i.test(u)) return `url(${quote}${u}${quote})`
-    try {
-      return `url(${quote}${new URL(u, base).toString()}${quote})`
-    } catch {
-      return `url(${quote}${u}${quote})`
-    }
-  })
-}
+type CssSource = { kind: 'url'; url: string } | { kind: 'inline'; css: string }
 
-function rewriteUrlAttrs(el: HTMLElement, base: URL) {
-  for (const node of el.querySelectorAll('a[href]')) {
-    const v = absolutise(node.getAttribute('href'), base)
-    if (v) node.setAttribute('href', v)
-  }
-  for (const node of el.querySelectorAll('img[src],script[src],source[src],iframe[src],video[src],audio[src]')) {
-    const v = absolutise(node.getAttribute('src'), base)
-    if (v) node.setAttribute('src', v)
-  }
-  for (const node of el.querySelectorAll('img[srcset],source[srcset]')) {
-    const srcset = node.getAttribute('srcset')
-    if (!srcset) continue
-    const rewritten = srcset.split(',').map(part => {
-      const [u, ...rest] = part.trim().split(/\s+/)
-      return [absolutise(u, base) ?? u, ...rest].join(' ')
-    }).join(', ')
-    node.setAttribute('srcset', rewritten)
-  }
-  for (const node of el.querySelectorAll('link[href]')) {
-    const v = absolutise(node.getAttribute('href'), base)
-    if (v) node.setAttribute('href', v)
-  }
-  for (const node of el.querySelectorAll('[poster]')) {
-    const v = absolutise(node.getAttribute('poster'), base)
-    if (v) node.setAttribute('poster', v)
-  }
-  for (const node of el.querySelectorAll('[style]')) {
-    const s = node.getAttribute('style')
-    if (s && /url\(/i.test(s)) node.setAttribute('style', absolutiseCssUrls(s, base))
-  }
-  for (const node of el.querySelectorAll('style')) {
-    const txt = node.text ?? ''
-    if (txt && /url\(/i.test(txt)) {
-      node.set_content(absolutiseCssUrls(txt, base))
-    }
-  }
-}
-
-function extractHead(root: HTMLElement, base: URL): {
-  headHtml: string
+// Walk <head> in document order, collecting stylesheet links + inline <style>
+// so the cascade order is preserved. Also surfaces font sheets (kept as <link>)
+// and the external-stylesheet list (for the integration guide).
+function collectHeadStyles(root: HTMLElement, base: URL): {
+  sources: CssSource[]
   externalStyles: string[]
   fontLinks: string[]
-  inlineCss: string[]
 } {
   const head = root.querySelector('head')
+  const sources: CssSource[] = []
   const externalStyles: string[] = []
   const fontLinks: string[] = []
-  const inlineCss: string[] = []
-  if (!head) return { headHtml: '', externalStyles, fontLinks, inlineCss }
+  if (!head) return { sources, externalStyles, fontLinks }
 
-  const keepNodes: string[] = []
-
-  for (const m of head.querySelectorAll('meta')) {
-    const charset = m.getAttribute('charset')
-    const name = m.getAttribute('name')?.toLowerCase()
-    const httpEquiv = m.getAttribute('http-equiv')?.toLowerCase()
-    if (charset || ['viewport', 'color-scheme', 'theme-color', 'format-detection'].includes(name ?? '') ||
-        ['content-type', 'x-ua-compatible'].includes(httpEquiv ?? '')) {
-      keepNodes.push(m.toString())
+  for (const node of head.childNodes) {
+    if (!(node instanceof HTMLElement)) continue
+    const t = (node.tagName || '').toUpperCase()
+    if (t === 'LINK') {
+      const rel = node.getAttribute('rel')?.toLowerCase() ?? ''
+      const href = absolutise(node.getAttribute('href'), base)
+      if (!href) continue
+      if (rel.includes('stylesheet')) {
+        externalStyles.push(href)
+        sources.push({ kind: 'url', url: href })
+      }
+      if (FONT_SHEET_RE.test(href)) fontLinks.push(href)
+    } else if (t === 'STYLE') {
+      const css = node.text ?? ''
+      if (css.trim()) sources.push({ kind: 'inline', css })
     }
   }
+  return { sources, externalStyles, fontLinks }
+}
 
-  for (const link of head.querySelectorAll('link')) {
-    const rel = link.getAttribute('rel')?.toLowerCase() ?? ''
-    const href = absolutise(link.getAttribute('href'), base)
-    if (!href) continue
-
-    if (rel.includes('stylesheet')) {
-      externalStyles.push(href)
-      link.setAttribute('href', href)
-      keepNodes.push(link.toString())
-    } else if (rel.includes('preconnect') || rel.includes('dns-prefetch') || rel.includes('preload') || rel.includes('icon')) {
-      link.setAttribute('href', href)
-      keepNodes.push(link.toString())
-    }
-
-    if (/fonts\.(googleapis|gstatic)\.com|use\.typekit|typography\.com|cloud\.typography|fonts\.adobe|fonts\.bunny/i.test(href)) {
-      fontLinks.push(href)
+// Absolutise every asset/link URL inside a markup fragment so nothing breaks
+// once it's detached from its origin.
+function absolutiseMarkup(el: HTMLElement, base: URL): void {
+  for (const a of el.querySelectorAll('a[href]')) {
+    const v = absolutise(a.getAttribute('href'), base); if (v) a.setAttribute('href', v)
+  }
+  for (const n of el.querySelectorAll('img[src],source[src],video[src],audio[src],use[href],[poster]')) {
+    for (const attr of ['src', 'href', 'poster'] as const) {
+      const cur = n.getAttribute(attr)
+      if (cur) { const v = absolutise(cur, base); if (v) n.setAttribute(attr, v) }
     }
   }
+  for (const n of el.querySelectorAll('img[srcset],source[srcset]')) {
+    const srcset = n.getAttribute('srcset'); if (!srcset) continue
+    n.setAttribute('srcset', srcset.split(',').map(part => {
+      const [u, ...rest] = part.trim().split(/\s+/)
+      return [absolutise(u, base) ?? u, ...rest].join(' ')
+    }).join(', '))
+  }
+  for (const n of el.querySelectorAll('[style]')) {
+    const s = n.getAttribute('style')
+    if (s && /url\(/i.test(s)) n.setAttribute('style', cssAbsUrls(s, base))
+  }
+}
 
-  for (const style of head.querySelectorAll('style')) {
-    const css = style.text ?? ''
-    if (css.trim()) inlineCss.push(css)
-    const abs = /url\(/i.test(css) ? absolutiseCssUrls(css, base) : css
-    const mediaAttr = style.getAttribute('media')
-    keepNodes.push(`<style${mediaAttr ? ` media="${mediaAttr}"` : ''}>${abs}</style>`)
+// Fetch every stylesheet (following @import recursively), absolutise each
+// against its OWN url, and concatenate in cascade order. Skips font sheets
+// (kept as <link>) and stops at a byte budget.
+async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  let budget = MAX_CSS_BYTES
+
+  async function pullUrl(url: string, depth: number): Promise<void> {
+    if (depth > 4 || budget <= 0 || seen.has(url)) return
+    seen.add(url)
+    const css = await safeFetchText(url, { accept: 'text/css,*/*', timeout: 8_000 })
+    if (!css) return
+    let base: URL
+    try { base = new URL(url) } catch { base = pageUrl }
+    const { imports, rest } = splitImports(css, base)
+    for (const imp of imports) await pullUrl(imp, depth + 1)
+    const abs = cssAbsUrls(rest, base)
+    budget -= abs.length
+    parts.push(abs)
   }
 
-  return { headHtml: keepNodes.join('\n'), externalStyles, fontLinks, inlineCss }
+  for (const src of sources) {
+    if (budget <= 0) break
+    if (src.kind === 'url') {
+      if (FONT_SHEET_RE.test(src.url)) continue // fonts stay as <link>
+      await pullUrl(src.url, 0)
+    } else {
+      const { imports, rest } = splitImports(src.css, pageUrl)
+      for (const imp of imports) await pullUrl(imp, 1)
+      const abs = cssAbsUrls(rest, pageUrl)
+      budget -= abs.length
+      parts.push(abs)
+    }
+  }
+  return parts.join('\n')
 }
 
 function extractScripts(root: HTMLElement, base: URL): {
@@ -227,15 +234,42 @@ function extractScripts(root: HTMLElement, base: URL): {
   return { scriptsHtml: keepNodes.join('\n'), externalScripts }
 }
 
-function extractRegion(root: HTMLElement, base: URL, selectors: string[]): string {
+function findRegionEl(root: HTMLElement, selectors: string[]): HTMLElement | null {
   for (const sel of selectors) {
     const el = root.querySelector(sel)
-    if (el && el.innerHTML.trim().length > 0) {
-      rewriteUrlAttrs(el, base)
-      return el.toString()
-    }
+    if (el && el.innerHTML.trim().length > 0) return el
   }
-  return ''
+  return null
+}
+
+// Is this element inside the site chrome (header/footer/nav)? Those headings
+// (logo wordmark, etc.) are not the page's news/blog title.
+function isInChrome(el: HTMLElement): boolean {
+  let p = el.parentNode as HTMLElement | null
+  while (p) {
+    const tag = (p.tagName || '').toUpperCase()
+    if (tag === 'HEADER' || tag === 'FOOTER' || tag === 'NAV') return true
+    p = p.parentNode as HTMLElement | null
+  }
+  return false
+}
+
+// Best-effort extraction of the client's news/blog page heading, so our listing
+// uses THEIR title (e.g. "Actualitat") instead of the literal "Articles".
+function extractPageTitle(root: HTMLElement): string | null {
+  // 1) First main-content <h1> that isn't part of the chrome.
+  for (const h1 of root.querySelectorAll('h1')) {
+    if (isInChrome(h1)) continue
+    const t = h1.text.replace(/\s+/g, ' ').trim()
+    if (t && t.length <= 80) return t
+  }
+  // 2) og:title / <title>, stripped of the site-name suffix.
+  const strip = (s: string) => s.split(/\s*[|·•\-–—]\s*/)[0].trim() || s.trim()
+  const og = root.querySelector('meta[property="og:title"]')?.getAttribute('content')?.trim()
+  if (og) return strip(og).slice(0, 80)
+  const title = root.querySelector('title')?.text?.trim()
+  if (title) return strip(title).slice(0, 80)
+  return null
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -265,39 +299,87 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Error parsejant HTML' }, { status: 422 })
   }
 
-  const { headHtml, externalStyles, fontLinks, inlineCss } = extractHead(root, baseUrl)
-  const { scriptsHtml, externalScripts } = extractScripts(root, baseUrl)
+  const { sources, externalStyles, fontLinks } = collectHeadStyles(root, baseUrl)
+  const { externalScripts } = extractScripts(root, baseUrl)
 
-  const headerHtml = sanitizeStructural(extractRegion(root, baseUrl, [
-    'header[role="banner"]', 'body > header', 'header.site-header', 'header#header',
-    '.site-header', '.main-header', '.page-header', 'header',
-    'nav[role="navigation"]', '.navbar', '.navigation',
-  ]))
+  const headerEl = findRegionEl(root, [
+    // Semantic / ARIA first
+    'header[role="banner"]', '[role="banner"]', 'body > header',
+    // WordPress (classic + block themes / FSE) and page builders
+    'header#masthead', '#masthead', 'header#site-header', '#site-header',
+    '.elementor-location-header', '[data-elementor-type="header"]',
+    'header.wp-block-template-part', '.wp-block-template-part.site-header',
+    // Common conventions
+    'header.site-header', 'header#header', '.site-header', '.main-header',
+    '.page-header', '.global-header', '.l-header', '#header',
+    // Generic fallbacks
+    'header', 'nav[role="navigation"]', '.navbar', '.navigation', 'nav',
+  ])
 
-  const footerHtml = sanitizeStructural(extractRegion(root, baseUrl, [
-    'footer[role="contentinfo"]', 'body > footer', 'footer.site-footer', 'footer#footer',
-    '.site-footer', '.main-footer', '.page-footer', 'footer',
-  ]))
+  const footerEl = findRegionEl(root, [
+    // Semantic / ARIA first
+    'footer[role="contentinfo"]', '[role="contentinfo"]', 'body > footer',
+    // WordPress (classic + block themes / FSE) and page builders
+    'footer#colophon', '#colophon', 'footer#site-footer', '#site-footer',
+    '.elementor-location-footer', '[data-elementor-type="footer"]',
+    'footer.wp-block-template-part', '.wp-block-template-part.site-footer',
+    // Common conventions
+    'footer.site-footer', 'footer#footer', '.site-footer', '.main-footer',
+    '.page-footer', '.global-footer', '.l-footer', '#footer',
+    // Generic fallback
+    'footer',
+  ])
+
+  // Capture the ORIGINAL header/footer markup as the model's SOURCE: every asset
+  // URL absolutised, scripts stripped. We do NOT ship this — the LLM rebuilds it.
+  const regionSource = (el: HTMLElement | null): string => {
+    if (!el) return ''
+    absolutiseMarkup(el, baseUrl)
+    // trimPayload aggressively strips scripts/styles/iframes/SVGs/base64 to slash
+    // the token count before the markup ever reaches the model.
+    return trimPayload(sanitizeStructural(el.toString()))
+  }
+  const headerSource = regionSource(headerEl)
+  const footerSource = regionSource(footerEl)
 
   const detection = detectFramework(fetched.body, fetched.headers)
 
-  // Fetch a sample of external stylesheets so we can parse design tokens
-  // (colours / fonts / radii) from real CSS, not just inline styles.
-  const uniqueStyles = [...new Set(externalStyles)].slice(0, MAX_STYLESHEETS)
-  const fetchedCss = await Promise.all(
-    uniqueStyles.map(href => safeFetchText(href, { accept: 'text/css,*/*', timeout: 8_000 })),
-  )
-  const cssTexts = [...inlineCss, ...fetchedCss.filter((c): c is string => !!c)]
+  // Fetch + inline the site's real CSS once. Used for (a) design-token
+  // extraction and (b) giving the reconstruction model a relevant styling slice
+  // per region. Crucially, this CSS is NEVER shipped to the render page.
+  let urlCount = 0
+  const cappedSources = sources.filter(s => s.kind === 'inline' || ++urlCount <= MAX_STYLESHEETS)
+  const rawCss = await fetchAllCss(cappedSources, baseUrl)
+  const tokens = extractTokens({ root, cssTexts: [rawCss], fontLinks })
 
-  const tokens = extractTokens({ root, cssTexts, fontLinks })
+  // ── LLM Reconstruction Engine: rebuild clean, isolated, native chrome ──
+  let rebuilt: { header: RebuiltRegion | null; footer: RebuiltRegion | null }
+  try {
+    rebuilt = await rebuildChrome({
+      siteName: baseUrl.hostname.replace(/^www\./, ''),
+      baseUrl: baseUrl.origin,
+      tokens: tokens as unknown as Record<string, string>,
+      fontFamilies: familiesFromFontLinks(fontLinks),
+      headerHtml: headerSource,
+      footerHtml: footerSource,
+      headerCss: filterCssForRegion(rawCss, headerSource),
+      footerCss: filterCssForRegion(rawCss, footerSource),
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error desconegut'
+    return NextResponse.json({ error: `Reconstrucció IA fallida: ${message}` }, { status: 502 })
+  }
+
+  // Stored per-region as JSON { html, css }: a self-contained, namespaced
+  // component. CSS is force-scoped at render time; html is script-stripped here.
+  const region = (r: RebuiltRegion | null): string =>
+    r ? JSON.stringify({ html: sanitizeStructural(r.html), css: r.css }) : ''
 
   return NextResponse.json({
-    extracted_head: headHtml,
-    extracted_header: headerHtml,
-    extracted_footer: footerHtml,
-    // Scripts are intentionally excluded from the render output: client scripts
-    // that reference DOM elements from the original site cause blank pages and
-    // other breakage. Visual fidelity comes from CSS alone.
+    // No client CSS bundle is shipped any more — isolation is structural.
+    extracted_head: '',
+    extracted_header: region(rebuilt.header),
+    extracted_footer: region(rebuilt.footer),
     extracted_scripts: '',
     external_styles: [...new Set(externalStyles)],
     external_scripts: [...new Set(externalScripts)],
@@ -305,5 +387,22 @@ export async function POST(request: NextRequest) {
     detection,
     base_url: baseUrl.origin,
     tokens,
+    section_title: extractPageTitle(root),
+    detected_locale: detectLocale(root),
   })
+}
+
+// The site's primary language from <html lang> (or og:locale), mapped to a
+// supported locale so it can seed the site's default i18n locale on capture.
+function detectLocale(root: HTMLElement): string | null {
+  const candidates = [
+    root.querySelector('html')?.getAttribute('lang'),
+    root.querySelector('meta[property="og:locale"]')?.getAttribute('content'),
+  ]
+  for (const c of candidates) {
+    if (!c) continue
+    const base = c.toLowerCase().replace('_', '-').split('-')[0]
+    if (isLocale(base)) return base
+  }
+  return null
 }

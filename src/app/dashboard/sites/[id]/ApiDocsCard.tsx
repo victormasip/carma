@@ -259,6 +259,17 @@ export default function ApiDocsCard({
         </div>
       </div>
 
+      {/* Aclariment: API JSON vs embed amb estils */}
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-lg flex items-center justify-center shrink-0">
+          <Code2 className="w-4 h-4" />
+        </div>
+        <p className="text-xs text-amber-900 leading-relaxed">
+          Aquesta API JSON retorna el contingut <strong>sense estils</strong> perquè el maquetis tu mateix dins el teu propi frontend.
+          Si vols el blog <strong>ja dissenyat</strong> i autoaïllat (es veu perfecte sobre qualsevol web), fes servir l&apos;<strong>Embed en directe</strong> de més amunt — injecta el CSS de Carma en un Shadow DOM, sense que el CSS del client l&apos;afecti.
+        </p>
+      </div>
+
       {/* Guia d'integració personalitzada */}
       <IntegrationGuide
         siteId={siteId}
@@ -270,7 +281,7 @@ export default function ApiDocsCard({
       {/* Endpoint i paràmetres */}
       <div className="bg-white border border-neutral-100 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-5 border-b border-neutral-100">
-          <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Endpoint</p>
+          <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Endpoint</p>
           <div className="flex items-center gap-3 bg-neutral-50 rounded-xl px-4 py-3 border border-neutral-200">
             <span className="text-xs font-bold text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded shrink-0">GET</span>
             <code className="text-sm font-mono text-neutral-700 truncate">{endpoint}</code>
@@ -283,7 +294,7 @@ export default function ApiDocsCard({
           onClick={() => setShowParams(v => !v)}
           className="cursor-pointer w-full flex items-center justify-between px-5 py-3.5 hover:bg-neutral-50 transition-colors"
         >
-          <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest">Paràmetres de consulta</p>
+          <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Paràmetres de consulta</p>
           {showParams ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
         </button>
 
@@ -305,7 +316,7 @@ export default function ApiDocsCard({
 
         {/* Esquema de resposta */}
         <div className="border-t border-neutral-100 p-5">
-          <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-3">Resposta (llista)</p>
+          <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-3">Resposta (llista)</p>
           <pre className="bg-neutral-900 text-neutral-300 rounded-xl p-4 text-xs font-mono leading-relaxed overflow-x-auto">{`{
   "site":  "Nom del lloc",
   "count": 3,

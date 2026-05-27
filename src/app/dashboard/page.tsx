@@ -173,8 +173,8 @@ export default async function DashboardHome({
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-neutral-100">
-                      <th className="text-left text-[11px] font-bold text-neutral-400 uppercase tracking-widest px-6 py-4">Email</th>
-                      <th className="text-left text-[11px] font-bold text-neutral-400 uppercase tracking-widest px-6 py-4">Llocs assignats</th>
+                      <th className="text-left text-xs font-bold text-neutral-400 uppercase tracking-widest px-6 py-4">Email</th>
+                      <th className="text-left text-xs font-bold text-neutral-400 uppercase tracking-widest px-6 py-4">Llocs assignats</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -240,7 +240,7 @@ function SiteGrid({ sites }: { sites: SiteWithCounts[] }) {
               <div className="w-1.5 h-1.5 rounded-full bg-carma-500" />
               Accedir al lloc
             </span>
-            <span className="font-medium normal-case text-[10px]">
+            <span className="font-medium normal-case text-xs">
               {new Date(site.created_at).toLocaleDateString('ca-ES')}
             </span>
           </div>
