@@ -294,6 +294,28 @@ function findContentRange(body: P5Node): ContentRange | null {
   // content BLOCKS and the sliced CHILDREN never are.)
   const isContent = (el: P5Node): boolean => !chromeOrInside.has(el) && !chromeAncestors.has(el)
 
+  // FAILSAFE: every bail-out below routes through here instead of returning null.
+  // We already have the header/footer anchors — so when the content-density
+  // heuristic can't isolate a content block (a chrome-heavy page, a near-empty body,
+  // an unusual layout), we still slice STRUCTURALLY at the chrome boundary rather
+  // than discarding the chrome. Guarantees: anchors found ⟹ chrome preserved. Slots
+  // the gap between the header and footer (or everything beside a lone anchor); if
+  // they are adjacent, inserts an empty slot between them (the blog renders there).
+  const fallback = (): ContentRange | null => {
+    const fParent: P5Node = headerAnchor && footerAnchor
+      ? (lcaOf(headerAnchor, footerAnchor) ?? body)
+      : body
+    const fkids = fParent.childNodes ?? []
+    if (!fkids.length) return null
+    const hChild = childContaining(fParent, headerAnchor)
+    const fChild = childContaining(fParent, footerAnchor)
+    const s = hChild ? fkids.indexOf(hChild) + 1 : 0
+    let e = fChild ? fkids.indexOf(fChild) - 1 : fkids.length - 1
+    if (e < s - 1) e = s - 1 // header & footer adjacent → insert, remove nothing
+    if (s < 0 || s > fkids.length) return null
+    return { parent: fParent, startIdx: s, endIdx: e }
+  }
+
   // 3. Content blocks = every content element scoring above the relative threshold.
   const stats = computeStats(body)
   let pivot: P5Node | null = null
@@ -303,7 +325,7 @@ function findContentRange(body: P5Node): ContentRange | null {
     const sc = scoreOf(stats, el)
     if (sc > bestScore) { bestScore = sc; pivot = el }
   }
-  if (!pivot || bestScore <= 0) return null
+  if (!pivot || bestScore <= 0) return fallback() // chrome but no scorable content
 
   const threshold = Math.max(MIN_BLOCK_SCORE, bestScore * BLOCK_FRACTION)
   let blocks = els.filter(el => isContent(el) && scoreOf(stats, el) >= threshold)
@@ -321,9 +343,9 @@ function findContentRange(body: P5Node): ContentRange | null {
     const lca = lcaOf(parent, blocks[i])
     if (lca) parent = lca
   }
-  if (chromeOrInside.has(parent)) return null
+  if (chromeOrInside.has(parent)) return fallback()
   const kids = parent.childNodes ?? []
-  if (!kids.length) return null
+  if (!kids.length) return fallback()
 
   // 5. Bound the slice by the chrome that lives INSIDE this container: never cross
   //    the header child (above) or the footer child (below).
@@ -345,7 +367,7 @@ function findContentRange(body: P5Node): ContentRange | null {
     for (let i = 0; i < kids.length; i++) {
       if (i > hIdx && i < fIdx && isElement(kids[i]) && isContent(kids[i])) contentIdx.push(i)
     }
-    if (!contentIdx.length) return null
+    if (!contentIdx.length) return fallback()
   }
   let startIdx = contentIdx[0]
   let endIdx = contentIdx[contentIdx.length - 1]
@@ -369,7 +391,7 @@ function findContentRange(body: P5Node): ContentRange | null {
     }
   }
 
-  if (startIdx < 0 || endIdx < startIdx || endIdx >= kids.length) return null
+  if (startIdx < 0 || endIdx < startIdx || endIdx >= kids.length) return fallback()
   return { parent, startIdx, endIdx }
 }
 
@@ -434,13 +456,17 @@ function sanitiseScripts(root: P5Node): void {
 }
 
 // Replace the inclusive child range [startIdx..endIdx] with one slot comment.
+// Replace the inclusive child range [startIdx..endIdx] with one slot comment.
+// `endIdx === startIdx - 1` is a valid degenerate range meaning INSERT the slot at
+// `startIdx` removing nothing — used by the failsafe when the header and footer are
+// adjacent (no content node between them to replace).
 function replaceRangeWithSlot(range: ContentRange): boolean {
   const { parent, startIdx, endIdx } = range
   const kids = parent.childNodes
-  if (!kids || startIdx < 0 || endIdx < startIdx || endIdx >= kids.length) return false
+  if (!kids || startIdx < 0 || startIdx > kids.length || endIdx < startIdx - 1 || endIdx >= kids.length) return false
   const slot = defaultTreeAdapter.createCommentNode(SLOT_DATA) as unknown as P5Node
   slot.parentNode = parent
-  kids.splice(startIdx, endIdx - startIdx + 1, slot)
+  kids.splice(startIdx, endIdx - startIdx + 1, slot) // count 0 when endIdx === startIdx-1 → pure insert
   return true
 }
 

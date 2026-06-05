@@ -499,6 +499,44 @@ section('asymmetric — footer nested with content, header outside')
   assertWellFormedSandwich('asymmetric', html)
 }
 
+// 17. FAILSAFE — chrome present but the content-density heuristic finds no block.
+//     Detection must NOT collapse to empty chrome: the structural failsafe slices
+//     at the header/footer boundary so the chrome is always preserved.
+section('failsafe — chrome preserved when no content block is detected')
+{
+  // (a) Header + footer with NOTHING between them (no content node to replace).
+  const noContent = splitPageChrome(
+    '<body><header id="T-HEADER" class="site-header"><nav><a href="/">A</a><a href="/b">B</a></nav></header><footer id="T-FOOTER" class="site-footer">© 2026</footer></body>',
+    new URL('https://fs1.test/'),
+  )
+  ok(noContent.strategy === 'content', `failsafe/no-content: did NOT collapse to none (got ${noContent.strategy})`)
+  ok(/id="T-HEADER"/.test(noContent.top), 'failsafe/no-content: header preserved in Top')
+  ok(/id="T-FOOTER"/.test(noContent.bottom), 'failsafe/no-content: footer preserved in Bottom')
+  const html = buildArticlePage(baseTheme(noContent.top, noContent.bottom), 'FS', 's1', POST, 'en')
+  assertWellFormedSandwich('failsafe-no-content', html)
+
+  // (b) Header only, with a single empty wrapper as the "content".
+  const headerOnly = splitPageChrome(
+    '<body><header id="T-HEADER" class="site-header"><nav><a href="/">A</a><a href="/b">B</a></nav></header><div class="x"></div></body>',
+    new URL('https://fs2.test/'),
+  )
+  ok(headerOnly.strategy === 'content', `failsafe/header-only: did NOT collapse to none (got ${headerOnly.strategy})`)
+  ok(/id="T-HEADER"/.test(headerOnly.top), 'failsafe/header-only: header preserved in Top')
+
+  // (c) Footer only.
+  const footerOnly = splitPageChrome(
+    '<body><div class="x"></div><footer id="T-FOOTER" class="site-footer">© 2026</footer></body>',
+    new URL('https://fs3.test/'),
+  )
+  ok(footerOnly.strategy === 'content', `failsafe/footer-only: did NOT collapse to none (got ${footerOnly.strategy})`)
+  ok(/id="T-FOOTER"/.test(footerOnly.bottom), 'failsafe/footer-only: footer preserved in Bottom')
+
+  // (d) A genuinely bare body with NO chrome at all still reports none (correct —
+  //     there is nothing to clone, so the default blog renders).
+  const bare = splitPageChrome('<body><p>just text</p></body>', new URL('https://fs4.test/'))
+  ok(bare.strategy === 'none', `failsafe/bare: no chrome → none (got ${bare.strategy})`)
+}
+
 // ── summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'═'.repeat(48)}`)
 console.log(`RESULT: ${pass} passed, ${fail} failed`)
