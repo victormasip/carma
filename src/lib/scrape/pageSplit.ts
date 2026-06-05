@@ -120,10 +120,23 @@ const FOOTER_HINT = /(?:^|[\s_-])(?:colophon|site-?footer|main-?footer|global-?f
 const hintHaystack = (el: P5Node): string => `${getAttr(el, 'id') ?? ''} ${getAttr(el, 'class') ?? ''}`
 const roleOf = (el: P5Node): string => (getAttr(el, 'role') ?? '').toLowerCase()
 
+// Whether the element carries `id="header"`/`class="header"` (or footer) as an
+// EXACT token — the bare, un-prefixed chrome name countless sites use instead of a
+// semantic <header>/<footer> tag or a "site-header" hint. We match the whole token
+// only (`page-header`, `entry-footer` etc. are NOT exact "header"/"footer"), so the
+// in-content fragmentation that suffix-matching caused can't recur; positional
+// anchoring (topmost header / bottommost footer) handles any stray same-named block.
+const hasExactToken = (el: P5Node, word: string): boolean => {
+  if ((getAttr(el, 'id') ?? '').toLowerCase() === word) return true
+  return (getAttr(el, 'class') ?? '').toLowerCase().split(/\s+/).includes(word)
+}
+
 const isStrongHeader = (el: P5Node): boolean =>
-  roleOf(el) === 'banner' || tagOf(el) === 'header' || HEADER_HINT.test(hintHaystack(el))
+  roleOf(el) === 'banner' || tagOf(el) === 'header' ||
+  HEADER_HINT.test(hintHaystack(el)) || hasExactToken(el, 'header')
 const isStrongFooter = (el: P5Node): boolean =>
-  roleOf(el) === 'contentinfo' || tagOf(el) === 'footer' || FOOTER_HINT.test(hintHaystack(el))
+  roleOf(el) === 'contentinfo' || tagOf(el) === 'footer' ||
+  FOOTER_HINT.test(hintHaystack(el)) || hasExactToken(el, 'footer')
 
 function countTag(el: P5Node, name: string): number {
   let n = 0

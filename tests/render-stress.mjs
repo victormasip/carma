@@ -163,6 +163,28 @@ section('non-semantic div-only chrome (no header/footer tags)')
   ok(/<body[^>]*\btheme-dark\b/.test(html), 'div-chrome: body attrs reapplied on render')
 }
 
+// 2b. BARE header/footer tokens — the most common non-semantic chrome (`class="header"`
+//     / `id="footer"`), with no semantic tag and no "site-header" hint. Must still be
+//     detected. An in-content `class="page-header"` must NOT be treated as chrome.
+section('bare class="header"/"footer" tokens (no hint, no semantic tag)')
+{
+  const raw = `<!doctype html><html><head></head>
+  <body>
+    <div class="header" id="T-HEADER"><div class="logo">Acme</div><nav><a href="/a">A</a></nav></div>
+    <div id="content">
+      <div class="page-header"><h1>Main</h1></div>
+      <p>page body that should be replaced</p>
+    </div>
+    <div id="footer" data-mark="T-FOOTER"><span>footer</span></div>
+  </body></html>`
+  const split = splitPageChrome(raw, new URL('https://bare.test/'))
+  ok(split.strategy === 'content', `bare-chrome: used content strategy (got ${split.strategy})`)
+  ok(/id="T-HEADER"/.test(split.top), 'bare-chrome: header captured in Top')
+  ok(/data-mark="T-FOOTER"/.test(split.bottom), 'bare-chrome: footer captured in Bottom')
+  ok(!/page body that should be replaced/.test(split.top + split.bottom), 'bare-chrome: main content carved out')
+  ok(/page-header/.test(split.top + split.bottom) === false, 'bare-chrome: in-content .page-header carved out with content (not kept as chrome)')
+}
+
 // 3. HOSTILE / MALFORMED — mismatched tags, stray closers, unquoted attrs, an
 //    inline SPA-hydration script that must be dropped, a tracker, an onclick.
 section('hostile malformed soup + dangerous scripts')
