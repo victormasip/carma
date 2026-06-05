@@ -1,83 +1,82 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useRef, useEffect, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, UserPlus, UserMinus, Users, Loader2, Globe, AlertTriangle, Search } from 'lucide-react'
+import { Pencil, Trash2, UserPlus, UserMinus, Users, Loader2, AlertTriangle, Search } from 'lucide-react'
 import { updateSiteName, deleteSite, assignUserToSite, removeUserFromSite } from '@/lib/actions/sites'
 import { useToast } from '@/components/ui/Toast'
 import { Modal, ModalClose } from '@/components/ui/Modal'
+import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import { cn } from '@/lib/cn'
 
 type Client = { id: string; email: string }
 type AssignedUser = { user_id: string; email: string }
 
-function EditNameModal({
-  siteId,
-  currentName,
-  open,
-  onClose,
-}: {
-  siteId: string
-  currentName: string
-  open: boolean
-  onClose: () => void
-}) {
-  const [name, setName] = useState(currentName)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
+// Click-to-edit site title (replaces the old "Editar" modal — basic metadata is
+// edited in place now). The H1 turns into an input on click; commit on Enter/blur
+// saves optimistically in the background with a subtle SaveStatus indicator.
+export function InlineSiteName({ siteId, siteName }: { siteId: string; siteName: string }) {
+  const [name, setName] = useState(siteName)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(siteName)
+  const [save, setSave] = useState<SaveState>('idle')
+  const inRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    const result = await updateSiteName(siteId, name)
-    if (result.error) {
-      setError(result.error)
-      setLoading(false)
-      return
-    }
-    toast('Nom del lloc actualitzat correctament')
-    router.refresh()
-    onClose()
+  useEffect(() => { if (editing) { inRef.current?.focus(); inRef.current?.select() } }, [editing])
+
+  const open = () => { setDraft(name); setEditing(true) }
+  const cancel = () => { setDraft(name); setEditing(false) }
+  const commit = () => {
+    setEditing(false)
+    const next = draft.replace(/\s+/g, ' ').trim()
+    if (!next || next === name) { setDraft(name); return }
+    const prev = name
+    setName(next)            // optimistic
+    setSave('saving')
+    void (async () => {
+      const r = await updateSiteName(siteId, next)
+      if (r.error) { setName(prev); setSave('error'); toast(r.error, 'error'); return }
+      setSave('saved')
+      setTimeout(() => setSave(s => (s === 'saved' ? 'idle' : s)), 1600)
+    })()
+  }
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit() }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel() }
   }
 
+  const typeClass = 'text-2xl sm:text-[28px] font-bold text-text tracking-tight'
+
+  if (editing) {
+    return (
+      <input
+        ref={inRef}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={onKeyDown}
+        aria-label="Nom del lloc"
+        className={cn(typeClass, 'min-w-0 w-full max-w-md bg-surface-subtle border border-accent rounded-lg px-2 -mx-2 outline-none ring-2 ring-accent/20')}
+      />
+    )
+  }
   return (
-    <Modal open={open} onClose={onClose} size="md" labelledBy="edit-site-title">
-      <ModalClose onClose={onClose} />
-      <div className="p-7">
-        <div className="flex items-center gap-3.5 mb-6">
-          <div className="w-11 h-11 bg-accent-soft text-accent rounded-xl flex items-center justify-center shrink-0">
-            <Globe className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 id="edit-site-title" className="text-lg font-semibold text-text">Editar Lloc</h2>
-            <p className="text-xs text-muted mt-0.5">Canvia el nom del lloc web</p>
-          </div>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text">Nom del Lloc</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-3.5 bg-surface-subtle border border-border rounded-xl focus:outline-none focus:border-accent focus:bg-surface text-text placeholder:text-subtle transition-colors text-sm"
-              required
-            />
-          </div>
-          {error && (
-            <div className="p-3 text-xs rounded-lg bg-danger-soft border border-danger/20 text-danger font-medium">{error}</div>
-          )}
-          <div className="pt-2 flex gap-2 justify-end">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel·lar</Button>
-            <Button type="submit" loading={loading}>Desar canvis</Button>
-          </div>
-        </form>
-      </div>
-    </Modal>
+    <div className="flex items-center gap-2 min-w-0">
+      <button
+        type="button"
+        onClick={open}
+        title="Clica per canviar el nom"
+        aria-label="Nom del lloc — clica per editar"
+        className="group/name inline-flex items-center gap-2 min-w-0 text-left rounded-lg -mx-1 px-1 hover:bg-surface-hover transition-colors cursor-text"
+      >
+        <span className={cn(typeClass, 'truncate')}>{name}</span>
+        <Pencil className="w-4 h-4 text-subtle opacity-0 group-hover/name:opacity-60 transition-opacity shrink-0" />
+      </button>
+      <SaveStatus state={save} className="shrink-0" />
+    </div>
   )
 }
 
@@ -136,30 +135,22 @@ function DeleteSiteModal({
   )
 }
 
+// Site-level admin actions. Renaming is now INLINE on the title (see
+// InlineSiteName), so this is just the destructive Delete (kept behind a modal).
 export function SiteAdminActions({ siteId, siteName }: { siteId: string; siteName: string }) {
-  const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={() => setShowEdit(true)}
-          title="Editar nom"
-          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-muted bg-surface border border-border hover:border-border-strong hover:text-text hover:bg-surface-hover rounded-lg transition-colors"
-        >
-          <Pencil className="w-3.5 h-3.5" />Editar
-        </button>
-        <button
-          onClick={() => setShowDelete(true)}
-          title="Eliminar lloc"
-          className="cursor-pointer flex items-center justify-center w-8 h-8 text-subtle bg-surface border border-border hover:border-danger/40 hover:text-danger hover:bg-danger-soft rounded-lg transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <EditNameModal   siteId={siteId} currentName={siteName} open={showEdit}   onClose={() => setShowEdit(false)} />
-      <DeleteSiteModal siteId={siteId} siteName={siteName}   open={showDelete} onClose={() => setShowDelete(false)} />
+      <button
+        onClick={() => setShowDelete(true)}
+        title="Eliminar lloc"
+        aria-label="Eliminar lloc"
+        className="cursor-pointer flex items-center justify-center w-8 h-8 text-subtle bg-surface border border-border hover:border-danger/40 hover:text-danger hover:bg-danger-soft rounded-lg transition-colors"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+      <DeleteSiteModal siteId={siteId} siteName={siteName} open={showDelete} onClose={() => setShowDelete(false)} />
     </>
   )
 }
@@ -245,7 +236,7 @@ export function SiteUsersManager({
 
       {unassigned.length > 0 && (
         <div className="border-t border-border pt-4 space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">Afegir clients</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Afegir clients</p>
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />

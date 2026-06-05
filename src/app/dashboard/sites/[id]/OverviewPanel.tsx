@@ -93,7 +93,7 @@ export default function OverviewPanel({
       <div className="bg-surface border border-border rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-subtle">Vistes per dia</h4>
-          {stats?.capped && <span className="text-[11px] text-subtle">(mostra parcial)</span>}
+          {stats?.capped && <span className="text-xs text-subtle">(mostra parcial)</span>}
         </div>
         {loading ? (
           <div className="h-[140px] flex items-center justify-center text-subtle"><Loader2 className="w-5 h-5 animate-spin" /></div>
@@ -199,7 +199,7 @@ function BarChart({ series }: { series: SiteStats['series'] }) {
           </div>
         ))}
       </div>
-      <div className="flex justify-between mt-2 text-[11px] text-subtle font-medium">
+      <div className="flex justify-between mt-2 text-xs text-subtle font-medium">
         {ticks.map(t => <span key={t}>{fmt(series[t]?.date ?? '')}</span>)}
       </div>
     </div>

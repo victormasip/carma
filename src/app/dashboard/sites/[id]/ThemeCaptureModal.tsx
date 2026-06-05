@@ -79,10 +79,10 @@ export default function ThemeCaptureModal() {
               />
             </div>
             <div className="mt-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-subtle">
+              <span className="text-xs font-semibold uppercase tracking-wider text-subtle">
                 {phase === 'success' ? 'Complet' : phase === 'error' ? 'Aturat' : 'En procés'}
               </span>
-              <span className="text-[11px] font-semibold tabular-nums text-muted">{Math.round(pct)}%</span>
+              <span className="text-xs font-semibold tabular-nums text-muted">{Math.round(pct)}%</span>
             </div>
           </div>
         </div>

@@ -772,7 +772,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
                   </button>
                   {addLangOpen && (
                     <div role="menu" className="absolute top-full right-0 mt-1.5 z-40 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden w-44">
-                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-subtle">Afegir idioma</p>
+                      <p className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-subtle">Afegir idioma</p>
                       {availableToAdd.map(loc => (
                         <button
                           key={loc}
@@ -935,7 +935,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
                 <button
                   type="button"
                   onClick={acceptDetection}
-                  className="cursor-pointer ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-info text-white text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                  className="cursor-pointer ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-info text-white text-xs font-semibold hover:opacity-90 transition-opacity"
                 >
                   Canviar a {LOCALE_META[detectedLocale].flag} {detectedLocale.toUpperCase()}
                 </button>
@@ -1250,7 +1250,7 @@ function SeoPanel({
         <div className="flex items-center gap-3">
           <ScoreRing pct={scorePct} ring={score.ring} />
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-subtle">Puntuació · {LOCALE_META[activeLocale].native}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle">Puntuació · {LOCALE_META[activeLocale].native}</p>
             <p className={cn('text-sm font-semibold', score.text)}>{score.label} · {passed}/{checks.length}</p>
           </div>
         </div>
@@ -1261,7 +1261,7 @@ function SeoPanel({
               <Globe className="w-2.5 h-2.5 text-subtle" />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-text font-medium leading-tight truncate">{previewHost}</p>
+              <p className="text-xs text-text font-medium leading-tight truncate">{previewHost}</p>
             </div>
           </div>
           <p className="text-[#1a0dab] text-[16px] leading-snug font-medium truncate">{previewTitle}</p>
@@ -1282,7 +1282,7 @@ function SeoPanel({
       <PanelSection title="Metadades de cerca" kind="localized">
         <div className="space-y-3">
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-subtle mb-1">Meta títol</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-subtle mb-1">Meta títol</label>
             <input
               type="text"
               value={cur.seoTitle}
@@ -1290,12 +1290,12 @@ function SeoPanel({
               placeholder={cur.title || 'Títol per a cercadors'}
               className="w-full h-9 px-2.5 bg-surface-subtle border border-border rounded-lg text-xs focus:outline-none focus:border-accent focus:bg-surface text-text placeholder:text-subtle transition-colors"
             />
-            <p className={cn('text-[11px] mt-1 font-semibold', counterTone((cur.seoTitle || cur.title).length, 30, 60))}>
+            <p className={cn('text-xs mt-1 font-semibold', counterTone((cur.seoTitle || cur.title).length, 30, 60))}>
               {(cur.seoTitle || cur.title).length} / 60
             </p>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-subtle mb-1">Meta descripció</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-subtle mb-1">Meta descripció</label>
             <textarea
               value={cur.seoDescription}
               onChange={e => patchLocale(activeLocale, { seoDescription: e.target.value })}
@@ -1303,7 +1303,7 @@ function SeoPanel({
               placeholder={cur.excerpt || 'Descripció per a cercadors'}
               className="w-full px-2.5 py-2 bg-surface-subtle border border-border rounded-lg text-xs focus:outline-none focus:border-accent focus:bg-surface text-text placeholder:text-subtle transition-colors resize-none"
             />
-            <p className={cn('text-[11px] mt-1 font-semibold', counterTone(cur.seoDescription.length, 120, 160))}>
+            <p className={cn('text-xs mt-1 font-semibold', counterTone(cur.seoDescription.length, 120, 160))}>
               {cur.seoDescription.length} / 160
             </p>
           </div>
@@ -1321,9 +1321,9 @@ function SeoPanel({
             </div>
           )}
           <div className="p-3 bg-surface-subtle">
-            <p className="text-[10px] uppercase text-subtle tracking-wide truncate">{previewHost}</p>
+            <p className="text-xs uppercase text-subtle tracking-wide truncate">{previewHost}</p>
             <p className="text-xs font-semibold text-text truncate mt-0.5">{previewTitle}</p>
-            <p className="text-[11px] text-muted line-clamp-2 mt-0.5">{previewDesc}</p>
+            <p className="text-xs text-muted line-clamp-2 mt-0.5">{previewDesc}</p>
           </div>
         </div>
       </PanelSection>
@@ -1331,7 +1331,7 @@ function SeoPanel({
       <PanelSection title="Avançat" kind="shared">
         <div className="space-y-3">
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-subtle mb-1">URL canònica</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-subtle mb-1">URL canònica</label>
             <input
               type="url"
               value={canonical}
@@ -1430,7 +1430,7 @@ function AiPanel({
             : <><Sparkles className="w-4 h-4" /> Genera un article SEO</>}
         </button>
         {generating && (
-          <p className="text-[11px] opacity-90 leading-snug text-center">
+          <p className="text-xs opacity-90 leading-snug text-center">
             Pot trigar fins a un minut. No tanquis l’editor.
           </p>
         )}
@@ -1485,7 +1485,7 @@ function AiPanel({
               <ScoreRing pct={analysis.readabilityScore} ring={analysis.readabilityScore >= 70 ? 'text-success' : analysis.readabilityScore >= 50 ? 'text-warning' : 'text-danger'} />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-text">{analysis.readabilityLabel}</p>
-                <p className="text-[11px] text-muted leading-snug">{analysis.summary}</p>
+                <p className="text-xs text-muted leading-snug">{analysis.summary}</p>
               </div>
             </div>
           </PanelSection>
@@ -1502,14 +1502,14 @@ function AiPanel({
                       <CategoryChip category={s.category} />
                     </div>
                     <div className="space-y-1.5">
-                      <p className="text-[11px] text-subtle line-through line-clamp-3 leading-snug">{s.before}</p>
+                      <p className="text-xs text-subtle line-through line-clamp-3 leading-snug">{s.before}</p>
                       <p className="text-xs text-text font-medium leading-snug">{s.after}</p>
                     </div>
-                    {s.why && <p className="text-[11px] text-muted italic leading-snug">{s.why}</p>}
+                    {s.why && <p className="text-xs text-muted italic leading-snug">{s.why}</p>}
                     <button
                       type="button"
                       onClick={() => onApply(s.before, s.after)}
-                      className="cursor-pointer w-full flex items-center justify-center gap-1.5 h-7 rounded-md text-[11px] font-semibold text-accent hover:bg-accent-soft transition-colors"
+                      className="cursor-pointer w-full flex items-center justify-center gap-1.5 h-7 rounded-md text-xs font-semibold text-accent hover:bg-accent-soft transition-colors"
                     >
                       <CheckCircle2 className="w-3 h-3" /> Aplicar
                     </button>
@@ -1547,7 +1547,7 @@ function AiPanel({
                 : <AlertCircle className="w-3.5 h-3.5 text-warning shrink-0 mt-px" />}
               <div className="min-w-0">
                 <p className="text-xs font-medium leading-snug text-text">{it.label}</p>
-                {it.hint && <p className="text-[11px] text-subtle mt-0.5 leading-snug">{it.hint}</p>}
+                {it.hint && <p className="text-xs text-subtle mt-0.5 leading-snug">{it.hint}</p>}
               </div>
             </li>
           ))}
@@ -1564,7 +1564,7 @@ function AiPanel({
 
       <PanelSection title="Vista prèvia per a chatbots">
         <div className="rounded-lg border border-border bg-surface-subtle p-3 max-h-48 overflow-y-auto">
-          <pre className="text-[11px] text-muted leading-snug whitespace-pre-wrap font-mono">{llmsExcerpt}</pre>
+          <pre className="text-xs text-muted leading-snug whitespace-pre-wrap font-mono">{llmsExcerpt}</pre>
         </div>
         <button
           type="button"
@@ -1574,7 +1574,7 @@ function AiPanel({
           {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <FileText className="w-3.5 h-3.5" />}
           {copied ? 'Copiat' : 'Copiar resum estil llms.txt'}
         </button>
-        <p className="text-[11px] text-subtle mt-1.5 leading-snug">
+        <p className="text-xs text-subtle mt-1.5 leading-snug">
           Un resum compacte com el que els crawlers d&apos;IA esperen. Útil per a llms.txt o per testar prompts.
         </p>
       </PanelSection>
@@ -1589,14 +1589,14 @@ function SeverityChip({ severity }: { severity: 'low' | 'medium' | 'high' }) {
       ? 'bg-warning-soft text-warning'
       : 'bg-surface-hover text-muted'
   const label = severity === 'high' ? 'Important' : severity === 'medium' ? 'Mig' : 'Lleu'
-  return <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider', styles)}>{label}</span>
+  return <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider', styles)}>{label}</span>
 }
 
 function CategoryChip({ category }: { category: 'clarity' | 'length' | 'jargon' | 'flow' | 'tone' }) {
   const map: Record<typeof category, string> = {
     clarity: 'Claredat', length: 'Longitud', jargon: 'Argot', flow: 'Flux', tone: 'To',
   }
-  return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-surface-subtle text-subtle border border-border">{map[category]}</span>
+  return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider bg-surface-subtle text-subtle border border-border">{map[category]}</span>
 }
 
 function Badge({ label, detail, ok }: { label: string; detail: string; ok: boolean }) {
@@ -1608,7 +1608,7 @@ function Badge({ label, detail, ok }: { label: string; detail: string; ok: boole
       )} />
       <div className="min-w-0">
         <p className="text-xs font-semibold font-mono text-text">{label}</p>
-        <p className="text-[11px] text-subtle leading-snug">{detail}</p>
+        <p className="text-xs text-subtle leading-snug">{detail}</p>
       </div>
     </div>
   )
@@ -1629,7 +1629,7 @@ function PanelSection({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           {Icon && <Icon className="w-3 h-3 text-subtle" />}
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-subtle truncate">{title}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-subtle truncate">{title}</p>
         </div>
         {kind && (
           <span className={cn(
@@ -1650,7 +1650,7 @@ function ToggleRow({ label, hint, checked, onChange, tone }: { label: string; hi
     <div className="flex items-start justify-between gap-3 px-2.5 py-2 bg-surface-subtle border border-border rounded-lg">
       <div className="min-w-0">
         <p className="text-xs font-semibold text-text">{label}</p>
-        {hint && <p className="text-[11px] text-subtle">{hint}</p>}
+        {hint && <p className="text-xs text-subtle">{hint}</p>}
       </div>
       <button
         type="button"
@@ -1677,10 +1677,10 @@ function TagInput({ label, values, onChange, placeholder }: { label: string; val
   }
   return (
     <div className="space-y-1">
-      <label className="block text-[10px] font-semibold uppercase tracking-wider text-subtle">{label}</label>
+      <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">{label}</label>
       <div className="flex flex-wrap gap-1.5 p-1.5 border border-border rounded-lg bg-surface-subtle min-h-9 focus-within:border-accent focus-within:bg-surface transition-colors">
         {values.map(t => (
-          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-soft text-accent rounded text-[11px] font-semibold">
+          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-soft text-accent rounded text-xs font-semibold">
             {t}
             <button type="button" onClick={() => onChange(values.filter(x => x !== t))} className="cursor-pointer hover:text-danger transition-colors">
               <X className="w-2.5 h-2.5" />
@@ -1718,7 +1718,7 @@ function ScoreRing({ pct, ring }: { pct: number; ring: string }) {
           strokeDasharray={circ} strokeDashoffset={offset}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-text">{pct}</span>
+      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-text">{pct}</span>
     </div>
   )
 }

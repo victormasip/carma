@@ -63,7 +63,7 @@ export default function SiteOnboarding({
           {view === 'choose' ? (
             <>
               <div className="text-center mb-9">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent-soft text-accent text-[11px] font-semibold uppercase tracking-wider mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent-soft text-accent text-xs font-semibold uppercase tracking-wider mb-4">
                   <Sparkles className="w-3.5 h-3.5" /> Nou lloc
                 </span>
                 <h1 className="text-3xl sm:text-4xl font-bold text-text tracking-tight">

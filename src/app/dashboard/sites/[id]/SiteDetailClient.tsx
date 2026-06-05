@@ -3,7 +3,7 @@
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, Loader2, LayoutDashboard } from 'lucide-react'
-import { SiteAdminActions, SiteUsersManager } from './SiteManager'
+import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import ApiDocsCard from './ApiDocsCard'
 import PostsManager from './PostsManager'
 import ImportModal from './ImportModal'
@@ -121,9 +121,13 @@ export default function SiteDetailClient({
           </Link>
           <div className="min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl sm:text-[28px] font-bold text-text tracking-tight truncate">
-                {siteName}
-              </h1>
+              {isSuperAdmin ? (
+                <InlineSiteName siteId={siteId} siteName={siteName} />
+              ) : (
+                <h1 className="text-2xl sm:text-[28px] font-bold text-text tracking-tight truncate">
+                  {siteName}
+                </h1>
+              )}
               {isSuperAdmin && <SiteAdminActions siteId={siteId} siteName={siteName} />}
             </div>
             <p className="text-sm text-muted mt-1.5">

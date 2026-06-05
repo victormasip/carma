@@ -525,7 +525,7 @@ function EmptyGrabber({
         {/* The capture modal is the single progress surface — no inline spinner
             here (that produced the "double loader"). Disabled while in flight. */}
         <Button
-          onClick={onGrab}
+          onClick={() => onGrab()}
           disabled={!url.trim() || analyzing}
           iconLeft={<Wand2 className="w-4 h-4" />}
         >
@@ -736,7 +736,7 @@ function DesignPanel({
     <div className="space-y-6">
       {/* Colors — visual swatch grid */}
       <div>
-        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5">Colors</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2.5">Colors</h6>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {COLOR_FIELDS.map(({ key, label, hint }) => (
             <ColorSwatch
@@ -752,7 +752,7 @@ function DesignPanel({
 
       {/* Typography — preset chooser + advanced custom override */}
       <div>
-        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5">Tipografia</h6>
+        <h6 className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2.5">Tipografia</h6>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {FONT_PRESETS.map(p => {
             const active = currentPresetId === p.id
@@ -812,7 +812,7 @@ function DesignPanel({
 
       {/* Sizes — compact, inline */}
       <div>
-        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5 flex items-center gap-1.5">
+        <h6 className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2.5 flex items-center gap-1.5">
           <Ruler className="w-3 h-3" /> Mides
         </h6>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -848,7 +848,7 @@ function LayoutPanel({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2">Format de les targetes</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Format de les targetes</p>
         <SegmentedControl
           value={tokens.layout === 'list' ? 'list' : 'grid'}
           onChange={v => setToken('layout', v as 'grid' | 'list')}
@@ -861,7 +861,7 @@ function LayoutPanel({
 
       {tokens.layout !== 'list' && (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2">Columnes (escriptori)</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Columnes (escriptori)</p>
           <div className="flex gap-2">
             {(['2', '3', '4'] as BlogColumns[]).map(c => (
               <button
@@ -889,7 +889,7 @@ function LayoutPanel({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="block text-[11px] font-semibold uppercase tracking-wider text-subtle">{label}</label>
+      <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">{label}</label>
       {children}
     </div>
   )
@@ -969,7 +969,7 @@ function ColorSwatch({
           aria-hidden
         />
         <p className="text-xs font-semibold text-text truncate">{label}</p>
-        <p className="text-[11px] text-subtle truncate">{hint}</p>
+        <p className="text-xs text-subtle truncate">{hint}</p>
       </button>
 
       {open && (
@@ -1053,7 +1053,7 @@ function StructureChip({ icon: Icon, label, ok }: { icon: typeof PanelTop; label
 
 function ResourcePill({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-surface-subtle text-subtle border border-border">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-surface-subtle text-subtle border border-border">
       {label}
     </span>
   )

@@ -307,7 +307,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
           {(phase === 'input' || phase === 'discovering') && (
             <>
               <div className="space-y-3">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-subtle">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">
                   Descoberta automàtica (WordPress · Sitemap · RSS)
                 </label>
                 <div className="flex gap-2">
@@ -336,7 +336,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
               <div className="space-y-3 bg-surface-subtle border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2">
                   <Newspaper className="w-4 h-4 text-muted" />
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
                     Pàgina d&apos;articles · Rastreig per selector CSS
                   </label>
                 </div>
@@ -378,7 +378,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
 
                 <button
                   onClick={() => setShowCrawlSelectors(v => !v)}
-                  className="cursor-pointer flex items-center gap-2 text-[11px] font-semibold text-subtle hover:text-text uppercase tracking-wider transition-colors"
+                  className="cursor-pointer flex items-center gap-2 text-xs font-semibold text-subtle hover:text-text uppercase tracking-wider transition-colors"
                 >
                   {showCrawlSelectors ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   Selectors per camps (opcional)
@@ -406,7 +406,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
 
               {/* Manual */}
               <div className="space-y-3">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-subtle">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">
                   URL manual · Article únic
                 </label>
                 <div className="flex gap-2">
@@ -469,7 +469,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-3">Selectors CSS</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-3">Selectors CSS</p>
                     <div className="space-y-2.5">
                       {SELECTOR_FIELDS.map(({ key, label }) => (
                         <div key={key} className="space-y-1">
@@ -507,7 +507,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
               {availableLangs.length > 1 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <Filter className="w-3.5 h-3.5 text-subtle shrink-0" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-subtle shrink-0">Idioma:</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-subtle shrink-0">Idioma:</span>
                   <LangChip active={langFilter === 'all'} onClick={() => { setLangFilter('all'); setSelected(new Set(discovered.map(a => a.url))) }}>
                     Tots ({discovered.length})
                   </LangChip>
@@ -555,7 +555,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                       <p className="text-xs text-subtle truncate font-mono mt-0.5">{article.url}</p>
                     </div>
                     {article.language && (
-                      <span className="text-[10px] font-semibold uppercase bg-surface-subtle text-muted px-1.5 py-0.5 rounded shrink-0 self-center">{article.language}</span>
+                      <span className="text-xs font-semibold uppercase bg-surface-subtle text-muted px-1.5 py-0.5 rounded shrink-0 self-center">{article.language}</span>
                     )}
                   </label>
                 ))}
@@ -638,7 +638,7 @@ function Divider() {
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1 h-px bg-border" />
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-subtle">o</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-subtle">o</span>
       <div className="flex-1 h-px bg-border" />
     </div>
   )
@@ -669,7 +669,7 @@ function LangChip({ active, onClick, children }: { active: boolean; onClick: () 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-1">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-1">{label}</p>
       {children}
     </div>
   )

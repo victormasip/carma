@@ -18,6 +18,7 @@ import {
   Loader2, ImageIcon, Calendar,
 } from 'lucide-react'
 import type { PostListItem } from '@/lib/actions/posts'
+import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { cn } from '@/lib/cn'
 
 // ── Inline, click-to-edit text field ─────────────────────────────────────────
@@ -153,7 +154,7 @@ function DateEdit({ value, onCommit }: { value: string; onCommit: (iso: string) 
 }
 
 export default function ArticleCard({
-  post, siteId, selected, uploading, busy,
+  post, siteId, selected, uploading, saveState, busy,
   onToggleSelect, onCommitTitle, onCommitSlug, onCommitDate, onPickThumbnail, onRemoveThumbnail,
   onTogglePublish, onDelete,
 }: {
@@ -161,6 +162,7 @@ export default function ArticleCard({
   siteId: string
   selected: boolean
   uploading: boolean
+  saveState: SaveState
   busy: boolean
   onToggleSelect: () => void
   onCommitTitle: (v: string) => void
@@ -219,18 +221,26 @@ export default function ArticleCard({
           </div>
         )}
 
-        {/* Selection checkbox — always present (discoverable), accent when on. */}
+        {/* Selection — a prominent, always-visible checkbox. Unselected: a clear
+            white chip that previews a check on hover; selected: accent-filled with
+            a ring so the chosen state reads at a glance over any thumbnail. */}
         <button
           type="button"
           onClick={onToggleSelect}
           aria-pressed={selected}
+          aria-label={selected ? 'Treure de la selecció' : 'Seleccionar article'}
           title={selected ? 'Treure de la selecció' : 'Seleccionar'}
           className={cn(
-            'absolute top-2.5 left-2.5 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center shadow-sm transition-all cursor-pointer',
-            selected ? 'bg-accent border-accent scale-100' : 'bg-white/80 border-white hover:bg-white',
+            'absolute top-2.5 left-2.5 z-10 w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer',
+            selected
+              ? 'bg-accent border-accent text-white scale-105 ring-2 ring-accent/50 shadow-lg'
+              : 'bg-white/95 border-white text-stone-500 shadow-md hover:scale-105 hover:text-accent',
           )}
         >
-          {selected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+          <Check
+            className={cn('w-4 h-4 transition-opacity', selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50')}
+            strokeWidth={3}
+          />
         </button>
 
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
@@ -238,7 +248,12 @@ export default function ArticleCard({
 
       {/* ── Body ── */}
       <div className="flex flex-col gap-2 p-4 flex-1">
-        <DateEdit value={post.created_at} onCommit={onCommitDate} />
+        {/* Meta row: editable date on the left, the live save indicator on the right
+            (the zero-click feedback for every inline edit on this card). */}
+        <div className="flex items-center justify-between gap-2 min-h-[22px]">
+          <DateEdit value={post.created_at} onCommit={onCommitDate} />
+          <SaveStatus state={saveState} className="shrink-0" />
+        </div>
 
         <InlineEdit
           value={post.title}
@@ -246,8 +261,8 @@ export default function ArticleCard({
           multiline
           ariaLabel="Títol de l'article"
           placeholder="Sense títol"
-          viewClassName="font-bold text-text leading-snug text-[15px] line-clamp-2"
-          editClassName="font-bold text-text leading-snug text-[15px]"
+          viewClassName="font-bold text-text leading-snug text-base line-clamp-2"
+          editClassName="font-bold text-text leading-snug text-base"
         />
 
         <InlineEdit
@@ -256,46 +271,46 @@ export default function ArticleCard({
           ariaLabel="Slug de l'article"
           prefix="/"
           placeholder="slug"
-          viewClassName="text-xs text-subtle font-mono truncate"
-          editClassName="text-xs text-text font-mono"
+          viewClassName="text-[13px] text-subtle font-mono truncate"
+          editClassName="text-[13px] text-text font-mono"
         />
 
-        {/* Status — an explicit, labelled switch (clear which state is active). */}
-        <button
-          type="button"
-          onClick={onTogglePublish}
-          disabled={busy}
-          aria-pressed={published}
-          title={published ? 'Clica per passar a esborrany' : 'Clica per publicar'}
-          className={cn(
-            'mt-0.5 flex items-center justify-between gap-2 w-full h-9 rounded-lg border px-2.5 transition-colors cursor-pointer disabled:opacity-60',
-            published ? 'border-success/30 bg-success-soft' : 'border-border bg-surface-subtle hover:bg-surface-hover',
-          )}
-        >
-          <span className={cn('flex items-center gap-1.5 text-xs font-bold', published ? 'text-success' : 'text-muted')}>
-            {published ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            {published ? 'Publicat' : 'Esborrany'}
-          </span>
-          <span className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', published ? 'bg-success' : 'bg-border-strong')}>
-            <span className={cn('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform', published && 'translate-x-4')} />
-          </span>
-        </button>
-
-        {/* ── Actions ── */}
+        {/* ── Actions — ONE consolidated row: publish toggle + edit + view + delete.
+            The status switch is color-coded (green = live) and lives inline with the
+            primary actions, so nothing is scattered across the card. ── */}
         <div className="border-t border-border mt-auto pt-2.5 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onTogglePublish}
+            disabled={busy}
+            role="switch"
+            aria-checked={published}
+            aria-label={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
+            title={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
+            className={cn(
+              'flex items-center gap-1.5 h-9 pl-2 pr-2.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-60 shrink-0',
+              published ? 'border-success/30 bg-success-soft text-success' : 'border-border bg-surface-subtle text-muted hover:bg-surface-hover',
+            )}
+          >
+            {published ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            <span className={cn('relative w-8 h-[18px] rounded-full transition-colors shrink-0', published ? 'bg-success' : 'bg-border-strong')}>
+              <span className={cn('absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full bg-white shadow transition-transform', published && 'translate-x-[14px]')} />
+            </span>
+          </button>
           <Link
             href={`/dashboard/sites/${siteId}/posts/${post.id}/edit`}
-            className="flex-1 flex items-center justify-center gap-1.5 h-8 text-xs font-bold text-white bg-accent hover:bg-accent-hover rounded-lg transition-colors shadow-sm"
+            title="Editar el contingut de l'article"
+            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 h-9 text-[13px] font-bold text-white bg-accent hover:bg-accent-hover rounded-lg transition-colors shadow-sm"
           >
-            <Pencil className="w-3 h-3" />
-            Editar contingut
+            <Pencil className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Editar</span>
           </Link>
           <a
             href={`/render/${siteId}/${post.slug}`}
             target="_blank"
             rel="noopener noreferrer"
             title="Veure al lloc"
-            className="cursor-pointer flex items-center justify-center w-8 h-8 text-muted bg-surface border border-border hover:border-accent/40 hover:text-accent hover:bg-accent-soft rounded-lg transition-all shrink-0"
+            className="cursor-pointer flex items-center justify-center w-9 h-9 text-muted bg-surface border border-border hover:border-accent/40 hover:text-accent hover:bg-accent-soft rounded-lg transition-all shrink-0"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
@@ -303,7 +318,7 @@ export default function ArticleCard({
             onClick={onDelete}
             disabled={busy}
             title="Eliminar"
-            className="cursor-pointer flex items-center justify-center w-8 h-8 text-danger hover:bg-danger-soft border border-transparent hover:border-danger/30 rounded-lg transition-all disabled:opacity-40 shrink-0"
+            className="cursor-pointer flex items-center justify-center w-9 h-9 text-danger hover:bg-danger-soft border border-transparent hover:border-danger/30 rounded-lg transition-all disabled:opacity-40 shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

@@ -36,7 +36,7 @@ export function PremiumPanel({
           <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center shadow-card">
             <Crown className="w-5 h-5" />
           </div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-accent bg-accent-soft px-2.5 py-1 rounded-md">
+          <span className="text-xs font-semibold uppercase tracking-wider text-accent bg-accent-soft px-2.5 py-1 rounded-md">
             Premium
           </span>
         </div>
@@ -84,7 +84,7 @@ export function PremiumLockOverlay({ label, locked = true, children }: { label: 
           </span>
           <div className="leading-tight">
             <p className="text-xs font-semibold text-text">{label}</p>
-            <p className="text-[11px] font-medium text-accent">Funció Premium</p>
+            <p className="text-xs font-medium text-accent">Funció Premium</p>
           </div>
         </div>
       </div>

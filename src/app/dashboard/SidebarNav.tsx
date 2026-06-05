@@ -26,7 +26,7 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
 
       {sites.length > 0 && (
         <div className="mt-6">
-          <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">
+          <p className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-subtle">
             {t('nav.yourSites')}
           </p>
           <div className="space-y-0.5 max-h-[42vh] overflow-y-auto pr-1">

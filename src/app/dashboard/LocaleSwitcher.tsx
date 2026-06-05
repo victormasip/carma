@@ -60,7 +60,7 @@ export default function LocaleSwitcher() {
               </button>
             )
           })}
-          <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle border-t border-border">
+          <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-subtle border-t border-border">
             {t('nav.language')}
           </p>
         </div>

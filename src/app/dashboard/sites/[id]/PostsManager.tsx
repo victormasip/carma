@@ -13,6 +13,7 @@ import {
 import { uploadImage } from '@/lib/upload'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
+import { useKeyedSaveState } from '@/components/ui/SaveStatus'
 import ArticleCard from './ArticleCard'
 
 type Filter = 'all' | 'published' | 'draft'
@@ -55,6 +56,8 @@ export default function PostsManager({
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
   const confirm = useConfirm()
+  // Per-card background-save indicator (saving → saved ✓ → idle, or error).
+  const save = useKeyedSaveState()
 
   // The query currently reflected in `posts`, so the search debounce can skip
   // redundant fetches and mutations can reload the right page.
@@ -160,14 +163,16 @@ export default function PostsManager({
   // rolling back on error. Used by the inline title/slug editors.
   const commitFields = (post: PostListItem, patch: { title?: string; slug?: string; created_at?: string }) => {
     const prevPosts = posts
+    save.markSaving(post.id)
     setPosts(ps => ps.map(p => (p.id === post.id ? { ...p, ...patch } : p)))
     startTransition(async () => {
       const r = await updatePostFields(post.id, siteId, patch)
-      if (r.error) { setPosts(prevPosts); toast(r.error, 'error'); return }
+      if (r.error) { setPosts(prevPosts); save.markError(post.id); toast(r.error, 'error'); return }
       // Reconcile the server-normalised slug (e.g. "Hola Món" → "hola-mon").
       if (r.slug && patch.slug !== undefined && r.slug !== patch.slug) {
         setPosts(ps => ps.map(p => (p.id === post.id ? { ...p, slug: r.slug! } : p)))
       }
+      save.flashSaved(post.id)
     })
   }
 
@@ -181,6 +186,7 @@ export default function PostsManager({
   // Thumbnail: upload to storage, then persist the URL (optimistic).
   const onPickThumbnail = (post: PostListItem, file: File) => {
     setUploadingIds(s => new Set(s).add(post.id))
+    save.markSaving(post.id)
     void (async () => {
       try {
         const url = await uploadImage(file, siteId)
@@ -188,9 +194,12 @@ export default function PostsManager({
         const r = await updatePostFields(post.id, siteId, { featured_image: url })
         if (r.error) {
           setPosts(ps => ps.map(p => (p.id === post.id ? { ...p, featured_image: post.featured_image } : p)))
-          toast(r.error, 'error')
+          save.markError(post.id); toast(r.error, 'error')
+        } else {
+          save.flashSaved(post.id)
         }
       } catch (e) {
+        save.markError(post.id)
         toast(e instanceof Error ? e.message : 'No s\'ha pogut pujar la imatge', 'error')
       } finally {
         setUploadingIds(s => { const n = new Set(s); n.delete(post.id); return n })
@@ -200,13 +209,15 @@ export default function PostsManager({
 
   const onRemoveThumbnail = (post: PostListItem) => {
     const prev = post.featured_image
+    save.markSaving(post.id)
     setPosts(ps => ps.map(p => (p.id === post.id ? { ...p, featured_image: null } : p)))
     startTransition(async () => {
       const r = await updatePostFields(post.id, siteId, { featured_image: null })
       if (r.error) {
         setPosts(ps => ps.map(p => (p.id === post.id ? { ...p, featured_image: prev } : p)))
-        toast(r.error, 'error')
+        save.markError(post.id); toast(r.error, 'error'); return
       }
+      save.flashSaved(post.id)
     })
   }
 
@@ -343,6 +354,7 @@ export default function PostsManager({
                   siteId={siteId}
                   selected={selected.has(post.id)}
                   uploading={uploadingIds.has(post.id)}
+                  saveState={save.stateOf(post.id)}
                   busy={isPending}
                   onToggleSelect={() => toggleSelect(post.id)}
                   onCommitTitle={v => onCommitTitle(post, v)}

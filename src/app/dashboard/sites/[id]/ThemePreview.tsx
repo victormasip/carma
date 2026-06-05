@@ -59,7 +59,7 @@ export default function ThemePreview({
       <div className="flex items-center gap-2 px-3 h-11 border-b border-border bg-surface shrink-0">
         <span className="text-xs font-bold text-text mr-1">Vista prèvia</span>
         {saving && (
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-subtle">
+          <span className="flex items-center gap-1 text-xs font-semibold text-subtle">
             <Loader2 className="w-3 h-3 animate-spin" /> actualitzant
           </span>
         )}

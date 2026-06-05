@@ -65,7 +65,7 @@ export default function UserMenu({ userEmail, isSuperAdmin }: Props) {
         </span>
         <span className="min-w-0 flex-1 text-left">
           <span className="block text-xs font-semibold text-text truncate">{userEmail}</span>
-          <span className="block text-[11px] text-subtle">
+          <span className="block text-xs text-subtle">
             {isSuperAdmin ? t('role.superadmin') : t('role.client')}
           </span>
         </span>
@@ -79,7 +79,7 @@ export default function UserMenu({ userEmail, isSuperAdmin }: Props) {
         >
           {/* Theme */}
           <div className="px-3 pt-3 pb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-subtle mb-1.5 px-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-1.5 px-1">
               {t('nav.theme')}
             </p>
             <div role="radiogroup" className="flex items-center gap-0.5 rounded-lg bg-surface-subtle border border-border p-0.5">
@@ -108,7 +108,7 @@ export default function UserMenu({ userEmail, isSuperAdmin }: Props) {
 
           {/* Locale */}
           <div className="px-3 pt-2 pb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-subtle mb-1 px-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-1 px-1">
               {t('nav.language')}
             </p>
             <ul className="space-y-0.5">
