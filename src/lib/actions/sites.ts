@@ -21,7 +21,7 @@ async function assertSuperAdmin() {
   return createAdminClient()
 }
 
-export async function createSite(name: string, userIds: string[]): Promise<ActionResult> {
+export async function createSite(name: string, userIds: string[]): Promise<ActionResult & { id?: string }> {
   try {
     const admin = await assertSuperAdmin()
     const trimmed = name.trim()
@@ -43,7 +43,7 @@ export async function createSite(name: string, userIds: string[]): Promise<Actio
     }
 
     revalidatePath('/dashboard')
-    return {}
+    return { id: site.id as string }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
   }

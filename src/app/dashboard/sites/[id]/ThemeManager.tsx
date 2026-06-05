@@ -3,18 +3,22 @@
 import Link from 'next/link'
 import {
   Palette, Globe, Loader2, Wand2, AlertCircle,
-  Trash2, Sparkles, Plug, Type, PanelTop, PanelBottom,
+  Trash2, Sparkles, Plug, PanelTop, PanelBottom, FileCode2,
   Check, Cloud, CloudOff, LayoutGrid, Rows3, AlignLeft, AlignCenter, AlignRight,
-  Heading, Ruler, Crown,
+  Ruler, Crown, ChevronDown, RotateCcw, MoreHorizontal, Newspaper,
 } from 'lucide-react'
-import { useRef, useEffect, type ReactNode, type CSSProperties } from 'react'
+import { useRef, useEffect, useState, type ReactNode, type CSSProperties } from 'react'
 import { type DesignTokens, type BlogColumns } from '@/lib/scrape/tokens'
-import { LOCALE_META } from '@/lib/i18n/config'
+import { LOCALE_META, type Locale } from '@/lib/i18n/config'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
 import { useThemeStudio, type SaveStatus } from './ThemeStudioContext'
 import VisualChromeEditor from './VisualChromeEditor'
+import NavEditor from './NavEditor'
+import ThemePreview from './ThemePreview'
 import { PremiumLockOverlay } from './PremiumGate'
+import Button from '@/components/ui/Button'
+import { cn } from '@/lib/cn'
 
 // Re-export so existing imports (SiteDetailClient) keep resolving the type here.
 export type { Theme } from './ThemeStudioContext'
@@ -24,83 +28,61 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   hugo: 'Hugo', jekyll: 'Jekyll', webflow: 'Webflow', squarespace: 'Squarespace',
   wix: 'Wix', shopify: 'Shopify', vue: 'Vue', react: 'React', html: 'HTML estàtic',
 }
-const HOSTING_LABELS: Record<string, string> = {
-  vercel: 'Vercel', netlify: 'Netlify', cloudflare: 'Cloudflare',
-  aws: 'AWS', github: 'GitHub Pages', wpengine: 'WP Engine',
-}
 
-const COLOR_FIELDS: { key: keyof DesignTokens; label: string }[] = [
-  { key: 'colorPrimary', label: 'Primari' },
-  { key: 'colorAccent', label: 'Accent / enllaços' },
-  { key: 'colorBg', label: 'Fons' },
-  { key: 'colorSurface', label: 'Superfície (cards)' },
-  { key: 'colorText', label: 'Text' },
-  { key: 'colorMuted', label: 'Text secundari' },
-  { key: 'colorBorder', label: 'Vores' },
+// Curated, well-paired font stacks — friendlier than a raw font-family input.
+type FontPreset = { id: string; name: string; sub: string; heading: string; body: string }
+const FONT_PRESETS: FontPreset[] = [
+  { id: 'system',    name: 'Sistema',    sub: 'Predeterminat ràpid',
+    heading: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    body: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  { id: 'modern',    name: 'Modern',     sub: 'Inter · per a SaaS',
+    heading: '"Inter", system-ui, sans-serif',
+    body: '"Inter", system-ui, sans-serif' },
+  { id: 'editorial', name: 'Editorial',  sub: 'Playfair + Source',
+    heading: '"Playfair Display", Georgia, serif',
+    body: '"Source Sans 3", system-ui, sans-serif' },
+  { id: 'classic',   name: 'Clàssic',    sub: 'Lora + Open Sans',
+    heading: '"Lora", Georgia, serif',
+    body: '"Open Sans", system-ui, sans-serif' },
+  { id: 'bold',      name: 'Bold',       sub: 'Space Grotesk',
+    heading: '"Space Grotesk", system-ui, sans-serif',
+    body: '"Inter", system-ui, sans-serif' },
 ]
-const FONT_FIELDS: { key: keyof DesignTokens; label: string }[] = [
-  { key: 'fontHeading', label: 'Tipografia títols' },
-  { key: 'fontBody', label: 'Tipografia text' },
-]
-const SCALE_FIELDS: { key: keyof DesignTokens; label: string; placeholder: string }[] = [
-  { key: 'baseFontSize', label: 'Mida base', placeholder: '16px' },
-  { key: 'radius', label: 'Radi', placeholder: '10px' },
-  { key: 'radiusLg', label: 'Radi gran', placeholder: '16px' },
-  { key: 'maxWidth', label: 'Amplada màx.', placeholder: '1200px' },
+
+const COLOR_FIELDS: { key: keyof DesignTokens; label: string; hint: string }[] = [
+  { key: 'colorAccent',  label: 'Accent',    hint: 'Enllaços i CTA' },
+  { key: 'colorPrimary', label: 'Primari',   hint: 'Color de marca' },
+  { key: 'colorBg',      label: 'Fons',      hint: 'Pàgina sencera' },
+  { key: 'colorSurface', label: 'Targetes',  hint: 'Cards i panells' },
+  { key: 'colorText',    label: 'Text',      hint: 'Cos principal' },
+  { key: 'colorMuted',   label: 'Text 2on',  hint: 'Captions, dates…' },
+  { key: 'colorBorder',  label: 'Vores',     hint: 'Separadors' },
 ]
 
 const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v.trim())
 
-const headingInput = "w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-medium transition-all"
-
-function HeadingField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <label className="block text-xs font-semibold text-neutral-500">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Section({
-  icon: Icon, title, desc, children,
-}: {
-  icon: typeof Palette
-  title: string
-  desc?: string
-  children: ReactNode
-}) {
-  return (
-    <section className="py-5 border-b border-neutral-100 last:border-0">
-      <div className="flex items-center gap-2">
-        <span className="w-7 h-7 rounded-lg bg-carma-50 text-carma-600 flex items-center justify-center shrink-0">
-          <Icon className="w-4 h-4" />
-        </span>
-        <h5 className="text-xs font-bold uppercase tracking-widest text-neutral-700">{title}</h5>
-      </div>
-      {desc && <p className="text-xs text-neutral-400 mt-1.5 ml-9">{desc}</p>}
-      <div className="mt-3.5 ml-9">{children}</div>
-    </section>
-  )
-}
+type SectionKey = 'heading' | 'design' | 'layout'
 
 export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { toast } = useToast()
   const confirm = useConfirm()
   const {
-    siteId, hasTheme, saveStatus,
-    url, setUrl, analyzing, error, grab, removeTheme,
+    siteId, hasTheme, saveStatus, savedAt,
+    url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab, removeTheme,
     tokens, setToken,
     sectionTitle, setSectionTitle,
     extractedHeader, setExtractedHeader,
     extractedFooter, setExtractedFooter,
-    detectedFramework, detectedHosting,
+    extractedHead, setExtractedHead,
+    detectedFramework,
     externalStyles, externalScripts, fontLinks,
     editLocale, setEditLocale, editLocales, chromeDefaultLocale,
     canTranslateChrome, translatingChrome, translateChrome,
+    nativeCardActive, nativeCardColumns, clearNativeCard,
   } = useThemeStudio()
 
-  const componentKb = Math.round(((extractedHeader.length + extractedFooter.length) / 1024) * 10) / 10
+  // Default open: "design" if a theme exists (most-edited), else "heading".
+  const [openSection, setOpenSection] = useState<SectionKey>(hasTheme ? 'design' : 'heading')
 
   const handleDelete = async () => {
     const ok = await confirm({
@@ -131,477 +113,947 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
     else toast(`Header i footer traduïts a ${LOCALE_META[editLocale].native}`, 'success')
   }
 
+  // ── Empty state — no theme yet ──────────────────────────────────────────────
+  if (!hasTheme) {
+    return (
+      <div className="space-y-5">
+        <ThemeToolbar
+          saveStatus={saveStatus}
+          editLocales={editLocales}
+          editLocale={editLocale}
+          setEditLocale={setEditLocale}
+          chromeDefaultLocale={chromeDefaultLocale}
+          canTranslateChrome={canTranslateChrome}
+          translatingChrome={translatingChrome}
+          onTranslate={handleTranslateChrome}
+          onDelete={isSuperAdmin ? handleDelete : undefined}
+          hasTheme={hasTheme}
+        />
+        <PremiumLockOverlay locked={!isSuperAdmin} label="Re-capturar el lloc web">
+          <EmptyGrabber
+            url={url} setUrl={setUrl}
+            blogUrl={blogUrl} setBlogUrl={setBlogUrl}
+            analyzing={analyzing} error={error} onGrab={grab}
+          />
+        </PremiumLockOverlay>
+      </div>
+    )
+  }
+
+  // ── Filled state — theme exists ─────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Header card */}
-      <div className="bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-2xl p-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-carma-500/10 blur-[80px] pointer-events-none rounded-full" />
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-carma-500/20 text-carma-300 rounded-2xl flex items-center justify-center">
-              <Palette className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-extrabold text-white">Theme Studio · Magic Wand</h3>
-              <p className="text-xs font-medium text-neutral-400 mt-1 max-w-md">
-                Enganxa la URL del client. La IA reconstrueix el header i footer com a components natius totalment aïllats, i pots editar-los visualment clicant-hi. Tot es desa sol.
+      <ThemeToolbar
+        saveStatus={saveStatus}
+        editLocales={editLocales}
+        editLocale={editLocale}
+        setEditLocale={setEditLocale}
+        chromeDefaultLocale={chromeDefaultLocale}
+        canTranslateChrome={canTranslateChrome}
+        translatingChrome={translatingChrome}
+        onTranslate={handleTranslateChrome}
+        onRecapture={isSuperAdmin ? () => grab() : undefined}
+        onDelete={isSuperAdmin ? handleDelete : undefined}
+        hasTheme={hasTheme}
+        detectedFramework={detectedFramework}
+        siteId={siteId}
+        analyzing={analyzing}
+      />
+
+      {/* Split workspace: live controls on the left, real-render preview on the right. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,560px)] gap-5 items-start">
+        <div className="space-y-5 min-w-0">
+
+        {nativeCardActive && (
+          <div className="flex items-start gap-3 rounded-xl border border-accent/30 bg-accent-soft p-3.5">
+            <span className="w-8 h-8 rounded-lg bg-accent text-on-accent flex items-center justify-center shrink-0">
+              <LayoutGrid className="w-4 h-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-text">Disseny de targetes clonat del lloc</p>
+              <p className="text-xs text-muted mt-0.5">
+                El feed replica les targetes d&apos;article originals{nativeCardColumns ? ` · ${nativeCardColumns} columnes` : ''}. Pots tornar al disseny premium de Carma.
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {hasTheme && <SaveIndicator status={saveStatus} />}
-          </div>
-        </div>
-      </div>
-
-      {/* URL grabber — re-capturing the source site is a Premium action. */}
-      <PremiumLockOverlay locked={!isSuperAdmin} label="Re-capturar el lloc web">
-      <div className="bg-white border border-neutral-100 rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">1</span>
-          <h4 className="text-sm font-bold text-neutral-900">Capturar el look &amp; feel</h4>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
-            <input
-              type="url"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && grab()}
-              placeholder="https://www.elmeuclient.com"
-              disabled={analyzing}
-              className="w-full pl-9 pr-3 py-2.5 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-carma-500 text-sm font-medium transition-all disabled:opacity-60"
-            />
-          </div>
-          <button
-            onClick={grab}
-            disabled={!url.trim() || analyzing}
-            className="cursor-pointer px-5 py-2.5 bg-carma-500 hover:bg-carma-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {hasTheme ? 'Tornar a capturar' : 'Capturar tema'}
-          </button>
-        </div>
-        {error && (
-          <div className="mt-3 flex items-start gap-2 p-2.5 bg-red-50 border border-red-100 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700 font-medium">{error}</p>
+            <button
+              type="button"
+              onClick={clearNativeCard}
+              className="cursor-pointer shrink-0 text-xs font-bold text-accent hover:underline whitespace-nowrap mt-0.5"
+            >
+              Usar disseny propi
+            </button>
           </div>
         )}
-        {analyzing && (
-          <div className="mt-3 flex items-start gap-2 p-2.5 bg-carma-50 border border-carma-100 rounded-lg">
-            <Sparkles className="w-4 h-4 text-carma-500 shrink-0 mt-0.5 animate-pulse" />
-            <p className="text-xs text-carma-700 font-medium">La IA reconstrueix el header i el footer com a components natius i aïllats, amb estats :hover i menús desplegables en CSS pur. Pot trigar entre 15 i 40 segons…</p>
-          </div>
-        )}
-      </div>
-      </PremiumLockOverlay>
 
-      {/* Detected framework banner */}
-      {detectedFramework && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5 flex items-center gap-4">
-          <div className="w-10 h-10 bg-green-500 text-white rounded-xl flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-bold uppercase tracking-widest text-green-700">Framework detectat</span>
-            <p className="text-sm font-bold text-neutral-900 mt-0.5">
-              {FRAMEWORK_LABELS[detectedFramework] ?? detectedFramework}
-              {detectedHosting && (
-                <span className="font-normal text-neutral-500"> · hosting {HOSTING_LABELS[detectedHosting] ?? detectedHosting}</span>
-              )}
-            </p>
-          </div>
-          <Link
-            href={`/dashboard/sites/${siteId}?tab=connexio`}
-            className="cursor-pointer flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-colors shrink-0"
-          >
-            <Plug className="w-3.5 h-3.5" />
-            Connexió
-          </Link>
-        </div>
-      )}
-
-      {hasTheme && (
-        <>
-          {/* Theme language switcher — edit header/footer/heading per language */}
-          {editLocales.length > 1 && (
-            <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm p-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-bold text-neutral-400 uppercase tracking-widest">
-                <Globe className="w-3.5 h-3.5" /> Idioma del tema
-              </span>
-              <div className="flex flex-wrap items-center gap-1">
-                {editLocales.map(loc => {
-                  const isActive = loc === editLocale
-                  return (
-                    <button
-                      key={loc}
-                      type="button"
-                      onClick={() => setEditLocale(loc)}
-                      className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive ? 'bg-carma-500 text-white shadow-sm' : 'text-neutral-500 hover:bg-neutral-100'}`}
-                      title={LOCALE_META[loc].label}
-                    >
-                      <span>{LOCALE_META[loc].flag}</span>
-                      <span>{LOCALE_META[loc].native}</span>
-                      {loc === chromeDefaultLocale && (
-                        <span className={`text-[10px] font-extrabold uppercase ${isActive ? 'text-white/80' : 'text-neutral-300'}`}>·&nbsp;base</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-              {editLocale !== chromeDefaultLocale && (
+        {!nativeCardActive && isSuperAdmin && (
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-surface-subtle p-3.5">
+            <span className="w-8 h-8 rounded-lg bg-surface text-muted border border-border flex items-center justify-center shrink-0">
+              <Newspaper className="w-4 h-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-text">Replica el disseny del blog del client</p>
+              <p className="text-xs text-muted mt-0.5 mb-2 leading-relaxed">
+                No hem detectat cap blog automàticament. Indica&apos;n la URL i tornarem a capturar per clonar-ne les targetes.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={blogUrl}
+                  onChange={e => setBlogUrl(e.target.value)}
+                  placeholder="https://elclient.com/noticies"
+                  disabled={analyzing}
+                  className="flex-1 min-w-0 h-9 px-3 bg-surface border border-border rounded-lg text-sm text-text placeholder:text-subtle focus:outline-none focus:border-accent transition-colors disabled:opacity-60"
+                />
                 <button
                   type="button"
-                  onClick={() => void handleTranslateChrome()}
-                  disabled={translatingChrome}
-                  className={`cursor-pointer ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
-                    canTranslateChrome
-                      ? 'text-carma-700 bg-carma-50 border border-carma-100 hover:bg-carma-100'
-                      : 'text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100'
-                  }`}
-                  title={canTranslateChrome ? `Traduir des de ${LOCALE_META[chromeDefaultLocale].native} amb IA` : 'Funció Premium'}
+                  onClick={() => grab()}
+                  disabled={analyzing || !blogUrl.trim()}
+                  className="cursor-pointer shrink-0 h-9 px-3.5 rounded-lg bg-accent text-on-accent text-xs font-bold hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {translatingChrome
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : canTranslateChrome ? <Sparkles className="w-3.5 h-3.5" /> : <Crown className="w-3.5 h-3.5" />}
-                  {translatingChrome ? 'Traduint…' : `Traduir de ${LOCALE_META[chromeDefaultLocale].native}`}
+                  Capturar
                 </button>
-              )}
-              <p className="w-full text-xs text-neutral-400 pl-1">
-                {editLocale === chromeDefaultLocale
-                  ? 'Idioma base — el header i footer capturats. Canvia d’idioma per editar-ne o traduir-ne les versions.'
-                  : `Editant la versió en ${LOCALE_META[editLocale].native}. Tradueix-la des de la base amb IA o edita-la manualment.`}
-              </p>
-            </div>
-          )}
-
-          {/* Design tokens + layout */}
-          <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-neutral-100 bg-gradient-to-r from-carma-50/40 to-white">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">2</span>
-                <h4 className="text-sm font-bold text-neutral-900">Disseny del blog</h4>
               </div>
-              <p className="text-xs text-neutral-500 mt-1 ml-8">Personalitza l&apos;encapçalament, els colors, la tipografia i la disposició. Tot s&apos;aplica i es desa en temps real.</p>
-            </div>
-
-            <div className="px-6">
-            <Section icon={Heading} title="Encapçalament" desc="El títol principal del llistat. Clica per editar-ne el text i ajusta l'estil.">
-              <InlineHeading
-                value={sectionTitle}
-                onChange={setSectionTitle}
-                fontHeading={String(tokens.fontHeading ?? '')}
-                color={String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')}
-                size={String(tokens.sectionTitleSize ?? '1.6rem')}
-                weight={String(tokens.sectionTitleWeight ?? '800')}
-                align={tokens.sectionTitleAlign ?? 'left'}
-                background={String(tokens.headingImage ? '#1c1917' : (tokens.colorBg ?? '#ffffff'))}
-              />
-
-              {/* Heading style controls */}
-              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-                <HeadingField label="Color">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={isHex(String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')) ? String(tokens.sectionTitleColor ?? tokens.colorText) : '#111111'}
-                      onChange={e => setToken('sectionTitleColor', e.target.value)}
-                      className="w-7 h-7 rounded cursor-pointer border border-neutral-200 bg-white p-0 shrink-0"
-                      aria-label="Color del títol"
-                    />
-                    <input
-                      type="text"
-                      value={String(tokens.sectionTitleColor ?? '')}
-                      onChange={e => setToken('sectionTitleColor', e.target.value)}
-                      placeholder={String(tokens.colorText ?? '#111')}
-                      className={headingInput}
-                    />
-                  </div>
-                </HeadingField>
-
-                <HeadingField label="Mida (rem/px)">
-                  <input
-                    type="text"
-                    value={String(tokens.sectionTitleSize ?? '')}
-                    onChange={e => setToken('sectionTitleSize', e.target.value)}
-                    placeholder="1.6rem"
-                    className={headingInput}
-                  />
-                </HeadingField>
-
-                <HeadingField label="Pes">
-                  <select
-                    value={String(tokens.sectionTitleWeight ?? '800')}
-                    onChange={e => setToken('sectionTitleWeight', e.target.value)}
-                    className={headingInput}
-                  >
-                    {['400', '500', '600', '700', '800', '900'].map(w => (
-                      <option key={w} value={w}>{w}</option>
-                    ))}
-                  </select>
-                </HeadingField>
-
-                <HeadingField label="Alineació">
-                  <div className="flex gap-1">
-                    {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => setToken('sectionTitleAlign', a)}
-                        className={`cursor-pointer flex-1 flex items-center justify-center py-1.5 rounded-lg border transition-all ${(tokens.sectionTitleAlign ?? 'left') === a ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'}`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                      </button>
-                    ))}
-                  </div>
-                </HeadingField>
-
-                <HeadingField label="Amplada">
-                  <input
-                    type="text"
-                    value={String(tokens.sectionTitleWidth ?? '')}
-                    onChange={e => setToken('sectionTitleWidth', e.target.value)}
-                    placeholder="100% / 720px"
-                    className={headingInput}
-                  />
-                </HeadingField>
-
-                <HeadingField label="Alçada mín.">
-                  <input
-                    type="text"
-                    value={String(tokens.sectionTitleHeight ?? '')}
-                    onChange={e => setToken('sectionTitleHeight', e.target.value)}
-                    placeholder="auto / 120px"
-                    className={headingInput}
-                  />
-                </HeadingField>
-
-                <div className="col-span-2">
-                  <HeadingField label="Imatge de fons (URL, opcional)">
-                    <input
-                      type="url"
-                      value={String(tokens.headingImage ?? '')}
-                      onChange={e => setToken('headingImage', e.target.value)}
-                      placeholder="https://example.com/banner.jpg"
-                      className={headingInput}
-                    />
-                  </HeadingField>
-                </div>
-
-                <div className="col-span-2 flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
-                  <span className="text-xs font-semibold text-neutral-600">Mostrar fil d&apos;Ariadna (breadcrumb)</span>
-                  <button
-                    type="button"
-                    onClick={() => setToken('showBreadcrumb', !tokens.showBreadcrumb)}
-                    role="switch"
-                    aria-checked={!!tokens.showBreadcrumb}
-                    className={`cursor-pointer relative w-11 h-6 rounded-full transition-colors ${tokens.showBreadcrumb ? 'bg-carma-500' : 'bg-neutral-300'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${tokens.showBreadcrumb ? 'translate-x-5' : ''}`} />
-                  </button>
-                </div>
-              </div>
-            </Section>
-
-            <Section icon={LayoutGrid} title="Disposició del llistat" desc="Com es presenten les targetes d'articles al llistat.">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex gap-1.5">
-                  <LayoutOption active={tokens.layout === 'grid'} icon={LayoutGrid} label="Graella" onClick={() => setToken('layout', 'grid')} />
-                  <LayoutOption active={tokens.layout === 'list'} icon={Rows3} label="Llista" onClick={() => setToken('layout', 'list')} />
-                </div>
-                {tokens.layout === 'grid' && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-neutral-400">Columnes</span>
-                    {(['2', '3', '4'] as BlogColumns[]).map(c => (
-                      <button
-                        key={c}
-                        onClick={() => setToken('columns', c)}
-                        className={`cursor-pointer w-8 h-8 rounded-lg text-xs font-bold border transition-all ${tokens.columns === c ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'}`}
-                      >
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Section>
-
-            <Section icon={Palette} title="Colors">
-              <div className="grid sm:grid-cols-2 gap-2.5">
-                {COLOR_FIELDS.map(({ key, label }) => {
-                  const value = String(tokens[key] ?? '')
-                  return (
-                    <div key={key} className="flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-2.5 py-2 transition-colors hover:border-neutral-300">
-                      {isHex(value) ? (
-                        <input
-                          type="color"
-                          value={value}
-                          onChange={e => setToken(key, e.target.value)}
-                          className="w-8 h-8 rounded-lg cursor-pointer border border-neutral-200 bg-white p-0 shrink-0"
-                          aria-label={label}
-                        />
-                      ) : (
-                        <span className="w-8 h-8 rounded-lg border border-neutral-200 shrink-0" style={{ background: value }} aria-hidden />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-neutral-600 truncate">{label}</p>
-                        <input
-                          type="text"
-                          value={value}
-                          onChange={e => setToken(key, e.target.value)}
-                          className="w-full bg-transparent outline-none text-xs font-mono text-neutral-400 focus:text-neutral-700"
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </Section>
-
-            <Section icon={Type} title="Tipografia" desc="Famílies tipogràfiques (CSS font-family).">
-              <div className="space-y-2.5">
-                {FONT_FIELDS.map(({ key, label }) => (
-                  <div key={key} className="flex items-center gap-2.5">
-                    <span className="w-28 shrink-0 text-xs font-semibold text-neutral-500">{label}</span>
-                    <input
-                      type="text"
-                      value={String(tokens[key] ?? '')}
-                      onChange={e => setToken(key, e.target.value)}
-                      className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
-                    />
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            <Section icon={Ruler} title="Mides i forma" desc="Mida base del text, radis de cantonada i amplada màxima.">
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-                {SCALE_FIELDS.map(({ key, label, placeholder }) => (
-                  <div key={key} className="flex items-center gap-2.5">
-                    <span className="w-24 shrink-0 text-xs font-semibold text-neutral-500">{label}</span>
-                    <input
-                      type="text"
-                      value={String(tokens[key] ?? '')}
-                      onChange={e => setToken(key, e.target.value)}
-                      placeholder={placeholder}
-                      className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-carma-400 focus:bg-white text-xs font-mono transition-all"
-                    />
-                  </div>
-                ))}
-              </div>
-            </Section>
             </div>
           </div>
+        )}
 
-          {/* Visual editor */}
-          <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-6 pb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 bg-carma-100 text-carma-700 text-xs font-bold rounded-full flex items-center justify-center">3</span>
-                <h4 className="text-sm font-bold text-neutral-900">Editor visual del header i footer</h4>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <StructureChip icon={PanelTop} label="Header" ok={!!extractedHeader} detail={extractedHeader ? 'Reconstruït amb IA (natiu)' : 'No detectat'} />
-                <StructureChip icon={PanelBottom} label="Footer" ok={!!extractedFooter} detail={extractedFooter ? 'Reconstruït amb IA (natiu)' : 'No detectat'} />
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3">
-                <ResourcePill label={`${componentKb} KB natiu`} active={componentKb > 0} />
-                <ResourcePill label={`${externalStyles.length} fulls CSS`} active={externalStyles.length > 0} />
-                <ResourcePill label={`${externalScripts.length} scripts`} active={externalScripts.length > 0} />
-                <ResourcePill label={`${fontLinks.length} tipografies`} active={fontLinks.length > 0} />
-              </div>
+      {/* Three accordion sections. Open one at a time to avoid the form-wall feel. */}
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+        <Section
+          icon={Sparkles}
+          title="Encapçalament"
+          summary={sectionTitle ? `«${sectionTitle.slice(0, 40)}»` : 'Sense títol personalitzat'}
+          open={openSection === 'heading'}
+          onToggle={() => setOpenSection('heading')}
+        >
+          <HeadingPanel
+            tokens={tokens}
+            setToken={setToken}
+            sectionTitle={sectionTitle}
+            setSectionTitle={setSectionTitle}
+          />
+        </Section>
+
+        <Section
+          icon={Palette}
+          title="Disseny"
+          summary={`Accent ${String(tokens.colorAccent ?? '#-')} · ${fontPresetName(tokens)}`}
+          open={openSection === 'design'}
+          onToggle={() => setOpenSection('design')}
+        >
+          <DesignPanel tokens={tokens} setToken={setToken} />
+        </Section>
+
+        <Section
+          icon={LayoutGrid}
+          title="Disposició"
+          summary={`${tokens.layout === 'list' ? 'Llista' : `Graella · ${tokens.columns ?? '3'} columnes`}`}
+          open={openSection === 'layout'}
+          onToggle={() => setOpenSection('layout')}
+        >
+          <LayoutPanel tokens={tokens} setToken={setToken} />
+        </Section>
+      </div>
+
+      {/* Visual chrome editor — its own surface because it's a different mental model. */}
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+        <div className="p-6 pb-4 border-b border-border">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-text">Header i footer</h4>
+              <p className="text-xs text-muted mt-1">
+                El header i el footer originals del lloc s&apos;injecten tal qual amb els seus estils. Edita el codi o els enllaços del menú.
+              </p>
             </div>
+            <div className="flex flex-wrap gap-1.5 shrink-0">
+              <StructureChip icon={PanelTop} label="Header" ok={!!extractedHeader} />
+              <StructureChip icon={PanelBottom} label="Footer" ok={!!extractedFooter} />
+              <StructureChip icon={FileCode2} label="Estils" ok={!!extractedHead} />
+            </div>
+          </div>
+        </div>
 
-            <div className="px-6 pb-6 border-t border-neutral-100 pt-5">
-              <p className="text-xs font-bold text-neutral-600 mb-1">Edició visual</p>
-              <p className="text-xs text-neutral-400 mb-4">Clica qualsevol element de la previsualització per editar-ne el text, l&apos;enllaç, els colors i l&apos;espaiat. O usa el codi avançat. Tot es desa automàticament.</p>
-              <VisualChromeEditor
+        <div className="p-6">
+          <VisualChromeEditor
+            header={extractedHeader}
+            footer={extractedFooter}
+            head={extractedHead}
+            onHeaderChange={setExtractedHeader}
+            onFooterChange={setExtractedFooter}
+            onHeadChange={setExtractedHead}
+          />
+        </div>
+
+        {(extractedHeader || extractedFooter) && (
+          <details className="border-t border-border group" open>
+            <summary className="cursor-pointer flex items-center gap-2 px-6 py-3 text-xs font-semibold text-subtle hover:text-text hover:bg-surface-hover transition-colors">
+              <PanelTop className="w-3.5 h-3.5" />
+              Menú de navegació
+              <ChevronDown className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="px-6 pb-6 pt-1">
+              <p className="text-xs text-muted mb-4 leading-relaxed">
+                Afegeix, edita, reordena o elimina els enllaços del menú. Els canvis conserven l’estil capturat i es desen automàticament.
+              </p>
+              <NavEditor
                 header={extractedHeader}
                 footer={extractedFooter}
                 onHeaderChange={setExtractedHeader}
                 onFooterChange={setExtractedFooter}
               />
             </div>
-          </div>
+          </details>
+        )}
 
-          {/* Danger zone — destructive, superadmin only */}
-          {isSuperAdmin && (
-            <div className="flex justify-end">
-              <button
-                onClick={handleDelete}
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Eliminar tema
-              </button>
+        {(externalStyles.length > 0 || externalScripts.length > 0 || fontLinks.length > 0) && (
+          <details className="border-t border-border group">
+            <summary className="cursor-pointer flex items-center gap-2 px-6 py-3 text-xs font-semibold text-subtle hover:text-text hover:bg-surface-hover transition-colors">
+              <MoreHorizontal className="w-3.5 h-3.5" />
+              Recursos detectats
+              <ChevronDown className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="px-6 pb-5 flex flex-wrap gap-1.5">
+              {externalStyles.length > 0 && <ResourcePill label={`${externalStyles.length} fulls CSS`} />}
+              {externalScripts.length > 0 && <ResourcePill label={`${externalScripts.length} scripts`} />}
+              {fontLinks.length > 0 && <ResourcePill label={`${fontLinks.length} tipografies`} />}
             </div>
+          </details>
+        )}
+        </div>
+        </div>
+
+        <ThemePreview
+          siteId={siteId}
+          tokens={tokens}
+          saving={saveStatus === 'saving'}
+          savedAt={savedAt}
+          className="xl:sticky xl:top-4 min-h-[620px] xl:h-[calc(100vh-2rem)]"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Toolbar ─────────────────────────────────────────────────────────────────
+
+function ThemeToolbar({
+  saveStatus, editLocales, editLocale, setEditLocale, chromeDefaultLocale,
+  canTranslateChrome, translatingChrome, onTranslate,
+  onRecapture, onDelete, hasTheme, detectedFramework, siteId, analyzing,
+}: {
+  saveStatus: SaveStatus
+  editLocales: Locale[]
+  editLocale: Locale
+  setEditLocale: (l: Locale) => void
+  chromeDefaultLocale: Locale
+  canTranslateChrome: boolean
+  translatingChrome: boolean
+  onTranslate: () => void
+  onRecapture?: () => void
+  onDelete?: () => void
+  hasTheme: boolean
+  detectedFramework?: string | null
+  siteId?: string
+  analyzing?: boolean
+}) {
+  const multiLocale = editLocales.length > 1
+
+  return (
+    <div className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex flex-wrap items-center gap-2">
+      {/* Save status — first, so it's always in the corner of the eye */}
+      <SaveIndicator status={saveStatus} hasTheme={hasTheme} />
+
+      {/* Framework detected — compact pill inline */}
+      {hasTheme && detectedFramework && siteId && (
+        <Link
+          href={`/dashboard/sites/${siteId}?tab=connexio`}
+          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-success bg-success-soft border border-success/20 hover:opacity-90 transition-opacity"
+          title={`${FRAMEWORK_LABELS[detectedFramework] ?? detectedFramework} detectat · veure connexió`}
+        >
+          <Plug className="w-3 h-3" />
+          {FRAMEWORK_LABELS[detectedFramework] ?? detectedFramework}
+        </Link>
+      )}
+
+      {/* Language selector — only when multiple locales */}
+      {multiLocale && (
+        <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-md p-0.5">
+          {editLocales.map(loc => {
+            const isActive = loc === editLocale
+            return (
+              <button
+                key={loc}
+                type="button"
+                onClick={() => setEditLocale(loc)}
+                title={LOCALE_META[loc].label}
+                className={cn(
+                  'cursor-pointer flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold transition-colors',
+                  isActive ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
+                )}
+              >
+                <span>{LOCALE_META[loc].flag}</span>
+                <span className="uppercase">{loc}</span>
+                {loc === chromeDefaultLocale && (
+                  <span className={cn('text-[9px] font-bold', isActive ? 'text-accent' : 'text-subtle')}>·</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Translate (only on non-base locale) */}
+      {multiLocale && editLocale !== chromeDefaultLocale && (
+        <button
+          type="button"
+          onClick={onTranslate}
+          disabled={translatingChrome}
+          title={canTranslateChrome ? `Traduir de ${LOCALE_META[chromeDefaultLocale].native}` : 'Funció Premium'}
+          className={cn(
+            'cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors disabled:opacity-60',
+            canTranslateChrome
+              ? 'text-accent bg-accent-soft hover:opacity-90'
+              : 'text-warning bg-warning-soft hover:opacity-90',
           )}
-        </>
+        >
+          {translatingChrome
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : canTranslateChrome ? <Sparkles className="w-3.5 h-3.5" /> : <Crown className="w-3.5 h-3.5" />}
+          {translatingChrome ? 'Traduint…' : 'Traduir'}
+        </button>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Actions */}
+      {onRecapture && (
+        <button
+          onClick={onRecapture}
+          disabled={analyzing}
+          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-60"
+          title="Tornar a capturar des de la URL d'origen"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Re-capturar
+        </button>
+      )}
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-subtle hover:text-danger hover:bg-danger-soft transition-colors"
+          title="Eliminar el tema"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       )}
     </div>
   )
 }
 
-function SaveIndicator({ status }: { status: SaveStatus }) {
+function SaveIndicator({ status, hasTheme }: { status: SaveStatus; hasTheme: boolean }) {
+  if (!hasTheme) {
+    return (
+      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-subtle">
+        <Palette className="w-3.5 h-3.5" /> Theme Studio
+      </span>
+    )
+  }
   if (status === 'saving') {
     return (
-      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-carma-200 bg-white/5 rounded-lg">
+      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-muted">
         <Loader2 className="w-3.5 h-3.5 animate-spin" /> Desant…
       </span>
     )
   }
   if (status === 'error') {
     return (
-      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-300 bg-red-500/10 rounded-lg">
+      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-danger bg-danger-soft rounded-md">
         <CloudOff className="w-3.5 h-3.5" /> Error en desar
       </span>
     )
   }
   if (status === 'saved') {
     return (
-      <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-green-300 bg-green-500/10 rounded-lg">
+      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-success">
         <Check className="w-3.5 h-3.5" /> Desat
       </span>
     )
   }
   return (
-    <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-400 bg-white/5 rounded-lg">
+    <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-subtle">
       <Cloud className="w-3.5 h-3.5" /> Desat automàtic
     </span>
   )
 }
 
-function LayoutOption({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof LayoutGrid; label: string; onClick: () => void }) {
+// ── Empty grabber (no theme yet) ────────────────────────────────────────────
+
+function EmptyGrabber({
+  url, setUrl, blogUrl, setBlogUrl, analyzing, error, onGrab,
+}: {
+  url: string
+  setUrl: (v: string) => void
+  blogUrl: string
+  setBlogUrl: (v: string) => void
+  analyzing: boolean
+  error: string | null
+  onGrab: () => void
+}) {
   return (
-    <button
-      onClick={onClick}
-      className={`cursor-pointer flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${active ? 'bg-carma-500 border-carma-500 text-white' : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'}`}
-    >
-      <Icon className="w-3.5 h-3.5" />
-      {label}
-    </button>
+    <div className="bg-surface border border-border rounded-2xl p-10 text-center">
+      <div className="mx-auto w-12 h-12 rounded-xl bg-accent-soft text-accent flex items-center justify-center mb-4">
+        <Wand2 className="w-6 h-6" />
+      </div>
+      <h3 className="text-base font-semibold text-text">Captura el tema d&apos;un lloc existent</h3>
+      <p className="text-sm text-muted mt-1.5 max-w-md mx-auto leading-relaxed">
+        Enganxa la URL del lloc del client. Injectem el header i el footer originals tal qual (amb els seus estils) i n&apos;extreiem colors i tipografies per al blog.
+      </p>
+      <div className="mt-5 max-w-md mx-auto flex gap-2">
+        <div className="relative flex-1">
+          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
+          <input
+            type="url"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onGrab()}
+            placeholder="https://www.elmeuclient.com"
+            disabled={analyzing}
+            className="w-full h-11 pl-9 pr-3 bg-surface-subtle border border-border rounded-xl focus:outline-none focus:border-accent text-sm text-text placeholder:text-subtle transition-colors disabled:opacity-60"
+          />
+        </div>
+        {/* The capture modal is the single progress surface — no inline spinner
+            here (that produced the "double loader"). Disabled while in flight. */}
+        <Button
+          onClick={onGrab}
+          disabled={!url.trim() || analyzing}
+          iconLeft={<Wand2 className="w-4 h-4" />}
+        >
+          Capturar
+        </Button>
+      </div>
+      {/* Optional Blog URL — guides card cloning when auto-detection is unsure. */}
+      <div className="mt-2.5 max-w-md mx-auto">
+        <div className="relative">
+          <Newspaper className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
+          <input
+            type="url"
+            value={blogUrl}
+            onChange={e => setBlogUrl(e.target.value)}
+            placeholder="URL del blog/notícies (opcional)"
+            disabled={analyzing}
+            className="w-full h-10 pl-9 pr-3 bg-surface-subtle border border-border rounded-xl focus:outline-none focus:border-accent text-sm text-text placeholder:text-subtle transition-colors disabled:opacity-60"
+          />
+        </div>
+        <p className="text-xs text-subtle mt-1.5 leading-relaxed">
+          Si el lloc ja té un blog/secció de notícies, indica&apos;n la URL i en clonarem el disseny de targetes.
+        </p>
+      </div>
+      {error && !analyzing && (
+        <div className="mt-4 max-w-md mx-auto flex items-start gap-2 p-2.5 bg-danger-soft border border-danger/20 rounded-lg text-left">
+          <AlertCircle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+          <p className="text-xs text-danger font-medium">{error}</p>
+        </div>
+      )}
+    </div>
   )
 }
 
-function StructureChip({ icon: Icon, label, ok, detail }: { icon: typeof PanelTop; label: string; ok: boolean; detail: string }) {
+// ── Section primitive ───────────────────────────────────────────────────────
+
+function Section({
+  icon: Icon, title, summary, open, onToggle, children,
+}: {
+  icon: typeof Palette
+  title: string
+  summary?: string
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border ${ok ? 'bg-green-50/40 border-green-100' : 'bg-neutral-50 border-neutral-200'}`}>
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${ok ? 'bg-green-100 text-green-700' : 'bg-white text-neutral-400 border border-neutral-200'}`}>
-        <Icon className="w-4 h-4" />
+    <section className="border-b border-border last:border-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="cursor-pointer w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-surface-hover transition-colors"
+        aria-expanded={open}
+      >
+        <span className={cn(
+          'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors',
+          open ? 'bg-accent-soft text-accent' : 'bg-surface-subtle text-muted',
+        )}>
+          <Icon className="w-4 h-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h5 className="text-sm font-semibold text-text leading-tight">{title}</h5>
+          {!open && summary && (
+            <p className="text-xs text-subtle mt-0.5 truncate">{summary}</p>
+          )}
+        </div>
+        <ChevronDown className={cn('w-4 h-4 text-subtle transition-transform shrink-0', open && 'rotate-180 text-accent')} />
+      </button>
+      {open && (
+        <div className="px-5 pb-5 animate-in fade-in slide-in-from-top-1 duration-150">
+          {children}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── Heading panel ───────────────────────────────────────────────────────────
+
+function HeadingPanel({
+  tokens, setToken, sectionTitle, setSectionTitle,
+}: {
+  tokens: DesignTokens
+  setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
+  sectionTitle: string
+  setSectionTitle: (v: string) => void
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Live preview of the title */}
+      <InlineHeading
+        value={sectionTitle}
+        onChange={setSectionTitle}
+        fontHeading={String(tokens.fontHeading ?? '')}
+        color={String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')}
+        size={String(tokens.sectionTitleSize ?? '1.6rem')}
+        weight={String(tokens.sectionTitleWeight ?? '800')}
+        align={tokens.sectionTitleAlign ?? 'left'}
+        background={String(tokens.headingImage ? '#1c1917' : (tokens.colorBg ?? '#ffffff'))}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Color">
+          <ColorInput
+            value={String(tokens.sectionTitleColor ?? tokens.colorText ?? '#111111')}
+            onChange={v => setToken('sectionTitleColor', v)}
+            placeholder={String(tokens.colorText ?? '#111')}
+          />
+        </Field>
+        <Field label="Mida">
+          <TextInput
+            value={String(tokens.sectionTitleSize ?? '')}
+            onChange={v => setToken('sectionTitleSize', v)}
+            placeholder="1.6rem"
+          />
+        </Field>
+        <Field label="Pes">
+          <select
+            value={String(tokens.sectionTitleWeight ?? '800')}
+            onChange={e => setToken('sectionTitleWeight', e.target.value)}
+            className="w-full h-9 px-2.5 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent text-sm text-text transition-colors"
+          >
+            {[
+              ['400', 'Normal'], ['500', 'Mig'], ['600', 'Seminegre'],
+              ['700', 'Negre'], ['800', 'Extranegre'], ['900', 'Ultra'],
+            ].map(([w, l]) => (<option key={w} value={w}>{l}</option>))}
+          </select>
+        </Field>
+        <Field label="Alineació">
+          <SegmentedControl
+            value={tokens.sectionTitleAlign ?? 'left'}
+            onChange={v => setToken('sectionTitleAlign', v)}
+            options={[
+              { value: 'left',   icon: <AlignLeft   className="w-3.5 h-3.5" />, label: 'Esquerra' },
+              { value: 'center', icon: <AlignCenter className="w-3.5 h-3.5" />, label: 'Centre' },
+              { value: 'right',  icon: <AlignRight  className="w-3.5 h-3.5" />, label: 'Dreta' },
+            ]}
+          />
+        </Field>
       </div>
-      <div className="min-w-0">
-        <p className="text-xs font-bold text-neutral-900">{label}</p>
-        <p className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-neutral-400'}`}>{detail}</p>
+
+      <details className="group rounded-lg bg-surface-subtle border border-border">
+        <summary className="cursor-pointer flex items-center gap-2 px-3 py-2 text-xs font-semibold text-muted hover:text-text">
+          <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
+          Opcions avançades
+        </summary>
+        <div className="px-3 pb-3 pt-1 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Amplada">
+              <TextInput
+                value={String(tokens.sectionTitleWidth ?? '')}
+                onChange={v => setToken('sectionTitleWidth', v)}
+                placeholder="100% / 720px"
+              />
+            </Field>
+            <Field label="Alçada mín.">
+              <TextInput
+                value={String(tokens.sectionTitleHeight ?? '')}
+                onChange={v => setToken('sectionTitleHeight', v)}
+                placeholder="auto / 120px"
+              />
+            </Field>
+          </div>
+          <Field label="Imatge de fons (URL)">
+            <TextInput
+              value={String(tokens.headingImage ?? '')}
+              onChange={v => setToken('headingImage', v)}
+              placeholder="https://example.com/banner.jpg"
+              type="url"
+            />
+          </Field>
+          <Toggle
+            label="Mostrar fil d'Ariadna"
+            checked={!!tokens.showBreadcrumb}
+            onChange={v => setToken('showBreadcrumb', v)}
+          />
+        </div>
+      </details>
+    </div>
+  )
+}
+
+// ── Design panel — colors + typography + sizes ──────────────────────────────
+
+function fontPresetName(tokens: DesignTokens): string {
+  const heading = String(tokens.fontHeading ?? '').toLowerCase()
+  const match = FONT_PRESETS.find(p => p.heading.toLowerCase() === heading)
+  if (match) return match.name
+  if (!heading) return 'Per defecte'
+  return 'Personalitzat'
+}
+
+function DesignPanel({
+  tokens, setToken,
+}: {
+  tokens: DesignTokens
+  setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
+}) {
+  const currentPresetId = FONT_PRESETS.find(p => p.heading === tokens.fontHeading)?.id
+
+  const applyPreset = (id: string) => {
+    const p = FONT_PRESETS.find(x => x.id === id)
+    if (!p) return
+    setToken('fontHeading', p.heading)
+    setToken('fontBody', p.body)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Colors — visual swatch grid */}
+      <div>
+        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5">Colors</h6>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {COLOR_FIELDS.map(({ key, label, hint }) => (
+            <ColorSwatch
+              key={key}
+              label={label}
+              hint={hint}
+              value={String(tokens[key] ?? '')}
+              onChange={v => setToken(key, v)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Typography — preset chooser + advanced custom override */}
+      <div>
+        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5">Tipografia</h6>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {FONT_PRESETS.map(p => {
+            const active = currentPresetId === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyPreset(p.id)}
+                className={cn(
+                  'cursor-pointer text-left p-3 rounded-lg border transition-colors',
+                  active
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover',
+                )}
+              >
+                <p
+                  className="text-base font-semibold text-text truncate"
+                  style={{ fontFamily: p.heading }}
+                >
+                  {p.name}
+                </p>
+                <p
+                  className="text-xs text-muted mt-0.5 truncate"
+                  style={{ fontFamily: p.body }}
+                >
+                  {p.sub}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+        <details className="mt-2 group">
+          <summary className="cursor-pointer flex items-center gap-1.5 text-xs font-semibold text-subtle hover:text-text">
+            <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
+            CSS personalitzat
+          </summary>
+          <div className="mt-2 space-y-2">
+            <Field label="Títols (font-family)">
+              <TextInput
+                value={String(tokens.fontHeading ?? '')}
+                onChange={v => setToken('fontHeading', v)}
+                placeholder='"Inter", system-ui, sans-serif'
+                mono
+              />
+            </Field>
+            <Field label="Text (font-family)">
+              <TextInput
+                value={String(tokens.fontBody ?? '')}
+                onChange={v => setToken('fontBody', v)}
+                placeholder='"Inter", system-ui, sans-serif'
+                mono
+              />
+            </Field>
+          </div>
+        </details>
+      </div>
+
+      {/* Sizes — compact, inline */}
+      <div>
+        <h6 className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2.5 flex items-center gap-1.5">
+          <Ruler className="w-3 h-3" /> Mides
+        </h6>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { key: 'baseFontSize' as const, label: 'Base text',  placeholder: '16px' },
+            { key: 'radius' as const,        label: 'Radi',       placeholder: '10px' },
+            { key: 'radiusLg' as const,      label: 'Radi gran',  placeholder: '16px' },
+            { key: 'maxWidth' as const,      label: 'Amplada màx.', placeholder: '1200px' },
+          ].map(({ key, label, placeholder }) => (
+            <Field key={key} label={label}>
+              <TextInput
+                value={String(tokens[key] ?? '')}
+                onChange={v => setToken(key, v)}
+                placeholder={placeholder}
+                mono
+              />
+            </Field>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function ResourcePill({ label, active }: { label: string; active: boolean }) {
+// ── Layout panel ────────────────────────────────────────────────────────────
+
+function LayoutPanel({
+  tokens, setToken,
+}: {
+  tokens: DesignTokens
+  setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
+}) {
   return (
-    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${active ? 'bg-carma-50 text-carma-700 border-carma-100' : 'bg-neutral-50 text-neutral-400 border-neutral-200'}`}>
+    <div className="space-y-4">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2">Format de les targetes</p>
+        <SegmentedControl
+          value={tokens.layout === 'list' ? 'list' : 'grid'}
+          onChange={v => setToken('layout', v as 'grid' | 'list')}
+          options={[
+            { value: 'grid', icon: <LayoutGrid className="w-3.5 h-3.5" />, label: 'Graella' },
+            { value: 'list', icon: <Rows3 className="w-3.5 h-3.5" />, label: 'Llista' },
+          ]}
+        />
+      </div>
+
+      {tokens.layout !== 'list' && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle mb-2">Columnes (escriptori)</p>
+          <div className="flex gap-2">
+            {(['2', '3', '4'] as BlogColumns[]).map(c => (
+              <button
+                key={c}
+                onClick={() => setToken('columns', c)}
+                className={cn(
+                  'cursor-pointer flex-1 h-10 rounded-lg text-sm font-semibold border transition-colors',
+                  tokens.columns === c
+                    ? 'bg-accent border-accent text-on-accent'
+                    : 'bg-surface-subtle border-border text-muted hover:bg-surface-hover hover:text-text',
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Small primitives ────────────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-[11px] font-semibold uppercase tracking-wider text-subtle">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function TextInput({
+  value, onChange, placeholder, type = 'text', mono = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  type?: 'text' | 'url'
+  mono?: boolean
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={cn(
+        'w-full h-9 px-2.5 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors',
+        mono && 'font-mono text-xs',
+      )}
+    />
+  )
+}
+
+function ColorInput({
+  value, onChange, placeholder,
+}: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="flex items-center gap-2 h-9 bg-surface-subtle border border-border rounded-lg pl-1 pr-2 focus-within:border-accent focus-within:bg-surface transition-colors">
+      <input
+        type="color"
+        value={isHex(value) ? value : '#111111'}
+        onChange={e => onChange(e.target.value)}
+        className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+        aria-label="Selector de color"
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 min-w-0 bg-transparent outline-none text-xs font-mono text-text"
+      />
+    </div>
+  )
+}
+
+function ColorSwatch({
+  label, hint, value, onChange,
+}: { label: string; hint: string; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="cursor-pointer w-full text-left bg-surface border border-border rounded-lg p-2.5 hover:border-border-strong transition-colors"
+      >
+        <div
+          className="w-full aspect-[4/1] rounded-md border border-border mb-2"
+          style={{ background: value || '#ffffff' }}
+          aria-hidden
+        />
+        <p className="text-xs font-semibold text-text truncate">{label}</p>
+        <p className="text-[11px] text-subtle truncate">{hint}</p>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-bg-elevated border border-border rounded-lg shadow-pop p-2.5 space-y-2">
+          <ColorInput value={value} onChange={onChange} />
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="cursor-pointer w-full h-7 text-xs font-semibold text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors"
+          >
+            Fet
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SegmentedControl<T extends string>({
+  value, onChange, options,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; icon?: ReactNode; label: string }[]
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-lg p-0.5">
+      {options.map(o => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            title={o.label}
+            className={cn(
+              'cursor-pointer flex flex-1 items-center justify-center gap-1.5 h-8 rounded-md text-xs font-semibold transition-colors',
+              active ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
+            )}
+          >
+            {o.icon}
+            <span>{o.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-text">{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        role="switch"
+        aria-checked={checked}
+        className={cn(
+          'cursor-pointer relative w-10 h-5 rounded-full transition-colors shrink-0',
+          checked ? 'bg-accent' : 'bg-border-strong',
+        )}
+      >
+        <span className={cn('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-surface shadow transition-transform', checked && 'translate-x-5')} />
+      </button>
+    </div>
+  )
+}
+
+function StructureChip({ icon: Icon, label, ok }: { icon: typeof PanelTop; label: string; ok: boolean }) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold',
+      ok ? 'bg-success-soft text-success' : 'bg-surface-subtle text-subtle',
+    )}>
+      <Icon className="w-3 h-3" />
+      {label}
+    </span>
+  )
+}
+
+function ResourcePill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-surface-subtle text-subtle border border-border">
       {label}
     </span>
   )
@@ -639,7 +1091,7 @@ function InlineHeading({
 
   return (
     <div
-      className="relative rounded-xl border border-dashed border-neutral-300 hover:border-carma-300 focus-within:border-carma-400 transition-colors px-5 py-4"
+      className="relative rounded-xl border border-dashed border-border-strong hover:border-accent/40 focus-within:border-accent transition-colors px-5 py-4 min-h-[80px]"
       style={{ background }}
     >
       <div

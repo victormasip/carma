@@ -33,10 +33,10 @@ export default async function DashboardLayout({
 
   return (
     <LocaleProvider initialLocale={locale}>
-      <div className="min-h-screen bg-[#F9F8F6]">
+      <div className="min-h-screen bg-bg">
         <DashboardSidebar isSuperAdmin={isSuperAdmin} sites={sites} userEmail={user.email ?? ''} />
 
-        <main className="lg:ml-64 min-w-0 p-5 sm:p-8 md:p-12">
+        <main className="lg:ml-60 min-w-0 p-5 sm:p-8 lg:p-10">
           <div className="max-w-[1400px] mx-auto w-full min-w-0">
             {children}
           </div>

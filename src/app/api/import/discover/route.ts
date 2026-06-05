@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isValidHttpUrl, isSafeUrl, safeFetchText, safeFetchJson, detectLangFromUrl } from '@/lib/scrape/http'
+import { isValidHttpUrl, isSafeUrl, safeFetchText, safeFetchJson, detectLangFromUrl, decodeEntities } from '@/lib/scrape/http'
 
 function parseSitemapUrls(xml: string): string[] {
   const urls: string[] = []
@@ -29,13 +29,9 @@ function parseRssItems(xml: string): { url: string; title: string }[] {
     const url =
       block.match(/<link[^>]*>\s*(https?:\/\/[^\s<]+)\s*<\/link>/i)?.[1]?.trim() ??
       block.match(/<guid[^>]*isPermaLink="true"[^>]*>\s*(https?:\/\/[^\s<]+)\s*<\/guid>/i)?.[1]?.trim() ?? ''
-    if (url) items.push({ url, title: decodeXml(title) })
+    if (url) items.push({ url, title: decodeEntities(title) })
   }
   return items
-}
-
-function decodeXml(s: string): string {
-  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
 }
 
 function extractFeedLink(html: string): string | null {
@@ -88,7 +84,7 @@ export async function POST(request: NextRequest) {
 
       for (const p of posts) {
         const title = p.title?.rendered?.replace(/<[^>]+>/g, '').trim() ?? titleFromUrl(p.link)
-        articles.push({ url: p.link, title: decodeXml(title), language: detectLangFromUrl(p.link) })
+        articles.push({ url: p.link, title: decodeEntities(title), language: detectLangFromUrl(p.link) })
       }
 
       if (posts.length < 100) break

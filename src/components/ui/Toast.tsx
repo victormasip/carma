@@ -16,25 +16,25 @@ export function useToast() {
 }
 
 const STYLES: Record<ToastType, { bar: string; chip: string; icon: React.ReactNode }> = {
-  success: { bar: 'bg-green-500',  chip: 'bg-green-100 text-green-600', icon: <CheckCircle2 className="w-5 h-5" /> },
-  error:   { bar: 'bg-red-500',    chip: 'bg-red-100 text-red-600',     icon: <XCircle className="w-5 h-5" /> },
-  info:    { bar: 'bg-carma-500',  chip: 'bg-carma-100 text-carma-700', icon: <Info className="w-5 h-5" /> },
+  success: { bar: 'bg-success',  chip: 'bg-success-soft text-success', icon: <CheckCircle2 className="w-4 h-4" /> },
+  error:   { bar: 'bg-danger',   chip: 'bg-danger-soft text-danger',   icon: <XCircle      className="w-4 h-4" /> },
+  info:    { bar: 'bg-accent',   chip: 'bg-accent-soft text-accent',   icon: <Info         className="w-4 h-4" /> },
 }
 
 function ToastPill({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
   const s = STYLES[item.type]
   return (
     <div
-      className="pointer-events-auto relative flex items-start gap-3 pl-5 pr-3 py-4 rounded-2xl border border-neutral-200/70 bg-white shadow-[0_24px_60px_-12px_rgba(0,0,0,0.28)] w-[360px] max-w-[calc(100vw-3rem)] overflow-hidden"
+      className="pointer-events-auto relative flex items-start gap-3 pl-4 pr-2.5 py-3.5 rounded-xl border border-border bg-bg-elevated shadow-premium w-[360px] max-w-[calc(100vw-3rem)] overflow-hidden"
       style={{ animation: 'toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1)' }}
       role="status"
     >
-      <span className={`absolute left-0 top-0 h-full w-1.5 ${s.bar}`} aria-hidden />
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${s.chip}`}>{s.icon}</span>
-      <p className="flex-1 text-sm font-semibold text-neutral-800 leading-snug pt-1.5">{item.message}</p>
+      <span className={`absolute left-0 top-0 h-full w-1 ${s.bar}`} aria-hidden />
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.chip}`}>{s.icon}</span>
+      <p className="flex-1 text-sm font-medium text-text leading-snug pt-1">{item.message}</p>
       <button
         onClick={onDismiss}
-        className="cursor-pointer mt-0.5 shrink-0 text-neutral-300 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg p-1 transition-colors"
+        className="cursor-pointer mt-0.5 shrink-0 text-subtle hover:text-text hover:bg-surface-hover rounded-md p-1 transition-colors"
         aria-label="Tancar"
       >
         <X className="w-4 h-4" />

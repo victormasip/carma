@@ -13,6 +13,12 @@ import { saveTheme, deleteTheme, translateChrome as translateChromeAction, type 
 import { addSiteLocale } from '@/lib/actions/locales'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import type { BlogSignature } from '@/lib/scrape/blogDetect'
+import {
+  CAPTURE_STEP_IDS, parseSseFrame,
+  type AnalyzeResult, type CaptureEvent, type CaptureStepId, type CaptureStepStatus,
+} from '@/lib/render/captureProgress'
+import { templateChromeJson, type BlogTemplate } from '@/lib/render/templates'
 
 type ChromeI18n = Record<string, { header?: string; footer?: string; section_title?: string }>
 
@@ -23,6 +29,8 @@ export type Theme = {
   extracted_head?: string | null
   extracted_header?: string | null
   extracted_footer?: string | null
+  extracted_body_attrs?: string | null
+  extracted_card?: string | null
   extracted_scripts?: string | null
   external_styles?: string[] | null
   external_scripts?: string[] | null
@@ -34,38 +42,72 @@ export type Theme = {
   section_title?: string | null
   default_locale?: string | null
   chrome_i18n?: ChromeI18n | null
-}
-
-type AnalyzeResponse = {
-  extracted_head: string
-  extracted_header: string
-  extracted_footer: string
-  extracted_scripts: string
-  external_styles: string[]
-  external_scripts: string[]
-  font_links: string[]
-  detection: { framework: string; hosting: string | null }
-  base_url: string
-  tokens: DesignTokens
-  section_title?: string | null
-  detected_locale?: string | null
-  error?: string
+  blog_signature?: BlogSignature | null
 }
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+// ── Live capture (Magic Wand) progress, surfaced to the progressive modal ──
+export type CapturePhase = 'idle' | 'running' | 'success' | 'error'
+
+// Out-of-band notice (e.g. "complex chrome — best-effort reconstruction").
+// Shown in the capture modal so the user can decide whether to keep going.
+export type CaptureNotice = {
+  severity: 'info' | 'warning'
+  code: string
+  message: string
+}
+
+export type CaptureState = {
+  open: boolean
+  phase: CapturePhase
+  pct: number
+  steps: Record<CaptureStepId, CaptureStepStatus>
+  stepDetail: Partial<Record<CaptureStepId, string>>
+  activeStep: CaptureStepId | null
+  error: string | null
+  notices: CaptureNotice[]
+}
+
+const initialSteps = (): Record<CaptureStepId, CaptureStepStatus> =>
+  Object.fromEntries(CAPTURE_STEP_IDS.map(id => [id, 'pending'])) as Record<CaptureStepId, CaptureStepStatus>
+
+const IDLE_CAPTURE: CaptureState = {
+  open: false, phase: 'idle', pct: 0,
+  steps: initialSteps(), stepDetail: {}, activeStep: null, error: null, notices: [],
+}
+
+// Abort the stream only after this long with NO event at all — a genuine hang,
+// not mere slowness. While progress events keep arriving (the LLM heartbeats
+// every ~300ms) the capture never times out, however heavy the site.
+const CAPTURE_STALL_MS = 60_000
 
 type ThemeStudio = {
   siteId: string
   // identity / lifecycle
   hasTheme: boolean
   saveStatus: SaveStatus
+  // Timestamp of the last SUCCESSFUL persist — bumped per save so the live
+  // preview can reload to pick up structural (header/footer/title) changes
+  // without a setState-in-render or impure Date.now() at the consumer.
+  savedAt: number
   // capture
   url: string
   setUrl: (v: string) => void
+  // Optional user-provided Blog URL — guides card cloning when auto-detection is
+  // unsure (BUG 2 fallback). Sent with the capture; seeded from the saved signature.
+  blogUrl: string
+  setBlogUrl: (v: string) => void
   analyzing: boolean
   error: string | null
-  grab: () => Promise<void>
+  grab: (overrideUrl?: string) => Promise<void>
   removeTheme: () => Promise<void>
+  // apply a from-scratch starter template (onboarding "template" path)
+  applyTemplate: (tpl: BlogTemplate, siteName: string) => void
+  // live capture progress (progressive modal)
+  capture: CaptureState
+  closeCapture: () => void
+  cancelCapture: () => void
   // tokens
   tokens: DesignTokens
   setToken: <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => void
@@ -76,6 +118,12 @@ type ThemeStudio = {
   setExtractedHeader: (v: string) => void
   extractedFooter: string
   setExtractedFooter: (v: string) => void
+  // The captured client <head> assets (CSS/fonts/scripts), injected at render so
+  // the light-DOM header/footer look 1:1. Base-locale only (head is not localized).
+  extractedHead: string
+  setExtractedHead: (v: string) => void
+  // captured article-card template (read-only; '' when using native cards)
+  extractedCard: string
   // multilingual chrome
   editLocale: Locale
   setEditLocale: (l: Locale) => void
@@ -90,6 +138,11 @@ type ThemeStudio = {
   externalStyles: string[]
   externalScripts: string[]
   fontLinks: string[]
+  // native card replication (GOAL 2): true when the feed mirrors the client's
+  // detected blog cards; clearNativeCard reverts to our premium default layout.
+  nativeCardActive: boolean
+  nativeCardColumns: number | null
+  clearNativeCard: () => void
 }
 
 const Ctx = createContext<ThemeStudio | null>(null)
@@ -98,15 +151,26 @@ const AUTOSAVE_MS = 700
 
 export function ThemeStudioProvider({
   siteId, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
+  onCaptureSuccess,
 }: {
   siteId: string
   initialTheme: Theme | null
   children: ReactNode
   defaultLocale?: string
   canTranslate?: boolean
+  // Fired (from the capture stream's `result` event, not an effect) once a Magic
+  // Wand capture lands — lets the host coordinate the post-capture flow (e.g.
+  // jump to the Theme tab, offer WordPress article import).
+  onCaptureSuccess?: (info: { framework: string | null; url: string; siteName: string | null }) => void
 }) {
+  // Latest-ref so grab()'s memoized callback always sees the current handler
+  // without taking it as a dependency.
+  const onCaptureSuccessRef = useRef(onCaptureSuccess)
+  onCaptureSuccessRef.current = onCaptureSuccess
+
   const [active, setActive] = useState(!!initialTheme)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [savedAt, setSavedAt] = useState(0)
 
   // The locale the BASE chrome (extracted_* / section_title) represents. Other
   // locales live in chromeI18n. editLocale is which one the UI is editing.
@@ -116,12 +180,22 @@ export function ThemeStudioProvider({
   const [translatingChrome, setTranslatingChrome] = useState(false)
 
   const [url, setUrl] = useState(initialTheme?.reference_url ?? initialTheme?.reference_url_home ?? '')
+  const [blogUrl, setBlogUrl] = useState(initialTheme?.blog_signature?.blogUrl ?? '')
+  const blogUrlRef = useRef(blogUrl)
+  blogUrlRef.current = blogUrl
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [capture, setCapture] = useState<CaptureState>(IDLE_CAPTURE)
+  const captureAbort = useRef<AbortController | null>(null)
+  const captureCancelled = useRef(false)
 
   const [extractedHead, setExtractedHead] = useState(initialTheme?.extracted_head ?? '')
   const [extractedHeader, setExtractedHeader] = useState(initialTheme?.extracted_header ?? '')
   const [extractedFooter, setExtractedFooter] = useState(initialTheme?.extracted_footer ?? '')
+  // The source <body>'s attributes (class/style/data-*); reapplied at render so the
+  // page's global background/typography match. Not localized, not user-edited.
+  const [extractedBodyAttrs, setExtractedBodyAttrs] = useState(initialTheme?.extracted_body_attrs ?? '')
+  const [extractedCard, setExtractedCard] = useState(initialTheme?.extracted_card ?? '')
   const [extractedScripts, setExtractedScripts] = useState(initialTheme?.extracted_scripts ?? '')
   const [externalStyles, setExternalStyles] = useState<string[]>(initialTheme?.external_styles ?? [])
   const [externalScripts, setExternalScripts] = useState<string[]>(initialTheme?.external_scripts ?? [])
@@ -131,6 +205,9 @@ export function ThemeStudioProvider({
   const [detectedHosting, setDetectedHosting] = useState<string | null>(initialTheme?.detected_hosting ?? null)
   const [tokens, setTokens] = useState<DesignTokens>({ ...DEFAULT_TOKENS, ...(initialTheme?.design_tokens ?? {}) })
   const [sectionTitle, setSectionTitle] = useState(initialTheme?.section_title ?? '')
+  // Detected blog/native-card signature (auto-derived at capture; persisted so the
+  // render can replicate the client's card design). Not user-edited.
+  const [blogSignature, setBlogSignature] = useState<BlogSignature | null>(initialTheme?.blog_signature ?? null)
 
   const setToken = useCallback(
     <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) =>
@@ -143,6 +220,8 @@ export function ThemeStudioProvider({
     extracted_head: extractedHead || null,
     extracted_header: extractedHeader || null,
     extracted_footer: extractedFooter || null,
+    extracted_body_attrs: extractedBodyAttrs || null,
+    extracted_card: extractedCard || null,
     extracted_scripts: extractedScripts || null,
     external_styles: externalStyles,
     external_scripts: externalScripts,
@@ -153,114 +232,244 @@ export function ThemeStudioProvider({
     design_tokens: tokens,
     section_title: sectionTitle.trim() || null,
     chrome_i18n: chromeI18n,
+    blog_signature: blogSignature,
   }), [
-    url, extractedHead, extractedHeader, extractedFooter, extractedScripts,
+    url, extractedHead, extractedHeader, extractedFooter, extractedBodyAttrs, extractedCard, extractedScripts,
     externalStyles, externalScripts, fontLinks, baseUrl, detectedFramework,
-    detectedHosting, tokens, sectionTitle, chromeI18n,
+    detectedHosting, tokens, sectionTitle, chromeI18n, blogSignature,
   ])
 
   // ── Debounced real-time autosave ──
   // We serialize the payload and persist it AUTOSAVE_MS after the last change.
-  // The first run is skipped so simply opening an existing theme doesn't write.
+  // We save only when the payload DIFFERS from what was last loaded/saved, so
+  // merely opening an existing theme doesn't write — but the FIRST capture or
+  // template on a brand-new site DOES persist. (The old first-run skip never got
+  // consumed while active was false, so it silently dropped that first save —
+  // the cause of "captured the theme but it wasn't saved".)
   const serialized = JSON.stringify(buildThemeData())
-  const firstRun = useRef(true)
+  const lastSavedRef = useRef(serialized)
   const reqId = useRef(0)
 
   useEffect(() => {
     if (!active) return
-    if (firstRun.current) { firstRun.current = false; return }
+    if (serialized === lastSavedRef.current) return
 
     setSaveStatus('saving')
     const id = ++reqId.current
     const handle = setTimeout(async () => {
-      const result = await saveTheme(siteId, JSON.parse(serialized) as ThemeData)
+      const payload = serialized
+      const result = await saveTheme(siteId, JSON.parse(payload) as ThemeData)
       // Ignore a stale response if a newer edit superseded this save.
       if (id !== reqId.current) return
+      if (!result.error) { lastSavedRef.current = payload; setSavedAt(Date.now()) }
       setSaveStatus(result.error ? 'error' : 'saved')
     }, AUTOSAVE_MS)
 
     return () => clearTimeout(handle)
   }, [serialized, active, siteId])
 
-  const grab = useCallback(async () => {
-    const target = url.trim()
+  // Apply a finished capture to the live theme state (identical to the old
+  // single-response handler — just driven by the streamed `result` event).
+  const applyResult = useCallback((data: AnalyzeResult) => {
+    setExtractedHead(data.extracted_head)
+    setExtractedHeader(data.extracted_header)
+    setExtractedFooter(data.extracted_footer)
+    setExtractedBodyAttrs(data.extracted_body_attrs ?? '')
+    setExtractedCard(data.extracted_card ?? '')
+    setExtractedScripts(data.extracted_scripts ?? '')
+    setExternalStyles(data.external_styles ?? [])
+    setExternalScripts(data.external_scripts ?? [])
+    setFontLinks(data.font_links ?? [])
+    setBaseUrl(data.base_url)
+    setDetectedFramework(data.detection?.framework ?? null)
+    setDetectedHosting(data.detection?.hosting ?? null)
+    // Preserve any layout the user already chose; refresh the visual tokens.
+    setTokens(prev => ({ ...DEFAULT_TOKENS, ...(data.tokens ?? {}), layout: prev.layout, columns: prev.columns }))
+    setSectionTitle(data.section_title ?? '')
+    setBlogSignature(data.blog_signature ?? null)
+    setBlogUrl(data.blog_signature?.blogUrl ?? '')
+    // A fresh capture replaces the base chrome → old translations are stale.
+    setChromeI18n({})
+    setEditLocale(chromeDefaultLocale)
+    setActive(true)
+    // Add the detected site language as an AVAILABLE locale (non-destructive):
+    // we don't force it as the default, so a mislabeled <html lang="en"> on a
+    // Catalan site can't hijack the base language — Catalan stays the default.
+    if (data.detected_locale) void addSiteLocale(siteId, data.detected_locale).catch(() => {})
+  }, [siteId, chromeDefaultLocale])
+
+  // Stream the capture pipeline over SSE, surfacing every step to the modal.
+  // There is NO arbitrary total timeout: we abort only if the stream goes
+  // completely silent for CAPTURE_STALL_MS (a real hang).
+  const grab = useCallback(async (overrideUrl?: string) => {
+    const target = (overrideUrl ?? url).trim()
     if (!target) return
-    setAnalyzing(true)
-    setError(null)
-    // The LLM reconstruction can take 15-40s; abort if it hangs past 90s so the
-    // UI never gets stuck on "analitzant" if the API/scraper stalls.
+    if (overrideUrl !== undefined) setUrl(overrideUrl)
+
+    captureAbort.current?.abort()
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 90_000)
+    captureAbort.current = controller
+    captureCancelled.current = false
+
+    setError(null)
+    setAnalyzing(true)
+    // Open the modal the instant the user clicks — immediate, tangible feedback.
+    setCapture({
+      open: true, phase: 'running', pct: 0,
+      steps: initialSteps(), stepDetail: {}, activeStep: null, error: null, notices: [],
+    })
+
+    let stallTimer: ReturnType<typeof setTimeout> | null = null
+    const bumpStall = () => {
+      if (stallTimer) clearTimeout(stallTimer)
+      stallTimer = setTimeout(() => controller.abort(), CAPTURE_STALL_MS)
+    }
+
+    const onEvent = (evt: CaptureEvent) => {
+      if (evt.type === 'progress') {
+        setCapture(c => ({
+          ...c,
+          pct: Math.max(c.pct, evt.pct), // monotonic — never jump backwards
+          activeStep: evt.status === 'running' ? evt.step : c.activeStep,
+          steps: { ...c.steps, [evt.step]: evt.status },
+          stepDetail: evt.detail ? { ...c.stepDetail, [evt.step]: evt.detail } : c.stepDetail,
+        }))
+      } else if (evt.type === 'notice') {
+        setCapture(c => ({
+          ...c,
+          notices: [...c.notices, { severity: evt.severity, code: evt.code, message: evt.message }],
+        }))
+      } else if (evt.type === 'result') {
+        applyResult(evt.data)
+        setCapture(c => ({
+          ...c,
+          phase: 'success',
+          pct: 100,
+          activeStep: null,
+          steps: Object.fromEntries(
+            CAPTURE_STEP_IDS.map(id => [id, c.steps[id] === 'skipped' ? 'skipped' : 'done']),
+          ) as Record<CaptureStepId, CaptureStepStatus>,
+        }))
+        onCaptureSuccessRef.current?.({ framework: evt.data.detection?.framework ?? null, url: target, siteName: evt.data.site_name ?? null })
+        // Linger on the completed state briefly, then reveal the editor.
+        setTimeout(() => setCapture(c => (c.phase === 'success' ? { ...c, open: false } : c)), 1300)
+      } else {
+        setError(evt.error)
+        setCapture(c => ({
+          ...c,
+          phase: 'error',
+          error: evt.error,
+          steps: evt.step ? { ...c.steps, [evt.step]: 'error' } : c.steps,
+        }))
+      }
+    }
+
     try {
       const res = await fetch('/api/theme/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: target }),
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ url: target, blogUrl: blogUrlRef.current.trim() || undefined }),
         signal: controller.signal,
       })
 
-      // Guard against malformed/empty bodies (e.g. a proxy 502 HTML page).
-      let data: AnalyzeResponse
-      try {
-        data = await res.json()
-      } catch {
-        setError('La resposta del servidor no és vàlida. Torna-ho a provar d’aquí una estona.')
+      // Auth / validation failures arrive as ordinary JSON, not a stream.
+      if (!res.ok || !res.body) {
+        const data = res.body ? await res.json().catch(() => null) : null
+        const message = (data as { error?: string } | null)?.error ?? `Error del servidor (${res.status}).`
+        setError(message)
+        setCapture(c => ({ ...c, phase: 'error', error: message }))
         return
       }
 
-      if (!res.ok) { setError(data?.error ?? `Error del servidor (${res.status}).`); return }
-      // The reconstruction must at least return a header or footer to be usable.
-      if (!data || (!data.extracted_header && !data.extracted_footer && !data.tokens)) {
-        setError('No s’ha pogut analitzar aquesta web (potser bloqueja els bots). Prova una altra URL.')
-        return
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      bumpStall()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        bumpStall()
+        buf += decoder.decode(value, { stream: true })
+        let idx: number
+        while ((idx = buf.indexOf('\n\n')) >= 0) {
+          const frame = buf.slice(0, idx)
+          buf = buf.slice(idx + 2)
+          const evt = parseSseFrame(frame)
+          if (evt) onEvent(evt)
+        }
       }
-
-      setExtractedHead(data.extracted_head)
-      setExtractedHeader(data.extracted_header)
-      setExtractedFooter(data.extracted_footer)
-      setExtractedScripts(data.extracted_scripts ?? '')
-      setExternalStyles(data.external_styles ?? [])
-      setExternalScripts(data.external_scripts ?? [])
-      setFontLinks(data.font_links ?? [])
-      setBaseUrl(data.base_url)
-      setDetectedFramework(data.detection?.framework ?? null)
-      setDetectedHosting(data.detection?.hosting ?? null)
-      // Preserve any layout the user already chose; refresh the visual tokens.
-      setTokens(prev => ({ ...DEFAULT_TOKENS, ...(data.tokens ?? {}), layout: prev.layout, columns: prev.columns }))
-      setSectionTitle(data.section_title ?? '')
-      // A fresh capture replaces the base chrome → old translations are stale.
-      setChromeI18n({})
-      setEditLocale(chromeDefaultLocale)
-      setActive(true)
-      // Add the detected site language as an AVAILABLE locale (non-destructive):
-      // we don't force it as the default, so a mislabeled <html lang="en"> on a
-      // Catalan site can't hijack the base language — Catalan stays the default.
-      if (data.detected_locale) void addSiteLocale(siteId, data.detected_locale).catch(() => {})
     } catch (e) {
-      setError(
-        e instanceof DOMException && e.name === 'AbortError'
-          ? 'La captura ha trigat massa (timeout). Torna-ho a provar.'
-          : 'Error de xarxa. Comprova la connexió i torna-ho a provar.',
-      )
+      // An explicit user cancel aborts the stream too — but that's not an error.
+      if (captureCancelled.current) return
+      const aborted = e instanceof DOMException && e.name === 'AbortError'
+      const message = aborted
+        ? 'La captura s’ha aturat: el servidor ha deixat de respondre. Torna-ho a provar.'
+        : 'Error de xarxa. Comprova la connexió i torna-ho a provar.'
+      setError(message)
+      setCapture(c => (c.phase === 'success' ? c : { ...c, phase: 'error', error: message }))
     } finally {
-      clearTimeout(timeout)
+      if (stallTimer) clearTimeout(stallTimer)
       setAnalyzing(false)
+      if (captureAbort.current === controller) captureAbort.current = null
     }
-  }, [url, siteId, chromeDefaultLocale])
+  }, [url, applyResult])
+
+  // Dismiss the modal after the stream has ended (success or error).
+  const closeCapture = useCallback(() => setCapture(c => ({ ...c, open: false })), [])
+
+  // Abort an in-flight capture and close the modal — no error UI, the user
+  // chose to stop.
+  const cancelCapture = useCallback(() => {
+    captureCancelled.current = true
+    captureAbort.current?.abort()
+    setAnalyzing(false)
+    setCapture(IDLE_CAPTURE)
+  }, [])
+
+  // Apply a from-scratch starter template: write its tokens + native chrome into
+  // the live state (base/default locale) and activate. The debounced autosave
+  // persists it, exactly like a capture — no LLM, no server round-trip here.
+  const applyTemplate = useCallback((tpl: BlogTemplate, name: string) => {
+    const { header, footer } = templateChromeJson(tpl, name)
+    setExtractedHead('')
+    setExtractedHeader(header)
+    setExtractedFooter(footer)
+    setExtractedBodyAttrs('') // starter templates are self-contained — no client body
+
+    setExtractedCard('') // templates use our native token-driven cards
+    setExtractedScripts('')
+    setExternalStyles([])
+    setExternalScripts([])
+    setFontLinks(tpl.fontLinks ?? [])
+    setBaseUrl('')
+    setDetectedFramework(null)
+    setDetectedHosting(null)
+    setTokens(prev => ({
+      ...DEFAULT_TOKENS,
+      ...tpl.tokens,
+      layout: tpl.tokens.layout ?? prev.layout,
+      columns: tpl.tokens.columns ?? prev.columns,
+    }))
+    setSectionTitle(tpl.sectionTitle)
+    setBlogSignature(null) // starter templates use OUR premium card design
+    setChromeI18n({})
+    setEditLocale(chromeDefaultLocale)
+    setActive(true)
+  }, [chromeDefaultLocale])
 
   const removeTheme = useCallback(async () => {
     const result = await deleteTheme(siteId)
     if (result.error) { setSaveStatus('error'); return }
     // Reset to a pristine, inactive studio; the autosave guard (active=false)
     // prevents this reset from writing anything back.
-    firstRun.current = true
     setActive(false)
     setSaveStatus('idle')
-    setExtractedHead(''); setExtractedHeader(''); setExtractedFooter(''); setExtractedScripts('')
+    setExtractedHead(''); setExtractedHeader(''); setExtractedFooter(''); setExtractedBodyAttrs(''); setExtractedCard(''); setExtractedScripts('')
     setExternalStyles([]); setExternalScripts([]); setFontLinks([]); setBaseUrl('')
     setDetectedFramework(null); setDetectedHosting(null)
     setTokens({ ...DEFAULT_TOKENS })
     setSectionTitle('')
+    setBlogSignature(null)
     setChromeI18n({})
     setEditLocale(chromeDefaultLocale)
   }, [siteId, chromeDefaultLocale])
@@ -313,15 +522,23 @@ export function ThemeStudioProvider({
     siteId,
     hasTheme: active,
     saveStatus,
-    url, setUrl, analyzing, error, grab, removeTheme,
+    savedAt,
+    url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab, removeTheme,
+    applyTemplate,
+    capture, closeCapture, cancelCapture,
     tokens, setToken,
     sectionTitle: sectionForLocale, setSectionTitle: setSectionForLocale,
     extractedHeader: headerForLocale, setExtractedHeader: setHeaderForLocale,
     extractedFooter: footerForLocale, setExtractedFooter: setFooterForLocale,
+    extractedHead, setExtractedHead,
+    extractedCard,
     editLocale, setEditLocale, editLocales: [...LOCALES], chromeDefaultLocale,
     canTranslateChrome: canTranslate, translatingChrome, translateChrome,
     detectedFramework, detectedHosting,
     externalStyles, externalScripts, fontLinks,
+    nativeCardActive: !!blogSignature?.card,
+    nativeCardColumns: blogSignature?.card?.columns ?? null,
+    clearNativeCard: () => setBlogSignature(null),
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -77,7 +77,7 @@ function CtaView({ node, updateAttributes, editor, selected }: NodeViewProps) {
       {editable && selected && (
         <div className="carma-cta-controls" contentEditable={false} style={{ textAlign: 'left' }}>
           <div className="carma-cta-href">
-            <Link2 className="w-3.5 h-3.5 text-neutral-400" />
+            <Link2 className="w-3.5 h-3.5 text-subtle" />
             <input
               type="url"
               value={node.attrs.href === '#' ? '' : node.attrs.href}

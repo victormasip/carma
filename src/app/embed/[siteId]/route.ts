@@ -130,6 +130,39 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
   }
   function cssEscape(s){ return String(s).replace(/["\\\\]/g, '\\\\$&'); }
 
+  // The cloned header/footer ship as Declarative Shadow DOM (<template
+  // shadowrootmode>). Set via innerHTML those templates are inert, so we attach
+  // each shadow root ourselves and wire its menu interactivity.
+  function wireMenu(sr){
+    try{
+      sr.addEventListener('click', function(e){
+        var t=e.target; if(!t||!t.closest) return;
+        var trg=t.closest('[aria-expanded],[aria-haspopup],[data-toggle],.menu-toggle,.hamburger,.nav-toggle,[class*="burger"]');
+        if(!trg||!sr.contains(trg)) return;
+        if(trg.tagName==='A' && trg.getAttribute('href') && trg.getAttribute('href')!=='#') return;
+        try{
+          var open=trg.getAttribute('aria-expanded')==='true';
+          trg.setAttribute('aria-expanded', open?'false':'true');
+          ['open','is-open','active','is-active','show'].forEach(function(c){ trg.classList.toggle(c,!open); });
+          var ctl=trg.getAttribute('aria-controls');
+          var tgt=ctl?sr.getElementById(ctl):(trg.nextElementSibling||trg.parentNode);
+          if(tgt&&tgt.classList){ ['open','is-open','active','is-active','show'].forEach(function(c){ tgt.classList.toggle(c,!open); }); }
+          e.preventDefault();
+        }catch(err){}
+      });
+    }catch(e){}
+  }
+  function attachShadows(scope){
+    try{
+      var tpls=scope.querySelectorAll('template[shadowrootmode]');
+      for(var i=0;i<tpls.length;i++){
+        var tpl=tpls[i]; var host=tpl.parentNode;
+        if(!host||!host.attachShadow||host.shadowRoot) continue;
+        try{ var s=host.attachShadow({mode:tpl.getAttribute('shadowrootmode')||'open'}); s.appendChild(tpl.content); tpl.remove(); wireMenu(s); }catch(e){}
+      }
+    }catch(e){}
+  }
+
   function render(root, frag){
     hoistFonts(frag.fonts);
     var style = document.createElement('style');
@@ -139,6 +172,10 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
     var wrap = document.createElement('div');
     wrap.innerHTML = frag.html || '';
     root.appendChild(wrap);
+    // The embed fragment is OUR blog only (no client chrome / nested shadow), but
+    // attach any declarative shadow roots defensively in case future content uses
+    // them — a no-op otherwise.
+    attachShadows(wrap);
   }
 
   function showMessage(root, msg){
@@ -165,13 +202,21 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
     // needed). Handles BOTH our intra-blog links AND the cloned header's native
     // language switcher.
     root.addEventListener('click', function(e){
-      var t = e.target;
-      var a = t && t.closest ? t.closest('a') : null;
+      // composedPath() surfaces the real <a> even when it lives inside the cloned
+      // header/footer's nested shadow root (events retarget at shadow boundaries).
+      var path = (e.composedPath && e.composedPath()) || [e.target];
+      var a = null, header = null;
+      for (var i = 0; i < path.length; i++){
+        var n = path[i];
+        if (!n || !n.tagName) continue;
+        if (!a && n.tagName === 'A') a = n;
+        if (!header && n.getAttribute && n.getAttribute('data-carma-chrome') === 'header') header = n;
+      }
       if (!a) return;
       var href = a.getAttribute('href') || '';
 
-      // 1. Our own /render links (cards, breadcrumb, our language pills): swap the
-      //    shadow content instead of following a dead relative link.
+      // 1. Our own /render links (cards, breadcrumb, language pills — including the
+      //    switcher inside the cloned header): swap the shadow content in place.
       if (href.indexOf('/render/' + SITEID) === 0){
         e.preventDefault();
         var p = parseRenderHref(href);
@@ -181,9 +226,8 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
         return;
       }
 
-      // 2. The cloned header's native language switcher: re-render the CURRENT
-      //    view in the chosen locale instead of navigating to the source site.
-      var header = a.closest ? a.closest('[data-carma-chrome="header"]') : null;
+      // 2. A native language switcher reused inside the cloned header: re-render
+      //    the CURRENT view in the chosen locale instead of leaving for the source.
       if (header){
         var loc = detectHeaderLocale(a, header);
         if (loc && loc !== currentLang){

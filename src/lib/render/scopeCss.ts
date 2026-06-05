@@ -1,11 +1,13 @@
-// Namespace scoper for the LLM-reconstructed chrome (header / footer).
+// Namespace scoper for the SCOPED starter-template chrome (header / footer).
 //
-// The LLM is *instructed* to namespace and prefix everything, but we never
-// trust that — this scoper deterministically FORCES every selector under the
-// region's `[data-carma-chrome="…"]` attribute, so a stray `a{}` or `*{}` in
-// the model output can never escape into our page. Combined with `all:initial`
-// on the wrapper (blocks inbound inheritance) this guarantees zero collisions
-// in BOTH directions without iframes or Shadow DOM.
+// Used only for the "start from a starter template" path (src/lib/render/
+// templates.ts), whose regions are self-contained `{ html, css }`. (The captured
+// 1:1 clone uses raw HTML injection instead — see render/theme.ts.) This scoper
+// deterministically FORCES every selector under the region's
+// `[data-carma-chrome="…"]` attribute, so a stray `a{}` or `*{}` can never escape
+// into our page. Combined with `all:initial` on the wrapper (blocks inbound
+// inheritance) this guarantees zero collisions in BOTH directions without iframes
+// or Shadow DOM.
 
 export type ChromeRegion = 'header' | 'footer'
 
@@ -78,8 +80,8 @@ const ROOT_RE = /^\s*(html|body|:root)(?=$|[\s.#\[:,>+~])/i
 function scopeSelector(sel: string, ns: string): string {
   const s = sel.trim()
   if (!s) return ''
-  // Already namespaced by the model — leave it.
-  if (s.includes('[data-carma-chrome')) return s
+  // Already namespaced by the model (chrome or card) — leave it.
+  if (s.includes('[data-carma-')) return s
   if (ROOT_RE.test(s)) {
     const rest = s.replace(ROOT_RE, '').trim()
     return rest ? `${ns}${rest.startsWith(':') ? '' : ' '}${rest}` : ns
@@ -117,8 +119,7 @@ function scopeRules(css: string, ns: string): string {
  * isolation reset. The returned stylesheet is safe to inline anywhere on the
  * render page — it cannot affect a single node outside its wrapper.
  */
-export function scopeChromeCss(css: string, region: ChromeRegion): string {
-  const ns = nsSelector(region)
+function scopeUnder(css: string, ns: string): string {
   const reset =
     `${ns}{all:initial;display:block;box-sizing:border-box;max-width:100%}\n` +
     `${ns} *,${ns} *::before,${ns} *::after{box-sizing:border-box}\n` +
@@ -130,4 +131,17 @@ export function scopeChromeCss(css: string, region: ChromeRegion): string {
     .replace(/@charset\s+[^;]+;/gi, '')
     .replace(/@import\s+[^;]+;/gi, '')
   return `${reset}\n${scopeRules(clean, ns)}`
+}
+
+export function scopeChromeCss(css: string, region: ChromeRegion): string {
+  return scopeUnder(css, nsSelector(region))
+}
+
+/**
+ * Same deterministic scoping for the captured article-card template, under the
+ * `[data-carma-card]` namespace. The wrapper is added around EACH rendered card,
+ * but the scoped stylesheet is emitted ONCE for the whole listing.
+ */
+export function scopeCardCss(css: string): string {
+  return scopeUnder(css, '[data-carma-card]')
 }

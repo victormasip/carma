@@ -58,48 +58,48 @@ export default function LiveEmbedCard() {
   if (!hasTheme) return null
 
   return (
-    <div className="bg-white border border-neutral-100 rounded-2xl p-6 shadow-sm">
+    <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-2">
-          <Radio className="w-4 h-4 text-carma-500" />
-          <h3 className="text-base font-bold text-neutral-900">Embed en directe</h3>
+          <Radio className="w-4 h-4 text-accent" />
+          <h3 className="text-base font-bold text-text">Embed en directe</h3>
         </div>
-        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-success bg-success-soft border border-success/30 px-2 py-1 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
           Sincronitzat
         </span>
       </div>
-      <p className="text-xs text-neutral-500 mb-4 leading-relaxed">
+      <p className="text-xs text-muted mb-4 leading-relaxed">
         Enganxa aquest codi al lloc del client. Injecta els estils de Carma en un entorn aïllat (Shadow DOM), així el blog es veu <strong>perfecte a qualsevol web</strong> independentment del seu CSS. La configuració s&apos;actualitza a l&apos;instant amb cada canvi de la pestanya <strong>Tema</strong>.
       </p>
 
       {/* Mode switch */}
-      <div className="flex gap-1 bg-neutral-100 p-1 rounded-xl w-fit mb-3">
+      <div className="flex gap-1 bg-surface-hover p-1 rounded-xl w-fit mb-3">
         <ModeButton active={mode === 'script'} icon={Code2} label="Script (recomanat)" onClick={() => setMode('script')} />
         <ModeButton active={mode === 'iframe'} icon={SquareStack} label="iframe" onClick={() => setMode('iframe')} />
       </div>
 
       {/* Snippet */}
-      <div className="bg-neutral-900 rounded-xl overflow-hidden mb-3">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800">
-          <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">
+      <div className="bg-text rounded-xl overflow-hidden mb-3">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+          <span className="text-xs font-bold text-subtle uppercase tracking-widest">
             {mode === 'script' ? 'Snippet · Shadow DOM' : 'Snippet · iframe'}
           </span>
           <CopyBtn text={snippet} />
         </div>
-        <pre className="p-4 text-xs font-mono leading-relaxed text-neutral-300 overflow-x-auto whitespace-pre">{snippet}</pre>
+        <pre className="p-4 text-xs font-mono leading-relaxed text-subtle overflow-x-auto whitespace-pre">{snippet}</pre>
       </div>
 
       {mode === 'script' && (
-        <p className="text-xs text-neutral-400 mb-3 leading-relaxed">
-          El blog es renderitza on col·loquis el <code className="font-mono text-neutral-500">&lt;script&gt;</code>. Per situar-lo en un contenidor concret, afegeix <code className="font-mono text-neutral-500">data-carma-target=&quot;#el-meu-div&quot;</code>.
+        <p className="text-xs text-subtle mb-3 leading-relaxed">
+          El blog es renderitza on col·loquis el <code className="font-mono text-muted">&lt;script&gt;</code>. Per situar-lo en un contenidor concret, afegeix <code className="font-mono text-muted">data-carma-target=&quot;#el-meu-div&quot;</code>.
         </p>
       )}
 
       {/* Raw URL */}
-      <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 mb-5 min-w-0">
-        <code className="text-xs font-mono text-neutral-600 truncate flex-1 min-w-0">{mode === 'script' ? embedUrl : renderUrl}</code>
-        <a href={mode === 'script' ? embedUrl : renderUrl} target="_blank" rel="noreferrer" className="cursor-pointer text-neutral-400 hover:text-carma-600 shrink-0" title="Obrir en una pestanya">
+      <div className="flex items-center gap-2 bg-surface-subtle border border-border rounded-lg px-3 py-2 mb-5 min-w-0">
+        <code className="text-xs font-mono text-muted truncate flex-1 min-w-0">{mode === 'script' ? embedUrl : renderUrl}</code>
+        <a href={mode === 'script' ? embedUrl : renderUrl} target="_blank" rel="noreferrer" className="cursor-pointer text-subtle hover:text-accent shrink-0" title="Obrir en una pestanya">
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
         <CopyBtn text={mode === 'script' ? embedUrl : renderUrl} subtle />
@@ -107,22 +107,22 @@ export default function LiveEmbedCard() {
 
       {/* Live preview */}
       <div>
-        <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-neutral-400 uppercase tracking-widest">
+        <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-subtle uppercase tracking-widest">
           <RefreshCw className="w-3 h-3" />
           Previsualització en viu
         </div>
-        <div className="rounded-xl overflow-hidden border border-neutral-200 bg-neutral-50">
+        <div className="rounded-xl overflow-hidden border border-border bg-surface-subtle">
           <iframe
             key={previewUrl}
             src={previewUrl}
             title="Previsualització del blog"
-            className="w-full h-[480px] bg-white"
+            className="w-full h-[480px] bg-surface"
             loading="lazy"
           />
         </div>
         {params && (
-          <p className="text-xs text-neutral-400 mt-2 break-all">
-            Payload de configuració: <code className="font-mono text-neutral-500">?{params}</code>
+          <p className="text-xs text-subtle mt-2 break-all">
+            Payload de configuració: <code className="font-mono text-muted">?{params}</code>
           </p>
         )}
       </div>
@@ -135,7 +135,7 @@ function ModeButton({ active, icon: Icon, label, onClick }: { active: boolean; i
     <button
       onClick={onClick}
       className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-        active ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+        active ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'
       }`}
     >
       <Icon className="w-3.5 h-3.5" />
@@ -151,14 +151,14 @@ function CopyBtn({ text, subtle = false }: { text: string; subtle?: boolean }) {
   }
   if (subtle) {
     return (
-      <button onClick={copy} title="Copiar" className="cursor-pointer text-neutral-400 hover:text-carma-600 shrink-0">
-        {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+      <button onClick={copy} title="Copiar" className="cursor-pointer text-subtle hover:text-accent shrink-0">
+        {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
     )
   }
   return (
-    <button onClick={copy} className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded-lg text-xs font-bold transition-colors shrink-0">
-      {copied ? <><Check className="w-3.5 h-3.5 text-carma-400" />Copiat</> : <><Copy className="w-3.5 h-3.5" />Copiar</>}
+    <button onClick={copy} className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-colors shrink-0">
+      {copied ? <><Check className="w-3.5 h-3.5 text-accent" />Copiat</> : <><Copy className="w-3.5 h-3.5" />Copiar</>}
     </button>
   )
 }

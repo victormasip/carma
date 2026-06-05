@@ -3,6 +3,7 @@
 // handlers don't import from each other.
 
 import { parse } from 'node-html-parser'
+import { decodeEntities } from '@/lib/scrape/http'
 
 // ─── Candidate selectors tried in order per field ─────────────────────────────
 
@@ -136,14 +137,14 @@ export function extractWithSelectors(html: string, custom: Record<string, string
   const contentText = contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
   return {
-    title: titleResult.value,
+    title: decodeEntities(titleResult.value),
     content: contentHtml,
-    contentPreview: contentText.slice(0, 400),
+    contentPreview: decodeEntities(contentText.slice(0, 400)),
     contentLength: contentText.length,
     image: imageResult.value,
-    author: authorResult.value,
+    author: decodeEntities(authorResult.value),
     date: dateResult.value,
-    categories: catResult.values,
+    categories: catResult.values.map(decodeEntities),
     selectorsUsed: {
       title: titleResult.selector,
       content: contentSel,

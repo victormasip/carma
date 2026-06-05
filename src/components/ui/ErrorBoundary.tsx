@@ -28,16 +28,16 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children
     if (this.props.fallback) return this.props.fallback
     return (
-      <div className="flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border border-red-100 bg-red-50/40 text-center">
-        <div className="w-11 h-11 rounded-xl bg-red-50 text-red-500 flex items-center justify-center">
+      <div className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border border-danger/20 bg-danger-soft text-center">
+        <div className="w-11 h-11 rounded-xl bg-danger-soft text-danger flex items-center justify-center">
           <AlertTriangle className="w-5 h-5" />
         </div>
-        <p className="text-sm font-bold text-neutral-800">
+        <p className="text-sm font-semibold text-text">
           {this.props.label ?? 'Aquesta secció ha tingut un error'}
         </p>
         <button
           onClick={this.reset}
-          className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition-colors"
+          className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-text text-bg-elevated hover:opacity-90 text-xs font-semibold transition-opacity"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Reintentar

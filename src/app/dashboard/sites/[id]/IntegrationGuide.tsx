@@ -84,28 +84,28 @@ export default function IntegrationGuide({
   const hostLabel = detectedHosting ? (HOSTING_LABEL[detectedHosting] ?? detectedHosting) : null
 
   return (
-    <div className="bg-white border border-neutral-100 rounded-2xl p-6 shadow-sm">
+    <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4 text-carma-500" />
-        <h3 className="text-base font-bold text-neutral-900">Connexió personalitzada</h3>
+        <Sparkles className="w-4 h-4 text-accent" />
+        <h3 className="text-base font-bold text-text">Connexió personalitzada</h3>
       </div>
-      <p className="text-xs text-neutral-500 mb-5 leading-relaxed">
+      <p className="text-xs text-muted mb-5 leading-relaxed">
         Instruccions pas a pas adaptades a la web del client.
       </p>
 
       {/* Detection banner */}
       {fwLabel && (
-        <div className="bg-gradient-to-r from-carma-50 via-amber-50 to-carma-50 border border-carma-200 rounded-2xl p-5 mb-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-carma-500 text-white rounded-xl flex items-center justify-center shrink-0">
+        <div className="bg-accent-soft border border-accent/30 rounded-2xl p-5 mb-5 flex items-start gap-4">
+          <div className="w-10 h-10 bg-accent text-white rounded-xl flex items-center justify-center shrink-0">
             <Zap className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-carma-700">Detectat al tema</p>
-            <p className="text-sm font-bold text-neutral-900 mt-0.5">
+            <p className="text-xs font-bold uppercase tracking-widest text-accent">Detectat al tema</p>
+            <p className="text-sm font-bold text-text mt-0.5">
               {fwLabel}
-              {hostLabel && <span className="font-normal text-neutral-500"> · hosting {hostLabel}</span>}
+              {hostLabel && <span className="font-normal text-muted"> · hosting {hostLabel}</span>}
             </p>
-            <p className="text-xs text-neutral-600 mt-1.5 leading-relaxed">
+            <p className="text-xs text-muted mt-1.5 leading-relaxed">
               <strong>Recomanació:</strong> {recommendation.reason}
             </p>
           </div>
@@ -172,26 +172,26 @@ function PathCard({
     <button
       onClick={onClick}
       className={`cursor-pointer relative text-left p-5 rounded-2xl border-2 transition-all ${
-        active ? 'bg-carma-50 border-carma-400 shadow-md' : 'bg-white border-neutral-200 hover:border-neutral-300 hover:shadow-sm'
+        active ? 'bg-accent-soft border-accent shadow-md' : 'bg-surface border-border hover:border-border-strong hover:shadow-sm'
       }`}
     >
       {recommended && (
-        <span className="absolute -top-2 left-4 text-xs font-bold uppercase tracking-widest bg-green-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+        <span className="absolute -top-2 left-4 text-xs font-bold uppercase tracking-widest bg-success text-white px-2 py-0.5 rounded-full shadow-sm">
           Recomanat
         </span>
       )}
       <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-carma-500 text-white' : 'bg-neutral-100 text-neutral-500'}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-accent text-white' : 'bg-surface-hover text-muted'}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded ${active ? 'bg-carma-100 text-carma-700' : 'bg-neutral-100 text-neutral-500'}`}>{badge}</span>
+        <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded ${active ? 'bg-accent-soft text-accent' : 'bg-surface-hover text-muted'}`}>{badge}</span>
       </div>
-      <h4 className="text-sm font-bold text-neutral-900 mb-1">{title}</h4>
-      <p className="text-xs text-neutral-500 mb-3">{subtitle}</p>
+      <h4 className="text-sm font-bold text-text mb-1">{title}</h4>
+      <p className="text-xs text-muted mb-3">{subtitle}</p>
       <ul className="space-y-1">
         {features.map(f => (
-          <li key={f} className="text-xs text-neutral-600 flex items-start gap-1.5">
-            <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${active ? 'bg-carma-500' : 'bg-neutral-400'}`} />
+          <li key={f} className="text-xs text-muted flex items-start gap-1.5">
+            <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${active ? 'bg-accent' : 'bg-subtle'}`} />
             {f}
           </li>
         ))}
@@ -226,23 +226,23 @@ function RenderInstructions({
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* URL display */}
-      <div className="bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-2xl p-5 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-carma-500/10 blur-[60px] pointer-events-none rounded-full" />
+      <div className="bg-text rounded-2xl p-5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-accent/10 blur-[60px] pointer-events-none rounded-full" />
         <div className="relative z-10">
-          <p className="text-xs font-bold text-carma-300 uppercase tracking-widest mb-2">URL de render del client</p>
-          <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-2 border border-neutral-700">
-            <code className="text-xs font-mono text-neutral-200 truncate flex-1">{renderUrl}</code>
+          <p className="text-xs font-bold text-accent uppercase tracking-widest mb-2">URL de render del client</p>
+          <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-2 border border-white/15">
+            <code className="text-xs font-mono text-subtle truncate flex-1">{renderUrl}</code>
             <InlineCopy text={renderUrl} dark />
           </div>
-          <p className="text-xs text-neutral-400 mt-3 leading-relaxed">
-            Aquesta URL serveix els articles del client amb el seu look. <strong className="text-white">L&apos;objectiu</strong> és que apareguin a <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs">la-seva-web.cat/noticies</code> (o el path que prefereixis).
+          <p className="text-xs text-subtle mt-3 leading-relaxed">
+            Aquesta URL serveix els articles del client amb el seu look. <strong className="text-white">L&apos;objectiu</strong> és que apareguin a <code className="bg-surface/10 px-1.5 py-0.5 rounded text-xs">la-seva-web.cat/noticies</code> (o el path que prefereixis).
           </p>
         </div>
       </div>
 
       {/* Method picker */}
       <div>
-        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el mètode</p>
+        <p className="text-xs font-bold text-subtle uppercase tracking-widest mb-2">Tria el mètode</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
           {METHODS.map(m => {
             const isRec = recommendedMethod === m.key
@@ -252,24 +252,24 @@ function RenderInstructions({
                 onClick={() => setMethod(m.key)}
                 className={`cursor-pointer relative text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   method === m.key
-                    ? 'bg-neutral-900 text-white shadow-sm'
+                    ? 'bg-text text-white shadow-sm'
                     : isRec
-                    ? 'bg-green-50 text-neutral-900 border border-green-300 hover:bg-green-100'
-                    : 'bg-neutral-50 text-neutral-700 hover:bg-neutral-100 border border-neutral-200'
+                    ? 'bg-success-soft text-text border border-success/30 hover:bg-success-soft'
+                    : 'bg-surface-subtle text-text hover:bg-surface-hover border border-border'
                 }`}
               >
                 {isRec && method !== m.key && (
-                  <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase bg-green-500 text-white px-1.5 py-0.5 rounded">★</span>
+                  <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase bg-success text-white px-1.5 py-0.5 rounded">★</span>
                 )}
                 <div className="flex items-center justify-between mb-0.5">
                   <span>{m.label}</span>
                   <span className="flex gap-0.5">
                     {[1,2,3].map(i => (
-                      <span key={i} className={`w-1 h-1 rounded-full ${i <= m.difficulty ? (method === m.key ? 'bg-carma-400' : 'bg-neutral-500') : 'bg-transparent'}`} />
+                      <span key={i} className={`w-1 h-1 rounded-full ${i <= m.difficulty ? (method === m.key ? 'bg-carma-400' : 'bg-surface-subtle') : 'bg-transparent'}`} />
                     ))}
                   </span>
                 </div>
-                <p className={`text-xs font-medium leading-tight ${method === m.key ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                <p className={`text-xs font-medium leading-tight ${method === m.key ? 'text-subtle' : 'text-muted'}`}>
                   {m.description}
                 </p>
               </button>
@@ -278,7 +278,7 @@ function RenderInstructions({
         </div>
       </div>
 
-      <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest border-l-4 border-carma-500 pl-3 py-1">
+      <div className="text-xs font-bold text-muted uppercase tracking-widest border-l-4 border-accent pl-3 py-1">
         Instruccions per a {selected.label}
       </div>
 
@@ -353,7 +353,7 @@ export default {
 
       <Step n={2} title="Crear el Worker">
         <ol className="space-y-2 list-none">
-          <Li><Strong>2.1.</Strong> Al menú esquerre de Cloudflare, clica <Btn>Workers &amp; Pages</Btn> <span className="text-neutral-400">(icona de quadrats)</span></Li>
+          <Li><Strong>2.1.</Strong> Al menú esquerre de Cloudflare, clica <Btn>Workers &amp; Pages</Btn> <span className="text-subtle">(icona de quadrats)</span></Li>
           <Li><Strong>2.2.</Strong> Botó taronja <Btn>Create application</Btn> a dalt a la dreta</Li>
           <Li><Strong>2.3.</Strong> Selecciona la pestanya <Btn>Workers</Btn> (NO &quot;Pages&quot;)</Li>
           <Li><Strong>2.4.</Strong> Clica <Btn>Create Worker</Btn></Li>
@@ -381,7 +381,7 @@ export default {
           <Li><Strong>4.2.</Strong> Clica la pestanya <Btn>Settings</Btn> a dalt</Li>
           <Li><Strong>4.3.</Strong> Al menú esquerre busca <Btn>Triggers</Btn> i clica-hi</Li>
           <Li><Strong>4.4.</Strong> Secció <Strong>Routes</Strong> → clica <Btn>+ Add route</Btn></Li>
-          <Li><Strong>4.5.</Strong> Camp <Code>Route</Code>: <Code>la-seva-web.cat/noticies*</Code> <span className="text-neutral-400">(asterisc final inclou totes les subrutes /noticies/article-1, etc.)</span></Li>
+          <Li><Strong>4.5.</Strong> Camp <Code>Route</Code>: <Code>la-seva-web.cat/noticies*</Code> <span className="text-subtle">(asterisc final inclou totes les subrutes /noticies/article-1, etc.)</span></Li>
           <Li><Strong>4.6.</Strong> Camp <Code>Zone</Code>: selecciona <Code>la-seva-web.cat</Code> (només apareix si Cloudflare ja ha activat el domini)</Li>
           <Li><Strong>4.7.</Strong> Clica <Btn>Save</Btn></Li>
         </ol>
@@ -486,7 +486,7 @@ function NetlifyGuide({ renderUrl }: { renderUrl: string }) {
       <Step n={1} title="Crear o editar el fitxer _redirects">
         <ol className="space-y-2 list-none">
           <Li><Strong>1.1.</Strong> Identifica on van els fitxers estàtics del projecte:</Li>
-          <ul className="ml-6 mt-1 space-y-1 text-xs text-neutral-600 list-disc">
+          <ul className="ml-6 mt-1 space-y-1 text-xs text-muted list-disc">
             <li>Next.js / React (CRA): <Code>/public</Code></li>
             <li>Vite: <Code>/public</Code></li>
             <li>Astro: <Code>/public</Code></li>
@@ -781,16 +781,16 @@ function ApiInstructions({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-800">
+      <div className="bg-warning-soft border border-warning/30 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+        <div className="text-xs text-warning">
           <strong>Capçalera obligatòria a totes les peticions:</strong>{' '}
-          <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono">x-api-key: {apiKey.slice(0, 12)}…</code>
+          <code className="bg-warning-soft px-1.5 py-0.5 rounded font-mono">x-api-key: {apiKey.slice(0, 12)}…</code>
         </div>
       </div>
 
       <div>
-        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Tria el stack del client</p>
+        <p className="text-xs font-bold text-subtle uppercase tracking-widest mb-2">Tria el stack del client</p>
         <div className="flex gap-1.5 flex-wrap">
           {PLATFORMS.map(p => {
             const isRec = recommendedPlatform === p.key
@@ -800,14 +800,14 @@ function ApiInstructions({
                 onClick={() => setPlatform(p.key)}
                 className={`cursor-pointer relative px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   platform === p.key
-                    ? 'bg-neutral-900 text-white shadow-sm'
+                    ? 'bg-text text-white shadow-sm'
                     : isRec
-                    ? 'bg-green-50 text-neutral-900 border border-green-300 hover:bg-green-100'
-                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    ? 'bg-success-soft text-text border border-success/30 hover:bg-success-soft'
+                    : 'bg-surface-hover text-muted hover:bg-surface-hover'
                 }`}
               >
                 {isRec && platform !== p.key && (
-                  <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold bg-green-500 text-white px-1 rounded">★</span>
+                  <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold bg-success text-white px-1 rounded">★</span>
                 )}
                 {p.label}
               </button>
@@ -1435,22 +1435,22 @@ function Steps({ children }: { children: ReactNode }) {
 function Step({ n, title, subtitle, children }: { n: number; title: string; subtitle?: string; children: ReactNode }) {
   const [open, setOpen] = useState(n <= 1)
   return (
-    <div className="border border-neutral-200 rounded-xl overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
-        className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-neutral-50 transition-colors text-left"
+        className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 bg-surface hover:bg-surface-subtle transition-colors text-left"
       >
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${n === 0 ? 'bg-amber-100 text-amber-700' : 'bg-neutral-900 text-white'}`}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${n === 0 ? 'bg-warning-soft text-warning' : 'bg-text text-white'}`}>
           {n === 0 ? '!' : n}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-neutral-900 leading-tight">{title}</p>
-          {subtitle && <p className="text-xs text-neutral-500 mt-0.5">{subtitle}</p>}
+          <p className="text-sm font-bold text-text leading-tight">{title}</p>
+          {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
         </div>
-        {open ? <ChevronUp className="w-4 h-4 text-neutral-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-neutral-400 shrink-0" />}
+        {open ? <ChevronUp className="w-4 h-4 text-subtle shrink-0" /> : <ChevronDown className="w-4 h-4 text-subtle shrink-0" />}
       </button>
       {open && (
-        <div className="px-4 py-4 border-t border-neutral-100 bg-neutral-50/40 space-y-3 text-xs text-neutral-700 leading-relaxed">
+        <div className="px-4 py-4 border-t border-border bg-surface-subtle/40 space-y-3 text-xs text-text leading-relaxed">
           {children}
         </div>
       )}
@@ -1460,29 +1460,29 @@ function Step({ n, title, subtitle, children }: { n: number; title: string; subt
 
 function Li({ children }: { children: ReactNode }) {
   return <li className="flex items-start gap-1.5">
-    <span className="w-1 h-1 rounded-full bg-neutral-400 mt-2 shrink-0" />
+    <span className="w-1 h-1 rounded-full bg-subtle mt-2 shrink-0" />
     <span className="flex-1">{children}</span>
   </li>
 }
 
 function Strong({ children }: { children: ReactNode }) {
-  return <strong className="text-neutral-900 font-bold">{children}</strong>
+  return <strong className="text-text font-bold">{children}</strong>
 }
 
 function Btn({ children }: { children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-900 text-white font-mono text-xs font-bold border border-neutral-700">
+  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-text text-white font-mono text-xs font-bold border border-white/15">
     <MousePointerClick className="w-2.5 h-2.5" />{children}
   </span>
 }
 
 function CodeBlock({ code, language }: { code: string; language: string }) {
   return (
-    <div className="relative bg-neutral-900 rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
-        <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">{language}</span>
+    <div className="relative bg-text rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+        <span className="text-xs font-bold text-subtle uppercase tracking-widest">{language}</span>
         <InlineCopy text={code} dark />
       </div>
-      <pre className="p-3 text-xs font-mono text-neutral-200 overflow-x-auto leading-relaxed">{code}</pre>
+      <pre className="p-3 text-xs font-mono text-subtle overflow-x-auto leading-relaxed">{code}</pre>
     </div>
   )
 }
@@ -1501,22 +1501,22 @@ function InlineCopy({ text, dark = false }: { text: string; dark?: boolean }) {
       onClick={copy}
       className={`cursor-pointer flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-colors ${
         dark
-          ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
-          : 'bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-600'
+          ? 'bg-white/15 hover:bg-white/25 text-subtle'
+          : 'bg-surface border border-border hover:bg-surface-subtle text-muted'
       }`}
     >
-      {copied ? <><Check className="w-3 h-3 text-carma-400" />Copiat</> : <><Copy className="w-3 h-3" />Copiar</>}
+      {copied ? <><Check className="w-3 h-3 text-accent" />Copiat</> : <><Copy className="w-3 h-3" />Copiar</>}
     </button>
   )
 }
 
 function Code({ children }: { children: ReactNode }) {
-  return <code className="bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
+  return <code className="bg-surface-hover text-text px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
 }
 
 function ExtLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noopener" className="text-carma-600 hover:text-carma-700 underline inline-flex items-center gap-0.5 font-semibold">
+    <a href={href} target="_blank" rel="noopener" className="text-accent hover:text-accent underline inline-flex items-center gap-0.5 font-semibold">
       {children}<ExternalLink className="w-3 h-3" />
     </a>
   )
@@ -1524,9 +1524,9 @@ function ExtLink({ href, children }: { href: string; children: ReactNode }) {
 
 function Warning({ children, small = false }: { children: ReactNode; small?: boolean }) {
   return (
-    <div className={`bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 ${small ? 'p-3' : 'p-4'}`}>
-      <AlertTriangle className={`text-amber-600 shrink-0 ${small ? 'w-3.5 h-3.5 mt-0.5' : 'w-4 h-4 mt-0.5'}`} />
-      <div className={`text-amber-800 ${small ? 'text-xs' : 'text-xs'} leading-relaxed`}>{children}</div>
+    <div className={`bg-warning-soft border border-warning/30 rounded-xl flex items-start gap-3 ${small ? 'p-3' : 'p-4'}`}>
+      <AlertTriangle className={`text-warning shrink-0 ${small ? 'w-3.5 h-3.5 mt-0.5' : 'w-4 h-4 mt-0.5'}`} />
+      <div className={`text-warning ${small ? 'text-xs' : 'text-xs'} leading-relaxed`}>{children}</div>
     </div>
   )
 }

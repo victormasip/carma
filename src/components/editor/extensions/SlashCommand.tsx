@@ -148,7 +148,7 @@ const SlashCommandList = forwardRef<SlashListRef, ListProps>(({ items, command }
 
   if (items.length === 0) {
     return (
-      <div className="w-72 p-3 bg-white rounded-xl shadow-2xl ring-1 ring-neutral-200 text-xs font-semibold text-neutral-400">
+      <div className="w-72 p-3 bg-bg-elevated rounded-xl shadow-pop ring-1 ring-border text-xs font-semibold text-subtle">
         Cap bloc coincideix
       </div>
     )
@@ -157,9 +157,9 @@ const SlashCommandList = forwardRef<SlashListRef, ListProps>(({ items, command }
   return (
     <div
       ref={containerRef}
-      className="w-72 max-h-80 overflow-y-auto p-1.5 bg-white rounded-xl shadow-2xl ring-1 ring-neutral-200"
+      className="w-72 max-h-80 overflow-y-auto p-1.5 bg-bg-elevated rounded-xl shadow-pop ring-1 ring-border"
     >
-      <p className="px-2.5 pt-1 pb-1.5 text-xs font-bold uppercase tracking-widest text-neutral-300">Blocs bàsics</p>
+      <p className="px-2.5 pt-1 pb-1.5 text-xs font-bold uppercase tracking-widest text-subtle">Blocs bàsics</p>
       {items.map((item, i) => {
         const Icon = item.icon
         return (
@@ -170,17 +170,17 @@ const SlashCommandList = forwardRef<SlashListRef, ListProps>(({ items, command }
             onMouseEnter={() => setActive(i)}
             onClick={() => command(item)}
             className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-              i === active ? 'bg-carma-50' : 'hover:bg-neutral-50'
+              i === active ? 'bg-accent-soft' : 'hover:bg-surface-hover'
             }`}
           >
             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
-              i === active ? 'border-carma-200 bg-white text-carma-600' : 'border-neutral-200 bg-white text-neutral-500'
+              i === active ? 'border-accent/30 bg-bg-elevated text-accent' : 'border-border bg-bg-elevated text-muted'
             }`}>
               <Icon className="h-4 w-4" />
             </span>
             <span className="min-w-0">
-              <span className="block text-[13px] font-bold text-neutral-800 truncate">{item.title}</span>
-              <span className="block text-xs font-medium text-neutral-400 truncate">{item.subtitle}</span>
+              <span className="block text-[13px] font-bold text-text truncate">{item.title}</span>
+              <span className="block text-xs font-medium text-subtle truncate">{item.subtitle}</span>
             </span>
           </button>
         )

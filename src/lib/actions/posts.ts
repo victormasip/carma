@@ -3,8 +3,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { DEFAULT_LOCALE, normalizeLocale } from '@/lib/i18n/config'
+import { DEFAULT_LOCALE, LOCALES, normalizeLocale } from '@/lib/i18n/config'
 import { translateFieldsWithClaude, type TranslatableFields } from '@/lib/i18n/translate'
+import { analyzeWriting, type WritingAnalysis } from '@/lib/writing/coach'
+import { harvestSiteBrief, generateArticle, type GeneratedArticle } from '@/lib/writing/generate'
 
 type ActionResult = { error?: string }
 type CreateResult = ActionResult & { id?: string }
@@ -67,6 +69,60 @@ function generateSlug(title: string): string {
   return base || `article-${Date.now()}`
 }
 
+// Every slug a post claims — the flat (default-locale) slug plus every
+// per-locale i18n slug. Since the render route resolves /render/<site>/<slug>
+// to (post, locale) by ANY matching slug, two different posts in the same site
+// can never share a slug across ANY locale, or one shadows the other.
+function collectPostSlugs(data: PostData, fallbackSlug: string): string[] {
+  const out = new Set<string>()
+  const flat = (data.slug?.trim() || fallbackSlug).trim()
+  if (flat) out.add(flat)
+  for (const v of Object.values(data.i18n ?? {})) {
+    const s = v?.slug?.trim()
+    if (s) out.add(s)
+  }
+  return [...out]
+}
+
+// Returns the first colliding slug found on a different post, or null if clear.
+// Single round-trip across the flat slug + every locale's i18n slug. Gracefully
+// degrades to the flat-only check before migration 008.
+async function findSlugConflict(
+  admin: ReturnType<typeof createAdminClient>,
+  siteId: string,
+  excludePostId: string | null,
+  slugs: string[],
+): Promise<string | null> {
+  if (slugs.length === 0) return null
+  const ors: string[] = []
+  for (const s of slugs) {
+    ors.push(`slug.eq.${s}`)
+    for (const loc of LOCALES) ors.push(`i18n->${loc}->>slug.eq.${s}`)
+  }
+  let q = admin.from('posts').select('id, slug, i18n').eq('site_id', siteId).or(ors.join(','))
+  if (excludePostId) q = q.neq('id', excludePostId)
+  const { data, error } = await q.limit(1)
+
+  if (error?.code === UNDEFINED_COLUMN) {
+    // Pre-migration-008: only the flat column exists. Check it directly.
+    let q2 = admin.from('posts').select('id, slug').eq('site_id', siteId).in('slug', slugs)
+    if (excludePostId) q2 = q2.neq('id', excludePostId)
+    const r = await q2.limit(1)
+    if (r.data && r.data.length > 0) return r.data[0].slug
+    return null
+  }
+  if (error || !data || data.length === 0) return null
+
+  const want = new Set(slugs)
+  const row = data[0] as { slug?: string; i18n?: Record<string, { slug?: string }> | null }
+  if (row.slug && want.has(row.slug)) return row.slug
+  for (const loc of LOCALES) {
+    const ls = row.i18n?.[loc]?.slug
+    if (ls && want.has(ls)) return ls
+  }
+  return null
+}
+
 async function assertSiteAccess(siteId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -96,7 +152,7 @@ async function assertSiteAccess(siteId: string) {
 
 const POSTS_PAGE_SIZE = 12
 
-export type PostListItem = { id: string; title: string; slug: string; is_published: boolean; created_at: string }
+export type PostListItem = { id: string; title: string; slug: string; is_published: boolean; created_at: string; featured_image: string | null }
 export type PostListResult = {
   posts: PostListItem[]
   page: number
@@ -127,7 +183,7 @@ export async function listPosts(
 
     let query = admin
       .from('posts')
-      .select('id, title, slug, is_published, created_at', { count: 'exact' })
+      .select('id, title, slug, is_published, created_at, featured_image', { count: 'exact' })
       .eq('site_id', siteId)
 
     if (opts.status === 'published') query = query.eq('is_published', true)
@@ -171,6 +227,12 @@ export async function createPost(
     if (!trimmed) return { error: 'El títol és obligatori' }
 
     const slug = data.slug?.trim() ? data.slug.trim() : generateSlug(trimmed)
+
+    // Cross-locale slug uniqueness: catch conflicts BEFORE the DB error so we
+    // can name the colliding slug. (The DB's UNIQUE(site_id, slug) only catches
+    // flat-slug clashes; localized-slug clashes need an app-level check.)
+    const conflict = await findSlugConflict(admin, siteId, null, collectPostSlugs(data, slug))
+    if (conflict) return { error: `El slug «${conflict}» ja existeix en aquest lloc. Cada idioma necessita un slug únic dins el lloc.` }
 
     const baseRow = {
       site_id: siteId,
@@ -220,6 +282,10 @@ export async function updatePost(
 
     const slug = data.slug?.trim() ? data.slug.trim() : generateSlug(trimmed)
 
+    // Cross-locale uniqueness — same rules as createPost, excluding this post.
+    const conflict = await findSlugConflict(admin, siteId, postId, collectPostSlugs(data, slug))
+    if (conflict) return { error: `El slug «${conflict}» ja existeix en un altre article d'aquest lloc.` }
+
     const baseRow = {
       title: trimmed,
       slug,
@@ -250,6 +316,78 @@ export async function updatePost(
     revalidatePath(`/dashboard/sites/${siteId}`)
     revalidatePath(`/dashboard/sites/${siteId}/posts/${postId}/edit`)
     return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
+/**
+ * Partial, single-round-trip update of an article's "surface" fields, for the
+ * INLINE editing in the post list (title / slug / featured image) — no need to
+ * open the full editor. Only the keys present in `fields` are written.
+ *
+ *  · title — trimmed; rejected if it would become empty.
+ *  · slug  — normalised to a safe slug; a blank value regenerates it from the
+ *            title; checked for cross-locale conflicts (same rule as updatePost).
+ *  · featured_image — a public URL, or null to clear the thumbnail.
+ *
+ * Returns the canonical `slug` when it was touched, so the optimistic client can
+ * reconcile (e.g. "Hello World" → "hello-world").
+ */
+export async function updatePostFields(
+  postId: string,
+  siteId: string,
+  fields: { title?: string; slug?: string; featured_image?: string | null; created_at?: string },
+): Promise<ActionResult & { slug?: string; created_at?: string }> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+    const patch: Record<string, unknown> = {}
+
+    if (fields.title !== undefined) {
+      const t = fields.title.trim()
+      if (!t) return { error: 'El títol no pot estar buit' }
+      patch.title = t
+    }
+
+    let finalDate: string | undefined
+    if (fields.created_at !== undefined) {
+      const d = new Date(fields.created_at)
+      if (Number.isNaN(d.getTime())) return { error: 'Data no vàlida' }
+      patch.created_at = d.toISOString()
+      finalDate = patch.created_at as string
+    }
+
+    let finalSlug: string | undefined
+    if (fields.slug !== undefined) {
+      let slug = fields.slug.trim()
+      if (!slug) {
+        // Blank → regenerate from the (new or stored) title.
+        const stored = await admin.from('posts').select('title').eq('id', postId).eq('site_id', siteId).single()
+        slug = generateSlug((patch.title as string | undefined) ?? stored.data?.title ?? '')
+      } else {
+        slug = generateSlug(slug)
+      }
+      const conflict = await findSlugConflict(admin, siteId, postId, [slug])
+      if (conflict) return { error: `El slug «${conflict}» ja existeix en un altre article d'aquest lloc.` }
+      patch.slug = slug
+      finalSlug = slug
+    }
+
+    if (fields.featured_image !== undefined) {
+      patch.featured_image = fields.featured_image // string URL or null
+    }
+
+    if (Object.keys(patch).length === 0) return {}
+
+    const { error } = await admin.from('posts').update(patch).eq('id', postId).eq('site_id', siteId)
+    if (error) {
+      if (error.code === '23505') return { error: 'Ja existeix un article amb aquest slug.' }
+      return { error: error.message }
+    }
+
+    revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidatePath(`/dashboard/sites/${siteId}/posts/${postId}/edit`)
+    return { ...(finalSlug ? { slug: finalSlug } : {}), ...(finalDate ? { created_at: finalDate } : {}) }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
   }
@@ -360,5 +498,86 @@ export async function translateArticle(
     return { result }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error de traducció' }
+  }
+}
+
+/**
+ * AI Writing Coach — analyzes an article's body in its own language and returns
+ * a readability score + concrete rewrite suggestions. Premium feature; gated by
+ * site access (the editor's UI also Premium-gates the trigger button).
+ */
+export async function analyzeArticleWriting(
+  siteId: string,
+  locale: string,
+  fields: { title: string; html: string },
+): Promise<ActionResult & { result?: WritingAnalysis }> {
+  try {
+    await assertSiteAccess(siteId)
+    const loc = normalizeLocale(locale)
+    const result = await analyzeWriting({ title: fields.title, html: fields.html, locale: loc })
+    return { result }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Error analitzant l'article" }
+  }
+}
+
+/**
+ * "Magic SEO Article" — analyze the site's URL, deduce its niche/tone, and
+ * autonomously generate ONE complete, ready-to-publish article. Gated to site
+ * members (the editor UI additionally Premium-gates the trigger for free clients).
+ *
+ * The URL is the site's captured reference URL; the caller may pass an override
+ * (e.g. a brand-new site that hasn't been captured yet). The article is written
+ * in the requested locale (defaults to the site's default locale).
+ */
+export async function generateSeoArticle(
+  siteId: string,
+  opts: { url?: string; locale?: string } = {},
+): Promise<ActionResult & { result?: GeneratedArticle }> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+
+    const { data: site } = await admin.from('sites').select('id, name').eq('id', siteId).single()
+    if (!site) return { error: 'Site no trobat' }
+
+    // Read the captured reference URL + the site's default locale in one go.
+    // 42703-safe: retry without the i18n column if the migration hasn't run.
+    let themeRow: { reference_url?: string | null; default_locale?: string | null } | null = null
+    {
+      const full = await admin
+        .from('site_themes').select('reference_url, default_locale').eq('site_id', siteId).maybeSingle()
+      if (full.error?.code === UNDEFINED_COLUMN) {
+        const base = await admin
+          .from('site_themes').select('reference_url').eq('site_id', siteId).maybeSingle()
+        themeRow = base.data
+      } else {
+        themeRow = full.data
+      }
+    }
+
+    // Reference URL: explicit override → captured reference_url.
+    const url = ((opts.url ?? '').trim() || (themeRow?.reference_url ?? '').trim())
+    if (!/^https?:\/\//i.test(url)) {
+      return { error: "Cal una URL del lloc per generar l'article. Captura primer el tema o introdueix la URL del teu web." }
+    }
+
+    // Effective locale: requested → site default → platform default.
+    const locale = normalizeLocale(opts.locale ?? themeRow?.default_locale, DEFAULT_LOCALE)
+
+    // Existing categories on this blog (so the model can reuse them).
+    const existingCategories = new Set<string>()
+    const { data: catRows } = await admin
+      .from('posts').select('categories').eq('site_id', siteId).limit(60)
+    for (const row of catRows ?? []) {
+      for (const c of (row as { categories?: string[] | null }).categories ?? []) {
+        if (c && existingCategories.size < 24) existingCategories.add(c)
+      }
+    }
+
+    const brief = await harvestSiteBrief(url, site.name, locale)
+    const result = await generateArticle(brief, [...existingCategories])
+    return { result }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Error generant l'article" }
   }
 }

@@ -1,15 +1,14 @@
-// Client CSS pipeline for the Shadow-DOM chrome.
+// CSS URL helpers for the Theme capture.
 //
-// We inject the client's REAL stylesheets inside a shadow root (perfect, native
-// CSS encapsulation — not an iframe). The only transform needed is to make the
-// document-root selectors work inside a shadow tree, where `:root`/`html`/`body`
-// never match: we replicate the original ancestry as `<div class="x-html"><div
-// class="x-body">` and remap those selectors to the wrapper classes. Everything
-// else (classes, ids, *, descendant rules, custom properties) then applies
-// exactly as on the original page. All url()/@import are absolutised so assets
-// and font files resolve.
-
-// ─── URL helpers ──────────────────────────────────────────────────────────────
+// When we inject the client's real <head> assets into the render document, inline
+// <style> blocks and @import targets carry RELATIVE urls (background images,
+// self-hosted fonts) that would 404 once served from our origin. These helpers
+// absolutise those urls against the source origin so every asset resolves. (We do
+// NOT rewrite urls inside EXTERNAL .css files — linking them at their absolute
+// origin URL makes their own relative urls resolve automatically.)
+//
+// `splitImports` is also used by the token-extraction CSS fetcher to follow
+// @import chains so we can read custom properties / palette rules.
 
 export function absolutiseUrl(url: string | undefined | null, base: URL): string {
   const u = (url ?? '').trim().replace(/^["']|["']$/g, '')
@@ -25,6 +24,42 @@ export function absolutiseCssUrls(css: string, base: URL): string {
   })
 }
 
+// ─── Icon/font CORS fix ─────────────────────────────────────────────────────
+// Cross-origin web fonts are CORS-blocked when the clone is served from our
+// origin. Route absolute font URLs through the same-origin /api/asset proxy
+// (which re-adds CORS) so @font-face icon fonts actually load.
+
+const FONT_URL_EXT = /\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i
+
+/** Proxy any absolute http(s) FONT url() in a CSS string through /api/asset. */
+export function proxyFontsInCss(css: string): string {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q: string, url: string) => {
+    if (/^https?:\/\//i.test(url) && FONT_URL_EXT.test(url)) {
+      return `url(${q}/api/asset?u=${encodeURIComponent(url)}${q})`
+    }
+    return m
+  })
+}
+
+/** Pull every `@font-face { … }` block out of a stylesheet (flat — they never
+ *  nest), for re-emitting with proxied font URLs. */
+export function extractFontFaceCss(css: string): string {
+  const blocks = css.match(/@font-face\s*\{[^{}]*\}/gi)
+  return blocks ? blocks.join('\n') : ''
+}
+
+/** Rewrite an SVG `<use>` href to the same-origin proxy when it targets an
+ *  EXTERNAL sprite file (cross-origin `<use>` is blocked by browsers). A pure
+ *  in-page fragment (`#icon`) is left untouched. The `#fragment` is preserved. */
+export function proxyUseHref(href: string | undefined | null, base: URL): string {
+  const abs = absolutiseUrl(href, base)
+  if (!/^https?:\/\//i.test(abs)) return abs // pure fragment / data: — leave as-is
+  const hash = abs.indexOf('#')
+  const file = hash >= 0 ? abs.slice(0, hash) : abs
+  const frag = hash >= 0 ? abs.slice(hash) : ''
+  return `/api/asset?u=${encodeURIComponent(file)}${frag}`
+}
+
 /** Pull @import statements out of a sheet, returning their absolute URLs and the
  *  CSS with the @imports removed (they're fetched + inlined separately). */
 export function splitImports(css: string, base: URL): { imports: string[]; rest: string } {
@@ -38,78 +73,4 @@ export function splitImports(css: string, base: URL): { imports: string[]; rest:
     },
   )
   return { imports, rest }
-}
-
-// ─── Comment / whitespace ───────────────────────────────────────────────────
-
-function stripComments(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, '')
-}
-
-// ─── Selector remap (the core trick) ──────────────────────────────────────────
-
-// Match `html`, `body` or `:root` ONLY where they are a type selector (not part
-// of a class/id/attr/string): preceded by start or a combinator/comma/open-paren
-// and followed by end or a combinator/class/id/attr/pseudo/comma.
-const ROOT_SELECTOR_RE = /(^|[\s,>+~(])(html|body|:root)(?=$|[\s.#\[:,>+~)])/gi
-
-function remapSelectorList(selectorList: string): string {
-  return selectorList.replace(ROOT_SELECTOR_RE, (_m, pre: string, kw: string) => {
-    const k = kw.toLowerCase()
-    // html and :root both map to the outer wrapper; body to the inner one.
-    return pre + (k === 'body' ? '.x-body' : '.x-html')
-  })
-}
-
-// ─── Rule walking (brace-depth aware) ─────────────────────────────────────────
-
-type Rule = { prelude: string; body: string }
-
-function parseRules(css: string): Rule[] {
-  const rules: Rule[] = []
-  let depth = 0
-  let start = 0
-  let preludeEnd = -1
-  for (let i = 0; i < css.length; i++) {
-    const c = css[i]
-    if (c === '{') {
-      if (depth === 0) preludeEnd = i
-      depth++
-    } else if (c === '}') {
-      depth--
-      if (depth === 0 && preludeEnd >= 0) {
-        rules.push({ prelude: css.slice(start, preludeEnd).trim(), body: css.slice(preludeEnd + 1, i) })
-        start = i + 1
-        preludeEnd = -1
-      }
-    }
-  }
-  return rules
-}
-
-function scopeRules(css: string): string {
-  return parseRules(css)
-    .map(({ prelude, body }) => {
-      if (prelude.startsWith('@')) {
-        const kind = prelude.slice(1).match(/^[a-z-]+/i)?.[0]?.toLowerCase() ?? ''
-        if (['media', 'supports', 'container', 'layer', 'scope'].includes(kind)) {
-          return `${prelude}{${scopeRules(body)}}`
-        }
-        // @keyframes / @font-face / @page / @font-feature-values: keep verbatim.
-        return `${prelude}{${body}}`
-      }
-      const sel = remapSelectorList(prelude)
-      return sel ? `${sel}{${body}}` : ''
-    })
-    .join('')
-}
-
-/** Remap document-root selectors so the client CSS works inside the shadow root.
- *  url()/@import must already be absolutised. */
-export function scopeClientCss(css: string): string {
-  if (!css?.trim()) return ''
-  const clean = stripComments(css)
-    .replace(/@charset\s+[^;]+;/gi, '')
-    .replace(/@import\s+[^;]+;/gi, '') // imports were inlined upstream
-  return scopeRules(clean)
 }

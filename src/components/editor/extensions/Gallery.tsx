@@ -2,7 +2,8 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import type { DOMOutputSpec } from '@tiptap/pm/model'
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { useRef, useState } from 'react'
-import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2 } from 'lucide-react'
+import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2, Loader2 } from 'lucide-react'
+import { uploadImages } from '@/lib/upload'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -12,26 +13,13 @@ declare module '@tiptap/core' {
   }
 }
 
+export type GalleryOptions = { siteId: string }
+
 // Stable-ish id base for a gallery's CSS slides + `:target` lightboxes.
 function hashStr(s: string): string {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0
   return Math.abs(h).toString(36)
-}
-
-function readFilesAsDataUrls(files: FileList | File[]): Promise<string[]> {
-  const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
-  return Promise.all(
-    imgs.map(
-      (f) =>
-        new Promise<string>((resolve) => {
-          const r = new FileReader()
-          r.onload = () => resolve(typeof r.result === 'string' ? r.result : '')
-          r.onerror = () => resolve('')
-          r.readAsDataURL(f)
-        }),
-    ),
-  ).then((arr) => arr.filter(Boolean))
 }
 
 /**
@@ -42,12 +30,16 @@ function readFilesAsDataUrls(files: FileList | File[]): Promise<string[]> {
  * lightbox with prev/next. The editor mirrors it with JS controls. Accepts both
  * image URLs and uploads (stored as data URLs).
  */
-export const Gallery = Node.create({
+export const Gallery = Node.create<GalleryOptions>({
   name: 'gallery',
   group: 'block',
   atom: true,
   draggable: true,
   selectable: true,
+
+  addOptions() {
+    return { siteId: '' }
+  },
 
   addAttributes() {
     return {
@@ -123,13 +115,15 @@ export const Gallery = Node.create({
   },
 })
 
-function GalleryView({ node, updateAttributes, editor, selected }: NodeViewProps) {
+function GalleryView({ node, updateAttributes, editor, selected, extension }: NodeViewProps) {
   const images: string[] = Array.isArray(node.attrs.images) ? node.attrs.images : []
   const [url, setUrl] = useState('')
   const [lightbox, setLightbox] = useState<number | null>(null)
+  const [uploading, setUploading] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const editable = editor.isEditable
+  const siteId: string = extension.options.siteId
 
   const addUrl = () => {
     const t = url.trim()
@@ -137,10 +131,17 @@ function GalleryView({ node, updateAttributes, editor, selected }: NodeViewProps
     updateAttributes({ images: [...images, t] })
     setUrl('')
   }
+  // Upload to storage (clean URLs), never base64 — matches the rest of the editor.
   const addFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-    const datas = await readFilesAsDataUrls(files)
-    if (datas.length) updateAttributes({ images: [...images, ...datas] })
+    const list = files ? Array.from(files).filter(f => f.type.startsWith('image/')) : []
+    if (list.length === 0 || !siteId) return
+    setUploading(true)
+    try {
+      const urls = await uploadImages(list, siteId)
+      if (urls.length) updateAttributes({ images: [...images, ...urls] })
+    } finally {
+      setUploading(false)
+    }
   }
   const removeImage = (i: number) => updateAttributes({ images: images.filter((_, idx) => idx !== i) })
   const page = (dir: -1 | 1) => {
@@ -202,8 +203,8 @@ function GalleryView({ node, updateAttributes, editor, selected }: NodeViewProps
           <button type="button" onClick={addUrl} title="Afegir per URL">
             <Plus className="w-4 h-4" />
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload">
-            <Upload className="w-4 h-4" />
+          <button type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload" disabled={uploading}>
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
           </button>
           <input
             ref={fileRef}

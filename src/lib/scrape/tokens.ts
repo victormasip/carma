@@ -32,15 +32,25 @@ export type DesignTokens = {
   layout: BlogLayout
   columns: BlogColumns
   // Blog/news heading styling — all optional, edited from the Theme Studio.
-  // Fall back to sensible defaults in the render when unset.
   sectionTitleColor?: string
   sectionTitleSize?: string        // e.g. '1.75rem'
   sectionTitleWeight?: string      // '400'..'900'
   sectionTitleAlign?: 'left' | 'center' | 'right'
   sectionTitleWidth?: string       // e.g. '100%' | '720px'
-  sectionTitleHeight?: string      // optional min-height, e.g. '120px'
+  sectionTitleHeight?: string
   showBreadcrumb?: boolean
-  headingImage?: string            // optional banner background URL
+  headingImage?: string
+  // ── Article-body typography — captured from the source so the public render
+  // inherits the source site's prose rhythm. All optional with sensible
+  // fallbacks in the renderer when extraction can't find them.
+  bodyLineHeight?: string          // e.g. '1.7'
+  paragraphSpacing?: string        // margin-top/bottom on <p>, e.g. '1.15rem'
+  linkColor?: string               // overrides accent for body links
+  linkUnderline?: 'always' | 'hover' | 'none'
+  headingWeight?: string           // h1..h3 weight, '400'..'900'
+  headingLineHeight?: string       // e.g. '1.2'
+  blockquoteBorderColor?: string   // border-left color, defaults to accent
+  blockquoteStyle?: 'italic' | 'normal'
 }
 
 export const DEFAULT_TOKENS: DesignTokens = {
@@ -307,6 +317,65 @@ export function extractTokens(opts: {
   // ── Max width (content container) ──
   const containerMax = ruleFor(s => /\b(container|wrapper|content|main|site)\b/.test(s), 'max-width')
   if (containerMax && /^[\d.]+(px|rem)$/.test(containerMax.trim())) tokens.maxWidth = containerMax.trim()
+
+  // ── Body typography rhythm — line-height, paragraph spacing, link & quote
+  //    styling. Captured optimistically (any clean match wins); the renderer
+  //    falls back to its own defaults when these aren't set. The point is to
+  //    make the public article body "feel" like the client's site visually
+  //    without inheriting their actual CSS.
+
+  // Body line-height — sample from body/html/article rules.
+  const lineHeight = ruleFor(s => has(s, ['body', 'html', 'article', '.article', '.post', '.content']), 'line-height')
+  if (lineHeight) {
+    const lh = lineHeight.trim()
+    if (/^[\d.]+(rem|em|%|px)?$/.test(lh)) tokens.bodyLineHeight = lh
+  }
+
+  // Paragraph spacing — sample <p> margin (top/bottom).
+  const pMargin = ruleFor(s => has(s, ['p', 'article p', '.content p']), 'margin')
+              ?? ruleFor(s => has(s, ['p', 'article p', '.content p']), 'margin-bottom')
+  if (pMargin) {
+    const first = pMargin.trim().split(/\s+/)[0]
+    if (/^[\d.]+(px|rem|em)$/.test(first)) tokens.paragraphSpacing = first
+  }
+
+  // Link styling — color + decoration. Body links often differ from accent.
+  if (linkColor && isColor(linkColor)) tokens.linkColor = linkColor.trim()
+  const linkDecoration = ruleFor(s => has(s, ['a', 'a:link']), 'text-decoration')
+                      ?? ruleFor(s => has(s, ['a', 'a:link']), 'text-decoration-line')
+  if (linkDecoration) {
+    const d = linkDecoration.toLowerCase()
+    if (d.includes('underline')) tokens.linkUnderline = 'always'
+    else if (d.includes('none')) {
+      // Check :hover for a hover-underline pattern.
+      const hover = ruleFor(s => has(s, ['a:hover']), 'text-decoration')
+                 ?? ruleFor(s => has(s, ['a:hover']), 'text-decoration-line')
+      tokens.linkUnderline = hover && hover.toLowerCase().includes('underline') ? 'hover' : 'none'
+    }
+  }
+
+  // Headings — weight + line-height. Sample h2 (most representative of in-body
+  // headings; h1 is often hero-sized and skews the value).
+  const hWeight = ruleFor(s => has(s, ['h1', 'h2', 'h3', 'h1,h2', 'h2,h3']), 'font-weight')
+  if (hWeight) {
+    const w = hWeight.trim()
+    if (/^[1-9]00$/.test(w) || ['bold', 'normal', 'bolder', 'lighter'].includes(w.toLowerCase())) {
+      // Map keywords to numeric weights for consistency.
+      tokens.headingWeight = w.toLowerCase() === 'bold' ? '700' : w.toLowerCase() === 'normal' ? '400' : w
+    }
+  }
+  const hLine = ruleFor(s => has(s, ['h1', 'h2', 'h3', 'h1,h2', 'h2,h3']), 'line-height')
+  if (hLine) {
+    const lh = hLine.trim()
+    if (/^[\d.]+(rem|em|%|px)?$/.test(lh)) tokens.headingLineHeight = lh
+  }
+
+  // Blockquote — border color + italic vs. normal.
+  const bqBorder = ruleFor(s => has(s, ['blockquote', '.quote']), 'border-left-color')
+                ?? ruleFor(s => has(s, ['blockquote', '.quote']), 'border-color')
+  if (bqBorder && isColor(bqBorder)) tokens.blockquoteBorderColor = bqBorder.trim()
+  const bqStyle = ruleFor(s => has(s, ['blockquote', '.quote']), 'font-style')
+  if (bqStyle && /italic|normal/i.test(bqStyle)) tokens.blockquoteStyle = bqStyle.toLowerCase().includes('italic') ? 'italic' : 'normal'
 
   return tokens
 }

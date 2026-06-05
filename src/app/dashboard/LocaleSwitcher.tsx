@@ -27,17 +27,17 @@ export default function LocaleSwitcher() {
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50 rounded-xl transition-colors cursor-pointer"
+        className="flex w-full items-center gap-2.5 px-3 py-2 text-sm font-medium text-muted hover:text-text hover:bg-surface-hover rounded-lg transition-colors cursor-pointer"
       >
-        <Languages className="w-5 h-5 shrink-0" />
+        <Languages className="w-4 h-4 shrink-0" />
         <span className="flex-1 text-left">{LOCALE_META[locale].native}</span>
-        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
           role="listbox"
-          className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-neutral-200 rounded-xl shadow-lg overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-150 z-10"
+          className="absolute bottom-full left-0 right-0 mb-1.5 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden z-10"
         >
           {LOCALES.map(loc => {
             const active = loc === locale
@@ -48,17 +48,21 @@ export default function LocaleSwitcher() {
                 role="option"
                 aria-selected={active}
                 onClick={() => { setLocale(loc); setOpen(false) }}
-                className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
-                  active ? 'text-carma-700 bg-carma-50/60' : 'text-neutral-600 hover:bg-neutral-50'
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  active
+                    ? 'text-accent bg-accent-soft font-semibold'
+                    : 'text-muted hover:text-text hover:bg-surface-hover font-medium'
                 }`}
               >
                 <span>{LOCALE_META[loc].flag}</span>
                 <span className="flex-1 text-left">{LOCALE_META[loc].native}</span>
-                {active && <Check className="w-4 h-4 text-carma-500" />}
+                {active && <Check className="w-3.5 h-3.5 text-accent" />}
               </button>
             )
           })}
-          <p className="px-4 py-2 text-xs text-neutral-300 border-t border-neutral-100">{t('nav.language')}</p>
+          <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle border-t border-border">
+            {t('nav.language')}
+          </p>
         </div>
       )}
     </div>

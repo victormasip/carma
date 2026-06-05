@@ -38,7 +38,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-900/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       style={{ animation: 'modal-fade 0.18s ease' }}
       onClick={closeOnBackdrop ? onClose : undefined}
       role="dialog"
@@ -46,7 +46,7 @@ export function Modal({
       aria-labelledby={labelledBy}
     >
       <div
-        className={`relative w-full ${maxW} bg-white rounded-[2rem] shadow-premium`}
+        className={`relative w-full ${maxW} bg-bg-elevated text-text rounded-2xl shadow-premium border border-border`}
         style={{ animation: 'modal-in 0.2s cubic-bezier(0.16,1,0.3,1)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -61,9 +61,9 @@ export function ModalClose({ onClose }: { onClose: () => void }) {
     <button
       onClick={onClose}
       aria-label="Tancar"
-      className="cursor-pointer absolute top-5 right-5 p-2 text-neutral-400 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 rounded-full transition-colors z-10"
+      className="cursor-pointer absolute top-4 right-4 p-2 text-subtle hover:text-text bg-surface-subtle hover:bg-surface-hover rounded-lg transition-colors z-10"
     >
-      <X className="w-5 h-5" />
+      <X className="w-4 h-4" />
     </button>
   )
 }
@@ -115,35 +115,35 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       {children}
       <Modal open={!!opts} onClose={() => settle(false)} size="sm" labelledBy="confirm-title">
         {opts && (
-          <div className="p-7">
+          <div className="p-6">
             <div className="flex items-start gap-4">
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                isDanger ? 'bg-red-50 text-red-500' : 'bg-carma-50 text-carma-600'
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                isDanger ? 'bg-danger-soft text-danger' : 'bg-accent-soft text-accent'
               }`}>
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0 pt-0.5">
-                <h2 id="confirm-title" className="text-base font-extrabold text-neutral-900">{opts.title}</h2>
+                <h2 id="confirm-title" className="text-base font-semibold text-text">{opts.title}</h2>
                 {opts.message && (
-                  <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">{opts.message}</p>
+                  <p className="text-sm text-muted mt-1.5 leading-relaxed">{opts.message}</p>
                 )}
               </div>
             </div>
 
-            <div className="mt-7 flex gap-3">
+            <div className="mt-6 flex gap-2 justify-end">
               <button
                 onClick={() => settle(false)}
-                className="cursor-pointer flex-1 py-3 text-sm font-bold text-neutral-600 hover:bg-neutral-100 rounded-xl transition-colors"
+                className="cursor-pointer h-10 px-4 text-sm font-semibold text-muted hover:text-text hover:bg-surface-hover rounded-xl transition-colors"
               >
                 {opts.cancelLabel ?? 'Cancel·lar'}
               </button>
               <button
                 ref={confirmBtnRef}
                 onClick={() => settle(true)}
-                className={`cursor-pointer flex-1 py-3 text-sm font-bold text-white rounded-xl transition-colors shadow-sm ${
+                className={`cursor-pointer h-10 px-5 text-sm font-semibold rounded-xl transition-colors shadow-card ${
                   isDanger
-                    ? 'bg-red-500 hover:bg-red-600'
-                    : 'bg-gradient-to-r from-carma-600 via-carma-500 to-carma-600 hover:from-carma-500 hover:to-carma-400'
+                    ? 'bg-danger text-white hover:opacity-90'
+                    : 'bg-accent text-on-accent hover:bg-accent-hover'
                 }`}
               >
                 {opts.confirmLabel ?? 'Confirmar'}

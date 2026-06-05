@@ -17,6 +17,10 @@ const en: Dict = {
   'role.superadmin': 'Superadmin',
   'role.client': 'Client',
   'common.signOut': 'Sign out',
+  'nav.theme': 'Theme',
+  'nav.theme.light': 'Light',
+  'nav.theme.dark': 'Dark',
+  'nav.theme.system': 'System',
 }
 
 const es: Dict = {
@@ -30,6 +34,10 @@ const es: Dict = {
   'role.superadmin': 'Superadmin',
   'role.client': 'Cliente',
   'common.signOut': 'Cerrar sesión',
+  'nav.theme': 'Tema',
+  'nav.theme.light': 'Claro',
+  'nav.theme.dark': 'Oscuro',
+  'nav.theme.system': 'Sistema',
 }
 
 const ca: Dict = {
@@ -43,6 +51,10 @@ const ca: Dict = {
   'role.superadmin': 'Superadmin',
   'role.client': 'Client',
   'common.signOut': 'Tancar sessió',
+  'nav.theme': 'Tema',
+  'nav.theme.light': 'Clar',
+  'nav.theme.dark': 'Fosc',
+  'nav.theme.system': 'Sistema',
 }
 
 export const MESSAGES: Record<Locale, Dict> = { en, es, ca }

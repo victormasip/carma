@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import SiteDetailClient from './SiteDetailClient'
 import { listPosts } from '@/lib/actions/posts'
+import { fetchSiteStats } from '@/lib/analytics/read'
 
 export default async function SiteDetailsPage({
   params,
@@ -32,7 +33,7 @@ export default async function SiteDetailsPage({
 
   // Fetch all tab data in parallel — enables instant client-side tab switching.
   // Posts are paginated (first page only) so the full table is never loaded.
-  const [postsResult, suResult, clientsResult, themeResult] = await Promise.all([
+  const [postsResult, suResult, clientsResult, themeResult, initialStats] = await Promise.all([
     listPosts(siteId, { page: 1, status: 'all' }),
     isSuperAdmin
       ? admin.from('site_users').select('user_id, profiles!inner(email)').eq('site_id', siteId)
@@ -43,6 +44,9 @@ export default async function SiteDetailsPage({
     // Theme is fetched for everyone: free clients can customize the design of
     // their assigned sites (the Tema tab), only re-capture/delete are gated.
     admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
+    // Initial analytics for the Resum section (30 days) — server-rendered so the
+    // Overview has data on first paint with no client round-trip.
+    fetchSiteStats(admin, siteId, 30),
   ])
 
   const assignedUsers = isSuperAdmin
@@ -59,10 +63,13 @@ export default async function SiteDetailsPage({
 
   // All tabs are valid deep-link targets for everyone; locked ones render an
   // upsell panel for free clients rather than the real content.
-  const validTabs = ['articles', 'tema', 'connexio', 'usuaris']
+  const validTabs = ['resum', 'articles', 'tema', 'connexio', 'usuaris']
   const defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
-    ? (qTab as 'articles' | 'tema' | 'connexio' | 'usuaris')
-    : 'articles'
+    ? (qTab as 'resum' | 'articles' | 'tema' | 'connexio' | 'usuaris')
+    : 'resum'
+
+  // A pristine site (no theme captured, no posts) gets the onboarding chooser.
+  const isNewSite = !themeResult.data && (postsResult.total ?? 0) === 0
 
   return (
     <SiteDetailClient
@@ -71,6 +78,7 @@ export default async function SiteDetailsPage({
       siteCreatedAt={site.created_at}
       apiKey={site.api_key}
       isSuperAdmin={isSuperAdmin}
+      isNewSite={isNewSite}
       initialPosts={postsResult.posts}
       initialPostsMeta={{
         page: postsResult.page,
@@ -83,6 +91,7 @@ export default async function SiteDetailsPage({
       assignedUsers={assignedUsers}
       availableClients={availableClients}
       initialTheme={themeResult.data ?? null}
+      initialStats={initialStats}
       defaultTab={defaultTab}
       siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
     />

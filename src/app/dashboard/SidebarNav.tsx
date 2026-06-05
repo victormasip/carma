@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, Settings, FileText, Globe } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
+import { cn } from '@/lib/cn'
 
 type Site = { id: string; name: string }
 
@@ -15,71 +16,78 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
   const isSettings = pathname === '/dashboard/settings'
 
   return (
-    <nav className="flex-1 py-8 px-4 overflow-y-auto">
-      <Link
+    <nav className="flex-1 py-5 px-3 overflow-y-auto">
+      <NavItem
         href="/dashboard"
-        className={`relative flex items-center gap-3 px-4 py-3.5 text-sm font-bold rounded-xl transition-all group overflow-hidden ${
-          isHome
-            ? 'text-carma-700 bg-carma-50/50'
-            : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
-        }`}
-      >
-        {isHome && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2/3 bg-gradient-to-b from-carma-400 to-carma-600 rounded-r-full" />
-        )}
-        {isSuperAdmin ? (
-          <LayoutDashboard className={`w-5 h-5 ${isHome ? 'text-carma-500 drop-shadow-sm' : ''}`} />
-        ) : (
-          <FileText className={`w-5 h-5 ${isHome ? 'text-carma-500 drop-shadow-sm' : ''}`} />
-        )}
-        {isSuperAdmin ? t('nav.allSites') : t('nav.mySites')}
-      </Link>
+        active={isHome}
+        icon={isSuperAdmin ? <LayoutDashboard className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+        label={isSuperAdmin ? t('nav.allSites') : t('nav.mySites')}
+      />
 
-      {/* Multi-site hub: quick-switch between the sites the user manages. */}
       {sites.length > 0 && (
         <div className="mt-6">
-          <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest text-neutral-300">
+          <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">
             {t('nav.yourSites')}
           </p>
           <div className="space-y-0.5 max-h-[42vh] overflow-y-auto pr-1">
             {sites.map(site => {
               const active = pathname.startsWith(`/dashboard/sites/${site.id}`)
               return (
-                <Link
+                <NavItem
                   key={site.id}
                   href={`/dashboard/sites/${site.id}`}
+                  active={active}
+                  icon={<Globe className="w-4 h-4" />}
+                  label={site.name}
                   title={site.name}
-                  className={`relative flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl transition-all ${
-                    active
-                      ? 'text-carma-700 bg-carma-50/50'
-                      : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
-                  }`}
-                >
-                  {active && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-1/2 bg-gradient-to-b from-carma-400 to-carma-600 rounded-r-full" />
-                  )}
-                  <Globe className={`w-4 h-4 shrink-0 ${active ? 'text-carma-500' : 'text-neutral-300'}`} />
-                  <span className="truncate">{site.name}</span>
-                </Link>
+                  truncate
+                />
               )
             })}
           </div>
         </div>
       )}
 
-      <div className="mt-6 pt-4 border-t border-neutral-100/70">
-        <Link
+      <div className="mt-6 pt-4 border-t border-border">
+        <NavItem
           href="/dashboard/settings"
-          className={`flex items-center gap-3 px-4 py-3.5 text-sm font-bold rounded-xl transition-all ${
-            isSettings
-              ? 'text-carma-700 bg-carma-50/50'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
-          }`}
-        >
-          <Settings className={`w-5 h-5 ${isSettings ? 'text-carma-500' : ''}`} />
-          {t('nav.settings')}
-        </Link>
+          active={isSettings}
+          icon={<Settings className="w-4 h-4" />}
+          label={t('nav.settings')}
+        />
       </div>
     </nav>
+  )
+}
+
+function NavItem({
+  href,
+  active,
+  icon,
+  label,
+  title,
+  truncate,
+}: {
+  href: string
+  active: boolean
+  icon: React.ReactNode
+  label: string
+  title?: string
+  truncate?: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      title={title}
+      className={cn(
+        'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
+        active
+          ? 'bg-accent-soft text-accent font-semibold'
+          : 'text-muted hover:text-text hover:bg-surface-hover font-medium',
+      )}
+    >
+      <span className={cn('shrink-0', active ? 'text-accent' : 'text-subtle')}>{icon}</span>
+      <span className={cn(truncate && 'truncate min-w-0')}>{label}</span>
+    </Link>
   )
 }

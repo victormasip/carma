@@ -18,9 +18,9 @@ export const LOCALE_COOKIE = 'carma_locale'
 type LocaleMeta = { label: string; native: string; flag: string }
 
 export const LOCALE_META: Record<Locale, LocaleMeta> = {
-  en: { label: 'English', native: 'English', flag: '🇬🇧' },
-  es: { label: 'Spanish', native: 'Español', flag: '🇪🇸' },
-  ca: { label: 'Catalan', native: 'Català', flag: '🇦🇩' },
+  en: { label: 'English', native: 'English', flag: 'GB' },
+  es: { label: 'Spanish', native: 'Español', flag: 'ES' },
+  ca: { label: 'Catalan', native: 'Català', flag: 'CA' },
 }
 
 export function isLocale(v: unknown): v is Locale {

@@ -1,31 +1,155 @@
 @import "tailwindcss";
 
+/* ── Brand palette (Carma gold) ─────────────────────────────────────────────── */
 @theme {
-  /* La paleta cromàtica daurada de Carma */
   --color-carma-50: #fdfaef;
   --color-carma-100: #fbf3d6;
   --color-carma-200: #f7e4ac;
   --color-carma-300: #f2d179;
   --color-carma-400: #eeb849;
-  --color-carma-500: #d4af37; /* Daurat corporatiu */
+  --color-carma-500: #d4af37;
   --color-carma-600: #b58f27;
   --color-carma-700: #906d1c;
   --color-carma-800: #78591a;
   --color-carma-950: #1c1405;
-
-  /* Ombra prèmium ultra-suau per a elements flotants */
-  --shadow-premium: 0 30px 70px -10px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.01);
 }
 
-/* Forcem que tot el lloc web respiri amb el fons premium neutre */
+/* ── Semantic tokens — light + dark, runtime-switchable ─────────────────────── */
+@theme inline {
+  --color-bg:              var(--c-bg);
+  --color-bg-elevated:     var(--c-bg-elevated);
+  --color-surface:         var(--c-surface);
+  --color-surface-hover:   var(--c-surface-hover);
+  --color-surface-subtle:  var(--c-surface-subtle);
+
+  --color-text:            var(--c-text);
+  --color-muted:           var(--c-text-muted);
+  --color-subtle:          var(--c-text-subtle);
+
+  --color-border:          var(--c-border);
+  --color-border-strong:   var(--c-border-strong);
+
+  --color-accent:          var(--c-accent);
+  --color-accent-hover:    var(--c-accent-hover);
+  --color-accent-soft:     var(--c-accent-soft);
+  --color-on-accent:       var(--c-on-accent);
+
+  --color-success:         var(--c-success);
+  --color-success-soft:    var(--c-success-soft);
+  --color-warning:         var(--c-warning);
+  --color-warning-soft:    var(--c-warning-soft);
+  --color-danger:          var(--c-danger);
+  --color-danger-soft:     var(--c-danger-soft);
+  --color-info:            var(--c-info);
+  --color-info-soft:       var(--c-info-soft);
+
+  --shadow-card:           var(--c-shadow-card);
+  --shadow-pop:            var(--c-shadow-pop);
+  --shadow-premium:        var(--c-shadow-premium);
+
+  --radius-sm:   6px;
+  --radius:      10px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   22px;
+  --radius-2xl:  28px;
+}
+
+/* Light theme — warm paper, gold accent, calm contrast */
+:root {
+  --c-bg:             #F9F8F6;
+  --c-bg-elevated:    #ffffff;
+  --c-surface:        #ffffff;
+  --c-surface-hover:  #f5f4f1;
+  --c-surface-subtle: #faf9f6;
+
+  --c-text:           #1c1917;
+  --c-text-muted:     #57534e;
+  --c-text-subtle:    #a8a29e;
+
+  --c-border:         rgba(28, 25, 23, 0.07);
+  --c-border-strong:  rgba(28, 25, 23, 0.14);
+
+  --c-accent:         #d4af37;
+  --c-accent-hover:   #b58f27;
+  --c-accent-soft:    rgba(212, 175, 55, 0.12);
+  --c-on-accent:      #1c1405;
+
+  --c-success:        #10b981;
+  --c-success-soft:   rgba(16, 185, 129, 0.12);
+  --c-warning:        #f59e0b;
+  --c-warning-soft:   rgba(245, 158, 11, 0.13);
+  --c-danger:         #ef4444;
+  --c-danger-soft:    rgba(239, 68, 68, 0.10);
+  --c-info:           #3b82f6;
+  --c-info-soft:      rgba(59, 130, 246, 0.10);
+
+  --c-shadow-card:    0 1px 2px rgba(28, 25, 23, 0.05), 0 4px 12px -8px rgba(28, 25, 23, 0.10);
+  --c-shadow-pop:     0 16px 40px -16px rgba(28, 25, 23, 0.22), 0 4px 10px -6px rgba(28, 25, 23, 0.08);
+  --c-shadow-premium: 0 40px 80px -24px rgba(28, 25, 23, 0.14), 0 8px 20px -12px rgba(28, 25, 23, 0.06), 0 1px 2px rgba(28, 25, 23, 0.03);
+
+  color-scheme: light;
+}
+
+/* Dark theme — warm-neutral stone, brighter gold for AA contrast */
+[data-theme="dark"] {
+  --c-bg:             #0e0d0c;
+  --c-bg-elevated:    #181614;
+  --c-surface:        #1c1917;
+  --c-surface-hover:  #25221f;
+  --c-surface-subtle: #14120f;
+
+  --c-text:           #f5f5f4;
+  --c-text-muted:     #a8a29e;
+  --c-text-subtle:    #6b655d;
+
+  --c-border:         rgba(255, 255, 255, 0.08);
+  --c-border-strong:  rgba(255, 255, 255, 0.14);
+
+  --c-accent:         #eeb849;
+  --c-accent-hover:   #f2d179;
+  --c-accent-soft:    rgba(238, 184, 73, 0.16);
+  --c-on-accent:      #1c1405;
+
+  --c-success:        #34d399;
+  --c-success-soft:   rgba(52, 211, 153, 0.16);
+  --c-warning:        #fbbf24;
+  --c-warning-soft:   rgba(251, 191, 36, 0.16);
+  --c-danger:         #f87171;
+  --c-danger-soft:    rgba(248, 113, 113, 0.14);
+  --c-info:           #60a5fa;
+  --c-info-soft:      rgba(96, 165, 250, 0.14);
+
+  --c-shadow-card:    0 1px 2px rgba(0, 0, 0, 0.4);
+  --c-shadow-pop:     0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+  --c-shadow-premium: 0 24px 60px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+/* Accessible base typography: body text is never below 16px, with a comfortable
+   1.6 line-height for readability on every device. Components may scale DOWN for
+   dense UI chrome (labels, chips) but reading text inherits this baseline. */
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body {
-  background-color: #F9F8F6;
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font-size: 1rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* ── Global premium micro-interactions ──────────────────────────────────────
-   Subtle, app-wide touches that lift the feel without changing any layout. */
+/* Theme-aware selection */
+::selection { background: var(--c-accent-soft); color: var(--c-text); }
+
+/* ── Global micro-interactions ─────────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }
@@ -43,8 +167,9 @@ body {
 .animate-spin { animation: carma-spin 0.8s linear infinite !important; }
 /* Accessible, on-brand keyboard focus ring (mouse clicks are unaffected). */
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid rgba(212, 175, 55, 0.55);
+  outline: 2px solid var(--c-accent);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 /* Tactile press feedback on interactive controls. */
 button:not(:disabled):active,
@@ -242,3 +367,38 @@ a[role="button"]:active {
   display: flex; align-items: center; justify-content: center;
   width: 36px; border-radius: 0.6rem; background: #d4af37; color: #fff; cursor: pointer;
 }
+
+/* ── Editor dark-mode overrides ─────────────────────────────────────────────
+   Only the chrome around the writing surface flips with the theme; the public
+   blog (.carma-root rendered on /render) stays driven by the customer's tokens
+   and is unaffected. */
+[data-theme="dark"] .carma-editor .ProseMirror { color: #f5f5f4; }
+[data-theme="dark"] .carma-editor .ProseMirror ::selection { background: rgba(238, 184, 73, 0.28); }
+[data-theme="dark"] .carma-editor .ProseMirror .is-empty::before { color: #4b4640; }
+[data-theme="dark"] .carma-editor .ProseMirror a { color: #eeb849; }
+[data-theme="dark"] .carma-editor .ProseMirror a:hover { color: #f2d179; }
+[data-theme="dark"] .carma-editor .ProseMirror code { background: rgba(255,255,255,0.08); color: #f5f5f4; }
+[data-theme="dark"] .carma-editor .ProseMirror blockquote { color: #a8a29e; border-color: #eeb849; }
+[data-theme="dark"] .carma-editor .ProseMirror hr { border-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption { color: #a8a29e; }
+[data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption:empty::before { color: #4b4640; }
+[data-theme="dark"] .carma-editor .ProseMirror .carma-column { border-color: rgba(255,255,255,0.10); }
+[data-theme="dark"] .carma-editor .ProseMirror details.carma-toggle { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
+[data-theme="dark"] .carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary::before { color: #6b655d; }
+[data-theme="dark"] .carma-toc-editor { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
+[data-theme="dark"] .carma-toc-editor li button { color: #a8a29e; }
+[data-theme="dark"] .carma-toc-head { color: #6b655d; }
+[data-theme="dark"] .carma-toc-empty { color: #6b655d; }
+[data-theme="dark"] .carma-gallery-empty { color: #6b655d; border-color: rgba(255,255,255,0.14); }
+[data-theme="dark"] .carma-gallery-add input { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); color: #f5f5f4; }
+[data-theme="dark"] .carma-gallery-add input:focus { background: rgba(255,255,255,0.06); border-color: #eeb849; }
+[data-theme="dark"] .carma-carousel-arrow { background: #25221f; color: #f5f5f4; border-color: rgba(255,255,255,0.14); }
+[data-theme="dark"] .carma-carousel-arrow:hover { background: #f5f5f4; color: #1c1917; }
+[data-theme="dark"] .carma-carousel-slide { background: rgba(255,255,255,0.05); }
+[data-theme="dark"] .carma-cta-href { background: #25221f; border-color: rgba(255,255,255,0.10); }
+[data-theme="dark"] .carma-cta-align button { background: #25221f; border-color: rgba(255,255,255,0.10); color: #a8a29e; }
+/* Callouts in dark mode: lower-saturation tinted surfaces with light text */
+[data-theme="dark"] .carma-callout[data-variant="info"]    { background: rgba(59,130,246,0.10);  border-color: rgba(59,130,246,0.30);  color: #cfe2ff; }
+[data-theme="dark"] .carma-callout[data-variant="success"] { background: rgba(16,185,129,0.10);  border-color: rgba(16,185,129,0.30);  color: #b6f0d8; }
+[data-theme="dark"] .carma-callout[data-variant="warning"] { background: rgba(245,158,11,0.10);  border-color: rgba(245,158,11,0.30);  color: #fde2a3; }
+[data-theme="dark"] .carma-callout[data-variant="danger"]  { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: #fbb4b4; }

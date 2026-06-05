@@ -1,22 +1,30 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { parse, HTMLElement } from 'node-html-parser'
-import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText } from '@/lib/scrape/http'
-import { extractTokens, familiesFromFontLinks } from '@/lib/scrape/tokens'
-import { sanitizeStructural } from '@/lib/scrape/sanitize'
-import { absolutiseCssUrls as cssAbsUrls, splitImports } from '@/lib/scrape/clientCss'
-import { rebuildChrome, filterCssForRegion, trimPayload, type RebuiltRegion } from '@/lib/render/llmChrome'
+import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText, decodeEntities } from '@/lib/scrape/http'
+import { extractTokens } from '@/lib/scrape/tokens'
+import { absolutiseCssUrls as cssAbsUrls, splitImports, extractFontFaceCss, proxyFontsInCss } from '@/lib/scrape/clientCss'
+import { absolutise, buildExtractedHead } from '@/lib/scrape/headerFooter'
+import { splitPageChrome } from '@/lib/scrape/pageSplit'
+import { detectBlogSignature } from '@/lib/scrape/blogDetect'
 import { isLocale } from '@/lib/i18n/config'
+import {
+  sseFrame, stepFloor, stepWeight,
+  type CaptureEvent, type CaptureStepId, type AnalyzeResult,
+} from '@/lib/render/captureProgress'
 
 // node-html-parser requires the Node.js runtime.
 export const runtime = 'nodejs'
-// The LLM reconstruction (two parallel model calls) is slow — give the route
-// generous headroom. NOTE: values >60 require a Vercel Pro plan; on Hobby (60s
-// cap) set THEME_LLM_MODEL=claude-haiku-4-5 to stay under the limit.
-export const maxDuration = 120
+// The capture STREAMS its progress (Server-Sent Events) so the connection stays
+// alive and the user sees steady movement. The pipeline is a single static fetch
+// + a parallel CSS scan (for token extraction) + a synchronous, verbatim
+// absolutisation of the head/header/footer — no LLM, no headless browser. Fast,
+// but we keep headroom for a slow CDN serving many stylesheets.
+export const maxDuration = 60
 
 const MAX_STYLESHEETS = 24
 const MAX_CSS_BYTES = 900_000
+const CSS_CONCURRENCY = 6
 const FONT_SHEET_RE = /fonts\.(googleapis|gstatic)\.com|use\.typekit|typography\.com|cloud\.typography|fonts\.adobe|fonts\.bunny/i
 
 // ─── Framework + hosting detection ────────────────────────────────────────────
@@ -32,6 +40,12 @@ type Detection = {
   version?: string
   hosting: Hosting
   confidence: 'high' | 'medium' | 'low'
+}
+
+const FRAMEWORK_LABELS: Record<Framework, string> = {
+  wordpress: 'WordPress', nextjs: 'Next.js', astro: 'Astro', gatsby: 'Gatsby',
+  hugo: 'Hugo', jekyll: 'Jekyll', webflow: 'Webflow', squarespace: 'Squarespace',
+  wix: 'Wix', shopify: 'Shopify', vue: 'Vue', react: 'React', html: 'HTML estàtic',
 }
 
 function detectFramework(html: string, headers: Headers): Detection {
@@ -91,14 +105,10 @@ function detectFramework(html: string, headers: Headers): Detection {
 }
 
 // ─── HTML processing helpers ──────────────────────────────────────────────────
-
-function absolutise(url: string | undefined, base: URL): string | undefined {
-  if (!url) return undefined
-  const trimmed = url.trim()
-  if (!trimmed) return undefined
-  if (/^(https?:|data:|mailto:|tel:|#)/i.test(trimmed)) return trimmed
-  try { return new URL(trimmed, base).toString() } catch { return trimmed }
-}
+// The raw head/header/footer extraction (absolutise, buildExtractedHead,
+// rawRegionHtml, region selectors) lives in @/lib/scrape/headerFooter so it can be
+// unit-tested + reused. This route adds the CSS-fetch-for-tokens + framework
+// detection + SSE plumbing on top.
 
 type CssSource = { kind: 'url'; url: string } | { kind: 'inline'; css: string }
 
@@ -136,65 +146,74 @@ function collectHeadStyles(root: HTMLElement, base: URL): {
   return { sources, externalStyles, fontLinks }
 }
 
-// Absolutise every asset/link URL inside a markup fragment so nothing breaks
-// once it's detached from its origin.
-function absolutiseMarkup(el: HTMLElement, base: URL): void {
-  for (const a of el.querySelectorAll('a[href]')) {
-    const v = absolutise(a.getAttribute('href'), base); if (v) a.setAttribute('href', v)
-  }
-  for (const n of el.querySelectorAll('img[src],source[src],video[src],audio[src],use[href],[poster]')) {
-    for (const attr of ['src', 'href', 'poster'] as const) {
-      const cur = n.getAttribute(attr)
-      if (cur) { const v = absolutise(cur, base); if (v) n.setAttribute(attr, v) }
+// Bounded-concurrency map that preserves input order. Lets us fetch many
+// stylesheets at once (so one slow CDN can't stall the whole capture) without
+// opening an unbounded number of sockets.
+async function mapWithConcurrency<T, R>(
+  items: T[], limit: number, fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = cursor++
+      if (i >= items.length) return
+      results[i] = await fn(items[i], i)
     }
   }
-  for (const n of el.querySelectorAll('img[srcset],source[srcset]')) {
-    const srcset = n.getAttribute('srcset'); if (!srcset) continue
-    n.setAttribute('srcset', srcset.split(',').map(part => {
-      const [u, ...rest] = part.trim().split(/\s+/)
-      return [absolutise(u, base) ?? u, ...rest].join(' ')
-    }).join(', '))
-  }
-  for (const n of el.querySelectorAll('[style]')) {
-    const s = n.getAttribute('style')
-    if (s && /url\(/i.test(s)) n.setAttribute('style', cssAbsUrls(s, base))
-  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  await Promise.all(workers)
+  return results
 }
 
 // Fetch every stylesheet (following @import recursively), absolutise each
-// against its OWN url, and concatenate in cascade order. Skips font sheets
-// (kept as <link>) and stops at a byte budget.
+// against its OWN url, and concatenate in cascade order. Top-level sheets are
+// fetched in PARALLEL (bounded) so a single slow/broken sheet is skipped, never
+// fatal — graceful degradation over an all-or-nothing serial wait. Stops at a
+// byte budget when concatenating.
 async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> {
   const seen = new Set<string>()
-  const parts: string[] = []
-  let budget = MAX_CSS_BYTES
 
-  async function pullUrl(url: string, depth: number): Promise<void> {
-    if (depth > 4 || budget <= 0 || seen.has(url)) return
+  async function pullUrl(url: string, depth: number): Promise<string> {
+    if (depth > 4 || seen.has(url)) return ''
     seen.add(url)
     const css = await safeFetchText(url, { accept: 'text/css,*/*', timeout: 8_000 })
-    if (!css) return
+    if (!css) return ''
     let base: URL
     try { base = new URL(url) } catch { base = pageUrl }
     const { imports, rest } = splitImports(css, base)
-    for (const imp of imports) await pullUrl(imp, depth + 1)
-    const abs = cssAbsUrls(rest, base)
-    budget -= abs.length
-    parts.push(abs)
+    const importedParts: string[] = []
+    for (const imp of imports) importedParts.push(await pullUrl(imp, depth + 1))
+    importedParts.push(cssAbsUrls(rest, base))
+    return importedParts.join('\n')
   }
 
-  for (const src of sources) {
-    if (budget <= 0) break
+  // One resolver per source, preserving document order. Font sheets resolve to
+  // '' (they stay as <link>, never inlined).
+  const tasks: Array<() => Promise<string>> = sources.map(src => {
     if (src.kind === 'url') {
-      if (FONT_SHEET_RE.test(src.url)) continue // fonts stay as <link>
-      await pullUrl(src.url, 0)
-    } else {
-      const { imports, rest } = splitImports(src.css, pageUrl)
-      for (const imp of imports) await pullUrl(imp, 1)
-      const abs = cssAbsUrls(rest, pageUrl)
-      budget -= abs.length
-      parts.push(abs)
+      if (FONT_SHEET_RE.test(src.url)) return async () => ''
+      return () => pullUrl(src.url, 0)
     }
+    return async () => {
+      const { imports, rest } = splitImports(src.css, pageUrl)
+      const importedParts: string[] = []
+      for (const imp of imports) importedParts.push(await pullUrl(imp, 1))
+      importedParts.push(cssAbsUrls(rest, pageUrl))
+      return importedParts.join('\n')
+    }
+  })
+
+  const resolved = await mapWithConcurrency(tasks, CSS_CONCURRENCY, t => t())
+
+  // Concatenate in cascade order under the byte budget.
+  let budget = MAX_CSS_BYTES
+  const parts: string[] = []
+  for (const css of resolved) {
+    if (budget <= 0) break
+    const slice = css.length > budget ? css.slice(0, budget) : css
+    budget -= slice.length
+    if (slice) parts.push(slice)
   }
   return parts.join('\n')
 }
@@ -234,14 +253,6 @@ function extractScripts(root: HTMLElement, base: URL): {
   return { scriptsHtml: keepNodes.join('\n'), externalScripts }
 }
 
-function findRegionEl(root: HTMLElement, selectors: string[]): HTMLElement | null {
-  for (const sel of selectors) {
-    const el = root.querySelector(sel)
-    if (el && el.innerHTML.trim().length > 0) return el
-  }
-  return null
-}
-
 // Is this element inside the site chrome (header/footer/nav)? Those headings
 // (logo wordmark, etc.) are not the page's news/blog title.
 function isInChrome(el: HTMLElement): boolean {
@@ -260,11 +271,11 @@ function extractPageTitle(root: HTMLElement): string | null {
   // 1) First main-content <h1> that isn't part of the chrome.
   for (const h1 of root.querySelectorAll('h1')) {
     if (isInChrome(h1)) continue
-    const t = h1.text.replace(/\s+/g, ' ').trim()
+    const t = decodeEntities(h1.text.replace(/\s+/g, ' ').trim())
     if (t && t.length <= 80) return t
   }
   // 2) og:title / <title>, stripped of the site-name suffix.
-  const strip = (s: string) => s.split(/\s*[|·•\-–—]\s*/)[0].trim() || s.trim()
+  const strip = (s: string) => decodeEntities(s.split(/\s*[|·•\-–—]\s*/)[0].trim() || s.trim())
   const og = root.querySelector('meta[property="og:title"]')?.getAttribute('content')?.trim()
   if (og) return strip(og).slice(0, 80)
   const title = root.querySelector('title')?.text?.trim()
@@ -272,124 +283,16 @@ function extractPageTitle(root: HTMLElement): string | null {
   return null
 }
 
-// ─── Route handler ────────────────────────────────────────────────────────────
-
-export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'superadmin') return NextResponse.json({ error: 'Accés denegat' }, { status: 403 })
-
-  let body: { url?: string }
-  try { body = await request.json() } catch { return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 }) }
-
-  const referenceUrl = body.url?.trim() ?? ''
-  if (!referenceUrl) return NextResponse.json({ error: 'Cal una URL' }, { status: 400 })
-  if (!isValidHttpUrl(referenceUrl)) return NextResponse.json({ error: 'URL no vàlida' }, { status: 400 })
-  if (!isSafeUrl(referenceUrl)) return NextResponse.json({ error: 'URL no permesa' }, { status: 400 })
-
-  const fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
-  if (!fetched) return NextResponse.json({ error: "No s'ha pogut accedir a la pàgina" }, { status: 422 })
-
-  const baseUrl = new URL(referenceUrl)
-  let root: HTMLElement
-  try { root = parse(fetched.body) as HTMLElement } catch {
-    return NextResponse.json({ error: 'Error parsejant HTML' }, { status: 422 })
-  }
-
-  const { sources, externalStyles, fontLinks } = collectHeadStyles(root, baseUrl)
-  const { externalScripts } = extractScripts(root, baseUrl)
-
-  const headerEl = findRegionEl(root, [
-    // Semantic / ARIA first
-    'header[role="banner"]', '[role="banner"]', 'body > header',
-    // WordPress (classic + block themes / FSE) and page builders
-    'header#masthead', '#masthead', 'header#site-header', '#site-header',
-    '.elementor-location-header', '[data-elementor-type="header"]',
-    'header.wp-block-template-part', '.wp-block-template-part.site-header',
-    // Common conventions
-    'header.site-header', 'header#header', '.site-header', '.main-header',
-    '.page-header', '.global-header', '.l-header', '#header',
-    // Generic fallbacks
-    'header', 'nav[role="navigation"]', '.navbar', '.navigation', 'nav',
-  ])
-
-  const footerEl = findRegionEl(root, [
-    // Semantic / ARIA first
-    'footer[role="contentinfo"]', '[role="contentinfo"]', 'body > footer',
-    // WordPress (classic + block themes / FSE) and page builders
-    'footer#colophon', '#colophon', 'footer#site-footer', '#site-footer',
-    '.elementor-location-footer', '[data-elementor-type="footer"]',
-    'footer.wp-block-template-part', '.wp-block-template-part.site-footer',
-    // Common conventions
-    'footer.site-footer', 'footer#footer', '.site-footer', '.main-footer',
-    '.page-footer', '.global-footer', '.l-footer', '#footer',
-    // Generic fallback
-    'footer',
-  ])
-
-  // Capture the ORIGINAL header/footer markup as the model's SOURCE: every asset
-  // URL absolutised, scripts stripped. We do NOT ship this — the LLM rebuilds it.
-  const regionSource = (el: HTMLElement | null): string => {
-    if (!el) return ''
-    absolutiseMarkup(el, baseUrl)
-    // trimPayload aggressively strips scripts/styles/iframes/SVGs/base64 to slash
-    // the token count before the markup ever reaches the model.
-    return trimPayload(sanitizeStructural(el.toString()))
-  }
-  const headerSource = regionSource(headerEl)
-  const footerSource = regionSource(footerEl)
-
-  const detection = detectFramework(fetched.body, fetched.headers)
-
-  // Fetch + inline the site's real CSS once. Used for (a) design-token
-  // extraction and (b) giving the reconstruction model a relevant styling slice
-  // per region. Crucially, this CSS is NEVER shipped to the render page.
-  let urlCount = 0
-  const cappedSources = sources.filter(s => s.kind === 'inline' || ++urlCount <= MAX_STYLESHEETS)
-  const rawCss = await fetchAllCss(cappedSources, baseUrl)
-  const tokens = extractTokens({ root, cssTexts: [rawCss], fontLinks })
-
-  // ── LLM Reconstruction Engine: rebuild clean, isolated, native chrome ──
-  let rebuilt: { header: RebuiltRegion | null; footer: RebuiltRegion | null }
-  try {
-    rebuilt = await rebuildChrome({
-      siteName: baseUrl.hostname.replace(/^www\./, ''),
-      baseUrl: baseUrl.origin,
-      tokens: tokens as unknown as Record<string, string>,
-      fontFamilies: familiesFromFontLinks(fontLinks),
-      headerHtml: headerSource,
-      footerHtml: footerSource,
-      headerCss: filterCssForRegion(rawCss, headerSource),
-      footerCss: filterCssForRegion(rawCss, footerSource),
-    })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Error desconegut'
-    return NextResponse.json({ error: `Reconstrucció IA fallida: ${message}` }, { status: 502 })
-  }
-
-  // Stored per-region as JSON { html, css }: a self-contained, namespaced
-  // component. CSS is force-scoped at render time; html is script-stripped here.
-  const region = (r: RebuiltRegion | null): string =>
-    r ? JSON.stringify({ html: sanitizeStructural(r.html), css: r.css }) : ''
-
-  return NextResponse.json({
-    // No client CSS bundle is shipped any more — isolation is structural.
-    extracted_head: '',
-    extracted_header: region(rebuilt.header),
-    extracted_footer: region(rebuilt.footer),
-    extracted_scripts: '',
-    external_styles: [...new Set(externalStyles)],
-    external_scripts: [...new Set(externalScripts)],
-    font_links: [...new Set(fontLinks)],
-    detection,
-    base_url: baseUrl.origin,
-    tokens,
-    section_title: extractPageTitle(root),
-    detected_locale: detectLocale(root),
-  })
+// The real brand / site name, so a freshly-created site auto-adopts it on capture
+// (instead of keeping the placeholder the operator typed). og:site_name is the
+// reliable source; otherwise a clean capitalized domain.
+function extractSiteName(root: HTMLElement, baseUrl: URL): string | null {
+  const og = root.querySelector('meta[property="og:site_name"]')?.getAttribute('content')?.trim()
+  if (og) return decodeEntities(og).slice(0, 60)
+  const app = root.querySelector('meta[name="application-name"]')?.getAttribute('content')?.trim()
+  if (app) return decodeEntities(app).slice(0, 60)
+  const host = baseUrl.hostname.replace(/^www\./, '').split('.')[0]
+  return host ? host.charAt(0).toUpperCase() + host.slice(1) : null
 }
 
 // The site's primary language from <html lang> (or og:locale), mapped to a
@@ -405,4 +308,215 @@ function detectLocale(root: HTMLElement): string | null {
     if (isLocale(base)) return base
   }
   return null
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+//
+// Authentication and request validation happen up front and return ordinary
+// JSON errors. Once the request is accepted, the response BODY is a Server-Sent
+// Events stream: the pipeline runs step by step and streams a `progress` event
+// for each, a final `result` event with the captured theme, or an `error` event
+// if a critical step cannot proceed. Non-critical failures (e.g. a slow
+// stylesheet) are skipped, not fatal.
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'superadmin') return NextResponse.json({ error: 'Accés denegat' }, { status: 403 })
+
+  let body: { url?: string; blogUrl?: string }
+  try { body = await request.json() } catch { return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 }) }
+
+  const referenceUrl = body.url?.trim() ?? ''
+  if (!referenceUrl) return NextResponse.json({ error: 'Cal una URL' }, { status: 400 })
+  if (!isValidHttpUrl(referenceUrl)) return NextResponse.json({ error: 'URL no vàlida' }, { status: 400 })
+  if (!isSafeUrl(referenceUrl)) return NextResponse.json({ error: 'URL no permesa' }, { status: 400 })
+
+  // Optional user-provided Blog URL — the fallback that guides card cloning when
+  // auto-detection is unsure. Validated/SSRF-checked like the main URL.
+  const blogUrlRaw = body.blogUrl?.trim() ?? ''
+  const blogUrlOverride = blogUrlRaw && isValidHttpUrl(blogUrlRaw) && isSafeUrl(blogUrlRaw) ? blogUrlRaw : ''
+
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false
+      const send = (event: CaptureEvent) => {
+        if (closed) return
+        try { controller.enqueue(encoder.encode(sseFrame(event))) } catch { closed = true }
+      }
+      const running = (step: CaptureStepId, detail?: string) =>
+        send({ type: 'progress', step, status: 'running', pct: stepFloor(step), detail })
+      const done = (step: CaptureStepId, detail?: string) =>
+        send({ type: 'progress', step, status: 'done', pct: stepFloor(step) + stepWeight(step), detail })
+      const skipped = (step: CaptureStepId, detail?: string) =>
+        send({ type: 'progress', step, status: 'skipped', pct: stepFloor(step) + stepWeight(step), detail })
+      const fail = (step: CaptureStepId | undefined, error: string) =>
+        send({ type: 'error', step, error })
+
+      try {
+        // ── 1. FETCH (static) ────────────────────────────────────────────────────
+        // We inject the page's REAL head + header + footer verbatim, so a plain
+        // fetch of the server-rendered HTML is all we need — the client's own CSS
+        // and JS (linked from the head) do the rest in the browser. (Fully
+        // JS-rendered chrome that isn't in the initial HTML won't be captured, but
+        // the overwhelming majority of sites server-render their header/footer.)
+        running('fetch')
+        const fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
+        if (!fetched) { fail('fetch', "No s'ha pogut accedir a la pàgina. Comprova la URL."); return }
+        const baseUrl = new URL(referenceUrl)
+        let root: HTMLElement
+        try { root = parse(fetched.body) as HTMLElement } catch {
+          fail('fetch', 'No hem pogut interpretar l’HTML de la pàgina.'); return
+        }
+        done('fetch', baseUrl.hostname.replace(/^www\./, ''))
+
+        // ── 2. ANALYZE (framework / hosting) ───────────────────────────────────
+        running('analyze')
+        const detection = detectFramework(fetched.body, fetched.headers)
+        done('analyze', FRAMEWORK_LABELS[detection.framework])
+
+        // ── 3. REGIONS (head assets / header / footer / title / locale) ────────
+        // We pull the page title/locale/site-name BEFORE extracting the head (the
+        // head extraction drops <title>/<meta>, but we read them off `root` which
+        // is untouched — extraction builds new strings, it doesn't mutate <head>).
+        running('regions')
+        const { sources, externalStyles, fontLinks } = collectHeadStyles(root, baseUrl)
+        const { externalScripts } = extractScripts(root, baseUrl)
+        const sectionTitle = extractPageTitle(root)
+        const detectedLocale = detectLocale(root)
+        const siteName = extractSiteName(root, baseUrl)
+
+        let extractedHead = buildExtractedHead(root, baseUrl)
+        // The Top/Bottom sandwich: parse5 splits the page around its main content,
+        // capturing EVERYTHING before it (wrappers + header) and EVERYTHING after
+        // it down to </body> (footer + wrapper closers + late scripts), repairing
+        // malformed markup so it can't swallow the page. The blog renders between
+        // them; body attrs reapply the source's global background/typography.
+        const split = splitPageChrome(fetched.body, baseUrl)
+        const extractedHeader = split.top
+        const extractedFooter = split.bottom
+        const extractedBodyAttrs = split.bodyAttrs
+        const regionDetail =
+          split.strategy === 'content' ? 'contingut aïllat · wrappers intactes'
+          : 'cap regió detectada'
+        if (split.strategy === 'none') {
+          send({
+            type: 'notice', severity: 'warning', code: 'no_chrome',
+            message: 'No hem detectat capçalera ni peu en aquesta pàgina. El blog es mostrarà amb el disseny base.',
+          })
+        }
+        done('regions', regionDetail)
+
+        // ── 4. STYLES (parallel CSS fetch + token extraction) ──────────────────
+        running('styles')
+        let rawCss = ''
+        let tokens
+        try {
+          let urlCount = 0
+          const cappedSources = sources.filter(s => s.kind === 'inline' || ++urlCount <= MAX_STYLESHEETS)
+          rawCss = await fetchAllCss(cappedSources, baseUrl)
+          tokens = extractTokens({ root, cssTexts: [rawCss], fontLinks })
+          done('styles', `${externalStyles.length} fulls CSS · ${fontLinks.length} tipografies`)
+        } catch {
+          // A styling hiccup must not sink the capture: degrade to whatever the
+          // inline markup + font links can give us and keep going.
+          tokens = extractTokens({ root, cssTexts: [rawCss], fontLinks })
+          skipped('styles', 'estils parcials (alguns fulls no disponibles)')
+        }
+
+        // ICON-FONT CORS FIX: re-emit every @font-face we fetched with its font
+        // URLs routed through our same-origin /api/asset proxy, appended to the
+        // injected head. The browser then loads the (CORS-blocked) self-hosted icon
+        // fonts via the proxy, so icon fonts render even when the client's server
+        // sends no CORS headers. Additive — the original linked CSS is untouched.
+        const fontFaceCss = proxyFontsInCss(extractFontFaceCss(rawCss))
+        if (fontFaceCss.trim()) {
+          extractedHead = `${extractedHead}\n<style data-carma-fontfix>${fontFaceCss.replace(/<\/style/gi, '<\\/style')}</style>`
+        }
+
+        // ── 5. INJECT (raw head + header + footer, NO LLM) ──────────────────────
+        // The clone is the client's REAL head assets + REAL header/footer markup,
+        // injected verbatim. There is nothing to "reconstruct": the work is the
+        // absolutisation done above. This step just reports what was captured.
+        running('reconstruct')
+        const cloned = [
+          extractedHeader ? 'capçalera' : null,
+          extractedFooter ? 'peu' : null,
+          extractedHead ? 'estils' : null,
+        ].filter(Boolean)
+
+        // Smart blog detection (GOAL 2): does the client already have a blog/news
+        // section + a repeating article-card design we should replicate? Detect on
+        // the captured page first; if it isn't a listing but a blog URL exists,
+        // fetch that index ONCE and detect the card pattern there (best-effort —
+        // a slow/blocked fetch never sinks the capture).
+        let blogSignature = detectBlogSignature({ root, cssTexts: [rawCss], base: baseUrl, blogUrlOverride: blogUrlOverride || null })
+        // Fetch the blog index — the USER'S Blog URL if given, else our (now strict)
+        // guess — to detect + clone its real card design. Best-effort.
+        const targetBlog = blogUrlOverride || (!blogSignature.card ? blogSignature.blogUrl : null)
+        if (targetBlog && targetBlog !== referenceUrl) {
+          try {
+            const blogPage = await safeFetch(targetBlog, { timeout: 8_000 })
+            if (blogPage) {
+              const blogRoot = parse(blogPage.body) as HTMLElement
+              blogSignature = detectBlogSignature({
+                root, cssTexts: [rawCss], base: baseUrl, blogRoot, blogUrlOverride: blogUrlOverride || null,
+              })
+            }
+          } catch { /* best-effort — keep the first-pass signature */ }
+        }
+        done('reconstruct', cloned.length ? cloned.join(' + ') : 'cap regió')
+
+        // ── 6. FINALIZE (packaging) ────────────────────────────────────────────
+        running('finalize')
+        const data: AnalyzeResult = {
+          // extracted_head = the client's real head assets (CSS/fonts/scripts),
+          // injected into the render <head> so they style the light-DOM
+          // header/footer 1:1. The blog between them is OUR template, isolated in
+          // a Shadow DOM. The card path is retired; native cards render the feed.
+          extracted_head: extractedHead,
+          extracted_header: extractedHeader,
+          extracted_footer: extractedFooter,
+          extracted_body_attrs: extractedBodyAttrs,
+          extracted_card: '',
+          extracted_scripts: '',
+          external_styles: [...new Set(externalStyles)],
+          external_scripts: [...new Set(externalScripts)],
+          font_links: [...new Set(fontLinks)],
+          detection,
+          base_url: baseUrl.origin,
+          tokens,
+          section_title: sectionTitle,
+          detected_locale: detectedLocale,
+          site_name: siteName,
+          blog_signature: blogSignature,
+        }
+        done('finalize')
+        send({ type: 'result', data })
+      } catch (err) {
+        fail(undefined, err instanceof Error ? err.message : 'Error inesperat durant la captura')
+      } finally {
+        closed = true
+        try { controller.close() } catch { /* already closed / client gone */ }
+      }
+    },
+    cancel() {
+      // Client disconnected (closed the modal / navigated away). Nothing to
+      // clean up beyond letting the in-flight work fall away.
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      // Disable proxy buffering so events flush to the client immediately.
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

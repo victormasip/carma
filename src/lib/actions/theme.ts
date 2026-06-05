@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { DesignTokens } from '@/lib/scrape/tokens'
+import type { BlogSignature } from '@/lib/scrape/blogDetect'
 import { normalizeLocale } from '@/lib/i18n/config'
 import { translateChromeWithClaude } from '@/lib/i18n/translate'
 
@@ -19,6 +20,8 @@ export type ThemeData = {
   extracted_head?: string | null
   extracted_header?: string | null
   extracted_footer?: string | null
+  extracted_body_attrs?: string | null
+  extracted_card?: string | null
   extracted_scripts?: string | null
   external_styles?: string[]
   external_scripts?: string[]
@@ -29,6 +32,7 @@ export type ThemeData = {
   design_tokens?: DesignTokens | null
   section_title?: string | null
   chrome_i18n?: Record<string, ChromeI18nEntry>
+  blog_signature?: BlogSignature | null
 }
 
 async function assertSuperAdmin() {
@@ -85,9 +89,18 @@ export async function saveTheme(siteId: string, data: ThemeData): Promise<Action
       section_title: data.section_title ?? null,
       is_enabled: true,
     }
-    const withI18n = { ...baseRow, chrome_i18n: data.chrome_i18n ?? {} }
+    // Newer optional columns (011 chrome_i18n, 012 extracted_card, 014
+    // extracted_body_attrs, 016 blog_signature) live only in the full row; if any
+    // is missing we retry with the base row so saving still works pre-migration.
+    const fullRow = {
+      ...baseRow,
+      extracted_card: data.extracted_card ?? null,
+      chrome_i18n: data.chrome_i18n ?? {},
+      extracted_body_attrs: data.extracted_body_attrs ?? null,
+      blog_signature: data.blog_signature ?? null,
+    }
 
-    let { error } = await admin.from('site_themes').upsert(withI18n, { onConflict: 'site_id' })
+    let { error } = await admin.from('site_themes').upsert(fullRow, { onConflict: 'site_id' })
     if (error?.code === UNDEFINED_COLUMN) {
       ;({ error } = await admin.from('site_themes').upsert(baseRow, { onConflict: 'site_id' }))
     }
@@ -102,20 +115,39 @@ export async function saveTheme(siteId: string, data: ThemeData): Promise<Action
   }
 }
 
-// Parse / re-assemble a chrome region JSON ({ html, css }).
-function parseRegionJson(json: string | null | undefined): { html: string; css: string } | null {
-  if (!json) return null
+// A stored chrome region is now usually RAW HTML, but a starter template (or a
+// pre-pivot capture) can still be JSON `{ html, css, mode? }`. We translate only
+// the HTML and re-serialize in the SAME shape so the region keeps rendering via
+// the same path (raw → raw; JSON → JSON with its css/mode preserved).
+type ParsedRegion =
+  | { kind: 'raw'; html: string }
+  | { kind: 'json'; html: string; css: string; mode?: string }
+
+function parseRegionValue(value: string | null | undefined): ParsedRegion | null {
+  if (!value) return null
+  const s = value.trim()
+  if (!s) return null
+  if (!s.startsWith('{')) return { kind: 'raw', html: s }
   try {
-    const o = JSON.parse(json) as { html?: unknown; css?: unknown }
+    const o = JSON.parse(s) as { html?: unknown; css?: unknown; mode?: unknown }
     if (typeof o.html !== 'string') return null
-    return { html: o.html, css: typeof o.css === 'string' ? o.css : '' }
-  } catch { return null }
+    return { kind: 'json', html: o.html, css: typeof o.css === 'string' ? o.css : '', mode: typeof o.mode === 'string' ? o.mode : undefined }
+  } catch {
+    return { kind: 'raw', html: s }
+  }
+}
+
+function serializeTranslatedRegion(region: ParsedRegion | null, html: string): string | null {
+  if (!region) return null
+  if (region.kind === 'raw') return html
+  return JSON.stringify({ html, css: region.css, ...(region.mode ? { mode: region.mode } : {}) })
 }
 
 /**
  * AI-translate the base header/footer/section title into another locale. Keeps
- * each region's CSS untouched (only the HTML text is translated). Returns the
- * translated chrome entry for the editor to store in chrome_i18n[toLocale].
+ * each region's structure/CSS untouched (only the HTML text is translated).
+ * Returns the translated chrome entry for the editor to store in
+ * chrome_i18n[toLocale].
  */
 export async function translateChrome(
   siteId: string,
@@ -129,8 +161,8 @@ export async function translateChrome(
     const to = normalizeLocale(toLocale)
     if (from === to) return { error: "L'idioma d'origen i el de destí són el mateix" }
 
-    const header = parseRegionJson(base.header)
-    const footer = parseRegionJson(base.footer)
+    const header = parseRegionValue(base.header)
+    const footer = parseRegionValue(base.footer)
 
     const translated = await translateChromeWithClaude(from, to, {
       headerHtml: header?.html ?? '',
@@ -140,8 +172,8 @@ export async function translateChrome(
 
     return {
       result: {
-        header: header ? JSON.stringify({ html: translated.headerHtml, css: header.css }) : null,
-        footer: footer ? JSON.stringify({ html: translated.footerHtml, css: footer.css }) : null,
+        header: serializeTranslatedRegion(header, translated.headerHtml),
+        footer: serializeTranslatedRegion(footer, translated.footerHtml),
         section_title: translated.sectionTitle || null,
       },
     }

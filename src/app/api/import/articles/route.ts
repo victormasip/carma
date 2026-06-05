@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parse } from 'node-html-parser'
-import { isValidHttpUrl, isSafeUrl, safeFetchText, safeFetchJson, detectLangFromUrl } from '@/lib/scrape/http'
+import { isValidHttpUrl, isSafeUrl, safeFetchText, safeFetchJson, detectLangFromUrl, decodeEntities } from '@/lib/scrape/http'
 import { extractWithSelectors } from '@/lib/scrape/extract'
+import { rehostImportedImages } from '@/lib/scrape/rehost'
 
 function slugFromUrl(url: string): string {
   try {
@@ -32,13 +33,13 @@ function extractFromHtml(html: string): { title: string; description: string; im
     root.querySelector(`meta[property="${prop}"]`)?.getAttribute('content') ??
     root.querySelector(`meta[name="${prop}"]`)?.getAttribute('content') ?? ''
 
-  const title = (
+  const title = decodeEntities((
     getMeta('og:title') ||
     root.querySelector('h1')?.text?.trim() ||
     root.querySelector('title')?.text?.split(/[|–-]/)[0]?.trim() || ''
-  ).replace(/\s+/g, ' ').trim()
+  ).replace(/\s+/g, ' ').trim())
 
-  const description = (getMeta('og:description') || getMeta('description')).replace(/\s+/g, ' ').trim()
+  const description = decodeEntities((getMeta('og:description') || getMeta('description')).replace(/\s+/g, ' ').trim())
   const image = getMeta('og:image')
 
   root.querySelectorAll('script, style, nav, header, footer, aside, [class*="sidebar"], [class*="comment"], [id*="comment"], [class*="widget"], noscript').forEach(el => el.remove())
@@ -86,9 +87,9 @@ async function importFromWordPress(
   if (!Array.isArray(posts) || posts.length === 0) return null
 
   const wp = posts[0]
-  const title = stripTags(wp.title?.rendered ?? '').replace(/\s+/g, ' ').trim()
+  const title = decodeEntities(stripTags(wp.title?.rendered ?? '').replace(/\s+/g, ' ').trim())
   const content = stripGutenbergComments(wp.content?.rendered ?? '')
-  const excerpt = stripTags(wp.excerpt?.rendered ?? '').replace(/\s+/g, ' ').trim()
+  const excerpt = decodeEntities(stripTags(wp.excerpt?.rendered ?? '').replace(/\s+/g, ' ').trim())
   const categories = (wp.categories ?? []).map(id => catMap[id]).filter(Boolean)
   const tags = (wp.tags ?? []).map(id => tagMap[id]).filter(Boolean)
 
@@ -130,8 +131,8 @@ export async function POST(request: NextRequest) {
       safeFetchJson(`${wpApiBase}/categories?per_page=100&_fields=id,name`) as Promise<WpCategory[] | null>,
       safeFetchJson(`${wpApiBase}/tags?per_page=100&_fields=id,name`) as Promise<WpTag[] | null>,
     ])
-    if (Array.isArray(cats)) catMap = Object.fromEntries(cats.map(c => [c.id, c.name]))
-    if (Array.isArray(tagsData)) tagMap = Object.fromEntries(tagsData.map(t => [t.id, t.name]))
+    if (Array.isArray(cats)) catMap = Object.fromEntries(cats.map(c => [c.id, decodeEntities(c.name)]))
+    if (Array.isArray(tagsData)) tagMap = Object.fromEntries(tagsData.map(t => [t.id, decodeEntities(t.name)]))
   }
 
   const hasCustomSelectors = selectors && Object.keys(selectors).some(k => selectors[k]?.trim())
@@ -193,6 +194,15 @@ export async function POST(request: NextRequest) {
 
       const finalSlug = slug || slugFromUrl(url)
       const lang = detectLangFromUrl(url)
+
+      // Re-host external/scraped images into our own Storage so the article never
+      // hot-links to (or breaks because of) the source site. Best-effort: any
+      // image that can't be fetched keeps its original URL.
+      try {
+        const rehosted = await rehostImportedImages(siteId, contentHtml, featuredImage)
+        contentHtml = rehosted.contentHtml
+        featuredImage = rehosted.featuredImage
+      } catch { /* keep original URLs on any failure */ }
 
       const post = {
         site_id: siteId,
