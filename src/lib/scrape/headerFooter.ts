@@ -1,15 +1,19 @@
-// Raw header / footer / <head> extraction — the foundation of the 1:1 clone.
+// <head> extraction + script-safety + fragment normalisation — shared helpers for
+// the 1:1 clone. (Header/footer CARVING is NOT here: it lives in pageSplit.ts,
+// which slices the page into a Top/Bottom sandwich around the content range. This
+// module no longer owns chrome detection — the old selector-table engine was
+// retired in favour of pageSplit's single structural model.)
 //
-// The Magic Wand injects the target site's REAL markup verbatim:
 //   · buildExtractedHead → the client's <head> assets (stylesheets / inline
 //     <style> / font links / resource hints / scripts), absolutised to the origin,
 //     with <title>/<meta>/<link rel=canonical>/<base> STRIPPED (ours own those).
-//   · rawRegionHtml → the absolutised outerHTML of the detected <header>/<footer>.
+//   · shouldDropScript    → the anti-blank-page denylist (shared with pageSplit).
+//   · normalizeFragment   → spec-compliant (parse5) balancing of a markup fragment.
+//   · absolutise          → resolve a single URL against the page origin.
 //
-// These are rendered verbatim into the render document (head + light-DOM chrome)
-// where the injected head CSS styles the chrome pixel-for-pixel. We do NOT rewrite
-// urls inside EXTERNAL .css files: served from their absolute origin URL, their
-// own relative font/image urls resolve automatically — that's the key to fidelity
+// The injected head CSS styles the light-DOM chrome pixel-for-pixel. We do NOT
+// rewrite urls inside EXTERNAL .css files: served from their absolute origin URL,
+// their own relative font/image urls resolve automatically — the key to fidelity
 // without re-hosting a single asset.
 //
 // Pure + dependency-light (node-html-parser, already a project dep). No DOM, no
@@ -57,34 +61,6 @@ export function shouldDropScript(src: string | null | undefined, inline = ''): b
   return DANGEROUS_INLINE_SCRIPT.test(inline)
 }
 
-export const HEADER_SELECTORS = [
-  // Semantic / ARIA first
-  'header[role="banner"]', '[role="banner"]', 'body > header',
-  // WordPress (classic + block themes / FSE) and page builders
-  'header#masthead', '#masthead', 'header#site-header', '#site-header',
-  '.elementor-location-header', '[data-elementor-type="header"]',
-  'header.wp-block-template-part', '.wp-block-template-part.site-header',
-  // Common conventions
-  'header.site-header', 'header#header', '.site-header', '.main-header',
-  '.page-header', '.global-header', '.l-header', '#header',
-  // Generic fallbacks
-  'header', 'nav[role="navigation"]', '.navbar', '.navigation', 'nav',
-]
-
-export const FOOTER_SELECTORS = [
-  // Semantic / ARIA first
-  'footer[role="contentinfo"]', '[role="contentinfo"]', 'body > footer',
-  // WordPress (classic + block themes / FSE) and page builders
-  'footer#colophon', '#colophon', 'footer#site-footer', '#site-footer',
-  '.elementor-location-footer', '[data-elementor-type="footer"]',
-  'footer.wp-block-template-part', '.wp-block-template-part.site-footer',
-  // Common conventions
-  'footer.site-footer', 'footer#footer', '.site-footer', '.main-footer',
-  '.page-footer', '.global-footer', '.l-footer', '#footer',
-  // Generic fallback
-  'footer',
-]
-
 // Resolve a URL against the page origin. Leaves absolute / data / anchor URLs as-is.
 export function absolutise(url: string | undefined | null, base: URL): string | undefined {
   if (!url) return undefined
@@ -93,31 +69,6 @@ export function absolutise(url: string | undefined | null, base: URL): string | 
   if (/^(https?:|data:|mailto:|tel:|#)/i.test(trimmed)) return trimmed
   if (trimmed.startsWith('//')) return `${base.protocol}${trimmed}`
   try { return new URL(trimmed, base).toString() } catch { return trimmed }
-}
-
-// Absolutise every asset/link URL inside a markup fragment so nothing breaks once
-// it's detached from its origin (href / src / poster / srcset + inline url()).
-export function absolutiseMarkup(el: HTMLElement, base: URL): void {
-  for (const a of el.querySelectorAll('a[href]')) {
-    const v = absolutise(a.getAttribute('href'), base); if (v) a.setAttribute('href', v)
-  }
-  for (const n of el.querySelectorAll('img[src],source[src],video[src],audio[src],use[href],[poster]')) {
-    for (const attr of ['src', 'href', 'poster'] as const) {
-      const cur = n.getAttribute(attr)
-      if (cur) { const v = absolutise(cur, base); if (v) n.setAttribute(attr, v) }
-    }
-  }
-  for (const n of el.querySelectorAll('img[srcset],source[srcset]')) {
-    const srcset = n.getAttribute('srcset'); if (!srcset) continue
-    n.setAttribute('srcset', srcset.split(',').map(part => {
-      const [u, ...rest] = part.trim().split(/\s+/)
-      return [absolutise(u, base) ?? u, ...rest].join(' ')
-    }).join(', '))
-  }
-  for (const n of el.querySelectorAll('[style]')) {
-    const s = n.getAttribute('style')
-    if (s && /url\(/i.test(s)) n.setAttribute('style', absolutiseCssUrls(s, base))
-  }
 }
 
 // Re-serialize an element's attributes, optionally overriding some, escaping
@@ -195,18 +146,6 @@ export function buildExtractedHead(root: HTMLElement, base: URL): string {
   return parts.join('\n').slice(0, MAX_HEAD_HTML)
 }
 
-// Remove inline on*="…" handlers from a subtree (cheapest XSS vector). Keeps every
-// other attribute and the client's real <script> tags intact.
-export function stripInlineEventHandlers(el: HTMLElement): void {
-  const scrub = (node: HTMLElement) => {
-    for (const k of Object.keys(node.attributes)) {
-      if (/^on/i.test(k)) node.removeAttribute(k)
-    }
-  }
-  scrub(el)
-  for (const child of el.querySelectorAll('*')) scrub(child)
-}
-
 /**
  * Normalize a possibly-malformed HTML fragment into browser-accurate, well-formed
  * markup. Targets routinely ship a header/footer with UNCLOSED tags; injected
@@ -221,26 +160,3 @@ export function normalizeFragment(html: string): string {
   try { return serialize(parseFragment(html)) } catch { return html }
 }
 
-/**
- * The raw, absolutised, WELL-FORMED outerHTML of a detected region (header/footer),
- * rendered VERBATIM in the light DOM. Keeps scripts (native menu interactivity) but
- * strips inline on*-handlers. Returns '' when the element is missing.
- */
-export function rawRegionHtml(el: HTMLElement | null, base: URL): string {
-  if (!el) return ''
-  absolutiseMarkup(el, base)
-  stripInlineEventHandlers(el)
-  const raw = el.toString()
-  // Cap FIRST, then balance — so even a mid-tag truncation can't leave a tag open.
-  const capped = raw.length > MAX_REGION_HTML ? raw.slice(0, MAX_REGION_HTML) : raw
-  return normalizeFragment(capped)
-}
-
-/** First region selector that matches a non-trivial element. */
-export function findRegionEl(root: HTMLElement, selectors: string[]): HTMLElement | null {
-  for (const sel of selectors) {
-    const el = root.querySelector(sel)
-    if (el && el.innerHTML.trim().length > 0) return el
-  }
-  return null
-}

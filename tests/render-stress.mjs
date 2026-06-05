@@ -383,6 +383,100 @@ section('icon fonts & SVG normalization')
   ok(!/body text body text/.test(split.top + split.bottom), 'icons: main content still carved out')
 }
 
+// 13. AUDIT REGRESSION (boundary failure) — a MULTI-SECTION homepage. The old
+//     single-node model replaced only the densest section and shoved every OTHER
+//     section (hero, cta) into the header/footer halves. The range carve must lift
+//     ALL sibling content sections out together, leaving only the true global
+//     header above and the true global footer below.
+section('multi-section homepage — every section carved, none leaks to chrome')
+{
+  const para = (w) => `<p>${(w + ' ').repeat(40)}</p>`
+  const raw = `<body><div class="page-wrapper">
+      <header id="T-HEADER" class="site-header"><nav><a href="/">Home</a><a href="/about">About</a></nav></header>
+      <section class="hero"><h1>Welcome</h1>${para('Hero intro copy that is substantial.')}</section>
+      <section class="featured"><h2>Featured</h2>${para('Featured grid body content here plenty.')}<img src="/f.jpg"></section>
+      <section class="cta"><h2>Subscribe</h2>${para('Call to action persuasive paragraph text.')}</section>
+    </div>
+    <footer id="T-FOOTER" class="site-footer"><p>© 2026 Acme</p></footer></body>`
+  const split = splitPageChrome(raw, new URL('https://multi.test/'))
+  ok(split.strategy === 'content', `multi-section: content strategy (got ${split.strategy})`)
+  ok(/id="T-HEADER"/.test(split.top), 'multi-section: global header in Top')
+  ok(/id="T-FOOTER"/.test(split.bottom), 'multi-section: global footer in Bottom')
+  ok(/class="page-wrapper"/.test(split.top), 'multi-section: page-wrapper OPENS in Top (intact)')
+  // The crux: NONE of the three sections may leak into the chrome halves.
+  const halves = split.top + split.bottom
+  ok(!/class="hero"/.test(halves), 'multi-section: HERO carved out (not swallowed into header)')
+  ok(!/class="featured"/.test(halves), 'multi-section: FEATURED carved out')
+  ok(!/class="cta"/.test(halves), 'multi-section: CTA carved out (not swallowed into footer)')
+  const html = buildListingPage(baseTheme(split.top, split.bottom, '', split.bodyAttrs), 'Multi', 's1', [POST], 'en')
+  assertWellFormedSandwich('multi-section', html)
+}
+
+// 14. AUDIT REGRESSION (injection failure) — a DEEPLY NESTED footer (page-builder
+//     style, ~8 wrappers down), which the old depth≤6 cap silently missed, sending
+//     the blog BELOW the footer. Bottom-up, cap-free detection must find it and
+//     keep it below the blog.
+section('deep-nested page-builder footer (beyond old depth cap)')
+{
+  const deepFooter = '<div class="elementor"><div class="e-con"><div class="e-con-inner"><div class="wrap"><div class="row"><div class="col"><footer id="T-FOOTER" class="site-footer"><nav><a href="/privacy">Privacy</a></nav><p>© 2026</p></footer></div></div></div></div></div></div>'
+  const raw = `<body>
+      <header id="T-HEADER" class="site-header"><nav><a href="/">Home</a></nav></header>
+      <main class="content"><h1>Article</h1><p>${'Real article body. '.repeat(50)}</p></main>
+      ${deepFooter}
+    </body>`
+  const split = splitPageChrome(raw, new URL('https://deep.test/'))
+  ok(split.strategy === 'content', `deep-footer: content strategy (got ${split.strategy})`)
+  ok(/id="T-HEADER"/.test(split.top), 'deep-footer: header in Top')
+  ok(/id="T-FOOTER"/.test(split.bottom), 'deep-footer: deep footer found + placed in Bottom (not below blog)')
+  ok(!/Real article body/.test(split.top + split.bottom), 'deep-footer: article body carved out')
+  const html = buildArticlePage(baseTheme(split.top, split.bottom, '', split.bodyAttrs), 'Deep', 's1', POST, 'en')
+  const a = assertWellFormedSandwich('deep-footer', html)
+  const host = a.byClass('carma-embed-host')[0], foot = a.byId('T-FOOTER')
+  ok(host && foot && a.idx(host) < a.idx(foot), 'deep-footer: blog precedes footer (injection order correct)')
+}
+
+// 15. A MEGA-FOOTER with far more text than a thin article must still be treated as
+//     chrome (Bottom), never mistaken for the content block and slotted.
+section('mega-footer must stay chrome, not become the content node')
+{
+  const sitemap = Array.from({ length: 40 }, (_, i) => `<a href="/p${i}">Link section item number ${i}</a>`).join('')
+  const raw = `<body>
+      <header id="T-HEADER" class="site-header"><nav><a href="/">Home</a></nav></header>
+      <main class="content"><h1>Short</h1><p>A tiny article body.</p></main>
+      <footer id="T-FOOTER" class="site-footer"><div class="links">${sitemap}</div></footer>
+    </body>`
+  const split = splitPageChrome(raw, new URL('https://mega.test/'))
+  ok(split.strategy === 'content', `mega-footer: content strategy (got ${split.strategy})`)
+  ok(/id="T-FOOTER"/.test(split.bottom), 'mega-footer: footer in Bottom (chrome)')
+  ok(/Link section item number 0/.test(split.bottom), 'mega-footer: footer links preserved in Bottom')
+  ok(!/Link section item number 0/.test(split.top), 'mega-footer: footer not pulled into Top')
+  ok(!/A tiny article body/.test(split.top + split.bottom), 'mega-footer: the real (thin) article still carved out')
+}
+
+// 16. ASYMMETRIC nesting — the footer lives INSIDE the same wrapper as the content
+//     (header is a body-level sibling). The slice must end before the footer so the
+//     footer stays in Bottom inside that wrapper, with content fully carved.
+section('asymmetric — footer nested with content, header outside')
+{
+  const raw = `<body>
+      <header id="T-HEADER" class="site-header"><nav><a href="/">Home</a></nav></header>
+      <div id="page">
+        <section class="a"><h1>Part A</h1><p>${'Section A body text. '.repeat(20)}</p></section>
+        <section class="b"><h2>Part B</h2><p>${'Section B body text. '.repeat(20)}</p></section>
+        <footer id="T-FOOTER" class="site-footer"><p>© 2026</p></footer>
+      </div>
+    </body>`
+  const split = splitPageChrome(raw, new URL('https://asym.test/'))
+  ok(split.strategy === 'content', `asymmetric: content strategy (got ${split.strategy})`)
+  ok(/id="T-HEADER"/.test(split.top), 'asymmetric: header in Top')
+  ok(/id="page"/.test(split.top), 'asymmetric: #page wrapper opens in Top')
+  ok(/id="T-FOOTER"/.test(split.bottom), 'asymmetric: footer in Bottom (kept inside #page)')
+  ok(!/Section A body text/.test(split.top + split.bottom), 'asymmetric: section A carved out')
+  ok(!/Section B body text/.test(split.top + split.bottom), 'asymmetric: section B carved out')
+  const html = buildArticlePage(baseTheme(split.top, split.bottom, '', split.bodyAttrs), 'Asym', 's1', POST, 'en')
+  assertWellFormedSandwich('asymmetric', html)
+}
+
 // ── summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'═'.repeat(48)}`)
 console.log(`RESULT: ${pass} passed, ${fail} failed`)
