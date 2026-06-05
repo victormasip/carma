@@ -643,8 +643,10 @@ function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: Head
   const fonts = buildFontLinks(theme)
   if (fonts) parts.push(fonts)
   // OUR base reset — emitted BEFORE the client head so the client's own body{}
-  // rules (background, global type) WIN and the page reads like the source.
-  parts.push(`<style>${buildPageResetCss(tokens)}</style>`)
+  // rules (background, global type) WIN and the page reads like the source. The
+  // page background is the SOURCE's real bg (not the forced-light blog surface), so
+  // light-on-dark chrome stays readable.
+  parts.push(`<style>${buildPageResetCss(pageBackground(theme, tokens))}</style>`)
   // THE CLIENT'S REAL HEAD — its stylesheets / fonts / scripts. This is what makes
   // the injected light-DOM Top/Bottom look 1:1 with the source site.
   const clientHead = sanitizeInjectedHead(theme?.extracted_head ?? '')
@@ -656,15 +658,29 @@ function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: Head
   return parts.join('\n')
 }
 
+// The page (light-DOM) background. CRITICAL: this is the SOURCE's REAL background,
+// NOT the readability-forced token bg. The injected chrome often has light text
+// designed for a dark site, or a transparent header that inherits the page bg —
+// forcing the page white made that text unreadable (white-on-white). The BLOG stays
+// readable regardless because it paints its OWN opaque, readability-forced surface
+// inside the Shadow DOM (:host). We only accept a clean, self-contained CSS colour
+// token (no rule-breakout chars); otherwise we fall back to the forced token bg.
+function pageBackground(theme: Theme, tokens: DesignTokens): string {
+  const raw = theme?.design_tokens?.colorBg
+  const safe = typeof raw === 'string' ? raw.trim() : ''
+  if (safe && /^[#a-z0-9(),.%/\s-]+$/i.test(safe) && !/[{}<>;]/.test(safe)) return safe
+  return tokens.colorBg
+}
+
 // Document base reset, emitted BEFORE the injected client head so the client's own
-// body{} rules win. We set only a margin reset + a background FALLBACK (the captured
-// page background) for sites whose CSS doesn't paint the body itself. We set NO
-// global font/typography — the client's injected CSS owns the chrome's look, and
-// the blog owns its own inside the shadow.
-function buildPageResetCss(t: DesignTokens): string {
+// body{} rules win. We set only a margin reset + the source's real page background
+// (so transparent/inherit chrome reads correctly). We set NO global font/typography
+// — the client's injected CSS owns the chrome's look, and the blog owns its own
+// inside the shadow.
+function buildPageResetCss(bg: string): string {
   return `html{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{background:${t.colorBg}}`
+body{background:${bg}}`
 }
 
 // The blog shadow-host box-guard, emitted AFTER the client head so it always wins.
@@ -720,6 +736,40 @@ const DSD_RUNTIME = `(function(){
 
 function runtimeScript(): string {
   return `<script>${DSD_RUNTIME}</script>`
+}
+
+// Client-side readability guard for the INJECTED chrome (light DOM only). The raw
+// header/footer carry the source's OWN colours; when a transparent header that
+// expected a hero image, or a colour rule we couldn't capture, leaves LIGHT text on
+// a LIGHT effective background, it's unreadable (the reported white-on-white). This
+// post-load pass detects exactly that — clearly light text over a clearly light,
+// image-less effective background — and darkens just that text. It runs in the
+// browser (where computed styles exist, so it's deterministic + free, no LLM). It
+// NEVER touches the blog (the Shadow DOM is out of reach of light-DOM
+// querySelectorAll; we also skip the host element) and never touches text that sits
+// on a dark background or a background image/gradient (which provides its own
+// contrast). Conservative thresholds keep it from misfiring on healthy pages.
+const CONTRAST_GUARD = `(function(){
+  function L(c){var m=c&&c.match(/rgba?\\(([^)]+)\\)/);if(!m)return null;var p=m[1].split(',').map(parseFloat);if(p.length>3&&p[3]===0)return null;return (0.299*p[0]+0.587*p[1]+0.114*p[2])/255;}
+  function bg(el){var n=el;while(n&&n.nodeType===1){var s=getComputedStyle(n);if(s.backgroundImage&&s.backgroundImage!=='none')return -1;var l=L(s.backgroundColor);if(l!==null)return l;n=n.parentElement;}return 1;}
+  function run(){try{
+    var host=document.querySelector('.carma-embed-host');
+    var body=document.body;if(!body)return;var els=body.querySelectorAll('*');
+    for(var i=0;i<els.length;i++){var el=els[i];
+      if(host&&(el===host||host.contains(el)))continue;
+      var has=false,ch=el.childNodes;for(var j=0;j<ch.length;j++){if(ch[j].nodeType===3&&ch[j].textContent.trim()){has=true;break;}}
+      if(!has)continue;
+      var tl=L(getComputedStyle(el).color);if(tl===null||tl<0.72)continue;
+      var bl=bg(el);if(bl===-1||bl<=0.6)continue;
+      el.style.setProperty('color','#1c1c1c','important');
+    }
+  }catch(e){}}
+  if(document.readyState!=='loading')run();else document.addEventListener('DOMContentLoaded',run);
+  setTimeout(run,700);
+})();`
+
+function contrastGuardScript(): string {
+  return `<script>${CONTRAST_GUARD}</script>`
 }
 
 // Cookieless analytics beacon — fires one view on load, skipping the dashboard's
@@ -998,6 +1048,7 @@ ${jsonLd}
 ${bodyOpenTag(theme)}
 ${listingBodyHtml(theme, siteName, siteId, posts, locale)}
 ${runtimeScript()}
+${contrastGuardScript()}
 ${trackingScript(siteId, null, 'listing')}
 </body>
 </html>`
@@ -1058,6 +1109,7 @@ ${jsonLd}
 ${bodyOpenTag(theme)}
 ${articleBodyHtml(theme, siteId, post, locale)}
 ${runtimeScript()}
+${contrastGuardScript()}
 ${trackingScript(siteId, post.id, 'article')}
 </body>
 </html>`

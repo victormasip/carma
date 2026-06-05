@@ -140,7 +140,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      // Browser revalidates so theme/chrome edits show immediately for the owner;
+      // CDN edge still caches for visitors (see listing route for rationale).
+      'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
     },
   })
 }

@@ -76,7 +76,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      // Browser always revalidates (so the owner sees a fresh capture/theme save
+      // immediately — saveTheme calls revalidatePath); the CDN edge still caches
+      // for visitors via s-maxage. Fixes "re-captured chrome doesn't show on the
+      // live render but does in the preview" (the preview always cache-busts).
+      'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
     },
   })
 }

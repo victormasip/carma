@@ -537,6 +537,32 @@ section('failsafe — chrome preserved when no content block is detected')
   ok(bare.strategy === 'none', `failsafe/bare: no chrome → none (got ${bare.strategy})`)
 }
 
+// 18. READABLE CHROME — a DARK source site. The page (light-DOM) background must
+//     keep the source's REAL dark bg so the injected chrome's light text stays
+//     readable; the readability force applies only to the BLOG surface (shadow).
+//     Plus the client-side contrast guard ships on every render.
+section('readable chrome — page bg = source bg (not forced-light) + contrast guard')
+{
+  const darkTheme = {
+    extracted_head: '',
+    extracted_header: '<header id="T-HEADER" class="site-header" style="color:#fff">Menu</header>',
+    extracted_footer: '<footer id="T-FOOTER" class="site-footer" style="color:#fff">© 2026</footer>',
+    extracted_body_attrs: '',
+    design_tokens: { colorBg: '#0b0b0b', colorText: '#f5f5f5' }, // a genuinely dark site
+    default_locale: 'en',
+  }
+  const html = buildListingPage(darkTheme, 'Dark', 's1', [POST], 'en')
+  // The light-DOM page body keeps the source's real dark background (so light-on-
+  // dark chrome reads), NOT the readability-forced white.
+  ok(/body\{background:#0b0b0b\}/.test(html), 'dark-site: page body uses the source dark bg (not forced white)')
+  ok(!/body\{background:#(ffffff|fff)\b/i.test(html), 'dark-site: page body is NOT forced to white')
+  // The blog still paints its own readable surface inside the shadow (var-driven).
+  ok(/background:var\(--ct-bg\)/.test(html), 'dark-site: blog shadow surface is token-driven (stays readable)')
+  // The deterministic, free contrast guard ships on every render.
+  ok(/getComputedStyle/.test(html) && /carma-embed-host/.test(html), 'render: client-side contrast guard present')
+  assertWellFormedSandwich('dark-site', html)
+}
+
 // ── summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'═'.repeat(48)}`)
 console.log(`RESULT: ${pass} passed, ${fail} failed`)
