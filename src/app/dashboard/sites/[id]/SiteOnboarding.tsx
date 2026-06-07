@@ -23,16 +23,20 @@ function normalizeUrl(raw: string): string {
 }
 
 export default function SiteOnboarding({
-  siteName, onMagicWandStarted, onTemplateApplied, onDismiss,
+  siteName, initialUrl, autoStart, onMagicWandStarted, onTemplateApplied, onDismiss,
 }: {
   siteName: string
+  /** Prefill the Magic Wand URL (carried from the public landing funnel). */
+  initialUrl?: string
+  /** Immediately fire the clone on mount (seamless funnel from registration). */
+  autoStart?: boolean
   onMagicWandStarted: () => void
   onTemplateApplied: (templateName: string) => void
   onDismiss: () => void
 }) {
   const { grab, applyTemplate } = useThemeStudio()
   const [view, setView] = useState<'choose' | 'templates'>('choose')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(initialUrl ?? '')
 
   const startMagicWand = () => {
     const target = normalizeUrl(url)
@@ -40,6 +44,18 @@ export default function SiteOnboarding({
     onMagicWandStarted()
     void grab(target)
   }
+
+  // Seamless funnel: when arriving from registration with a target URL, kick the
+  // Magic Wand automatically so the user watches their site assemble itself.
+  const fired = useRef(false)
+  useEffect(() => {
+    if (autoStart && initialUrl && !fired.current) {
+      fired.current = true
+      onMagicWandStarted()
+      void grab(normalizeUrl(initialUrl))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, initialUrl])
 
   const pickTemplate = (tpl: BlogTemplate) => {
     applyTemplate(tpl, siteName)
