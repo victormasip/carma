@@ -1,0 +1,270 @@
+/* ============================================================================
+ * Carma Design System — Colors & Typography
+ * ----------------------------------------------------------------------------
+ * A premium Catalan-first content-management platform. Warm gold (daurat)
+ * over an off-white canvas; Plus Jakarta Sans throughout; extrabold display,
+ * tiny uppercase eyebrows. Soft "premium" shadows, generous radii.
+ * ========================================================================== */
+
+/* ── Webfont (load locally; fallback to Google) ──────────────────────────── */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("fonts/PlusJakartaSans-VariableFont_wght.woff2") format("woff2-variations"),
+       url("https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_qU79TKKZqA.woff2") format("woff2");
+}
+
+:root {
+  /* ──────────────────────────────────────────────────────────────────────
+   * 1. GOLD SCALE — "Daurat corporatiu"
+   *    Lifted 1:1 from src/app/globals.css @theme.
+   *    500 is the corporate gold; 600 is the hover/dark counterpart.
+   * ────────────────────────────────────────────────────────────────────── */
+  --carma-50:  #fdfaef;
+  --carma-100: #fbf3d6;
+  --carma-200: #f7e4ac;
+  --carma-300: #f2d179;
+  --carma-400: #eeb849;
+  --carma-500: #d4af37;  /* ★ Corporate gold */
+  --carma-600: #b58f27;
+  --carma-700: #906d1c;
+  --carma-800: #78591a;
+  --carma-950: #1c1405;
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 2. NEUTRALS — Tailwind's `neutral` ramp, used everywhere for chrome.
+   * ────────────────────────────────────────────────────────────────────── */
+  --neutral-50:  #fafafa;
+  --neutral-100: #f5f5f5;
+  --neutral-200: #e5e5e5;
+  --neutral-300: #d4d4d4;
+  --neutral-400: #a3a3a3;
+  --neutral-500: #737373;
+  --neutral-600: #525252;
+  --neutral-700: #404040;
+  --neutral-800: #262626;
+  --neutral-900: #171717;
+  --neutral-950: #0a0a0a;
+
+  /* The warm canvas the entire app sits on. */
+  --bg-page: #F9F8F6;
+  --bg-card: #ffffff;
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 3. SEMANTIC STATUS
+   * ────────────────────────────────────────────────────────────────────── */
+  --success-500: #22c55e;
+  --success-50:  #f0fdf4;
+  --success-100: #dcfce7;
+  --success-600: #16a34a;
+  --success-700: #15803d;
+
+  --danger-500: #ef4444;
+  --danger-50:  #fef2f2;
+  --danger-100: #fee2e2;
+  --danger-600: #dc2626;
+  --danger-700: #b91c1c;
+
+  --info-500: #3b82f6;
+  --info-50:  #eff6ff;
+  --info-100: #dbeafe;
+
+  --warning-500: #f59e0b;
+  --warning-50:  #fffbeb;
+  --warning-100: #fef3c7;
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 4. SEMANTIC FOREGROUNDS / BACKGROUNDS
+   *    Use these in components rather than raw scale steps where possible.
+   * ────────────────────────────────────────────────────────────────────── */
+  --fg-1: var(--neutral-900);   /* primary copy + display */
+  --fg-2: var(--neutral-700);   /* body strong */
+  --fg-3: var(--neutral-500);   /* body / secondary */
+  --fg-4: var(--neutral-400);   /* tertiary / eyebrows */
+  --fg-5: var(--neutral-300);   /* placeholders, dividers */
+  --fg-accent: var(--carma-700);
+  --fg-accent-strong: var(--carma-800);
+
+  --bg-1: var(--bg-page);
+  --bg-2: var(--bg-card);
+  --bg-3: var(--neutral-50);
+  --bg-tint: rgba(212, 175, 55, 0.06);   /* gold tint @ ~6% */
+  --bg-tint-2: rgba(212, 175, 55, 0.12);
+
+  --border-1: var(--neutral-100);
+  --border-2: var(--neutral-200);
+  --border-3: rgba(212, 175, 55, 0.30);  /* gold border on active items */
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 5. RADII — Carma leans LARGE.
+   * ────────────────────────────────────────────────────────────────────── */
+  --radius-sm:  0.5rem;   /*  8px  pills, tags */
+  --radius-md:  0.75rem;  /* 12px  inputs, small buttons */
+  --radius-lg:  1rem;     /* 16px  buttons, list items */
+  --radius-xl:  1.5rem;   /* 24px  panels, toasts */
+  --radius-2xl: 2rem;     /* 32px  modals */
+  --radius-3xl: 2.5rem;   /* 40px  hero cards, dashboards */
+  --radius-full: 9999px;
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 6. SHADOWS — soft + generous; signature "premium" shadow is huge & faint.
+   * ────────────────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 6px 18px -6px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 18px 40px -18px rgba(0, 0, 0, 0.22);
+  --shadow-premium: 0 30px 70px -10px rgba(0, 0, 0, 0.06),
+                    0 1px 3px rgba(0, 0, 0, 0.01);
+  --shadow-toast: 0 24px 60px -12px rgba(0, 0, 0, 0.28);
+  --shadow-gold: 0 10px 30px -6px rgba(212, 175, 55, 0.30);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.02);
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 7. SPACING — Tailwind's 4-px grid.
+   * ────────────────────────────────────────────────────────────────────── */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-7:  1.75rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ──────────────────────────────────────────────────────────────────────
+   * 8. TYPOGRAPHY — Plus Jakarta Sans variable; mono is system.
+   * ────────────────────────────────────────────────────────────────────── */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-editor: ui-sans-serif, system-ui, -apple-system,
+                 "Segoe UI", Roboto, sans-serif; /* TipTap article body */
+
+  /* Type scale */
+  --text-xs:   0.75rem;   /* 12 */
+  --text-sm:   0.875rem;  /* 14 */
+  --text-base: 1rem;      /* 16 */
+  --text-md:   1.0625rem; /* 17 — editor body */
+  --text-lg:   1.125rem;  /* 18 */
+  --text-xl:   1.25rem;   /* 20 — card titles */
+  --text-2xl:  1.5rem;    /* 24 — H2 editor */
+  --text-3xl:  1.875rem;  /* 30 — page title */
+  --text-4xl:  2rem;      /* 32 — H1 editor */
+  --text-display: 2.25rem;/* 36 — wordmark / hero */
+
+  /* Tracking for the signature uppercase eyebrow label */
+  --tracking-tight:  -0.02em;
+  --tracking-snug:   -0.015em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.025em;
+  --tracking-widest: 0.1em;
+
+  /* Animation */
+  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1); /* signature modal/in entrances */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-mid: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* ============================================================================
+ * SEMANTIC ELEMENT STYLES
+ * Drop-in styles for an unstyled HTML page. Don't fight Tailwind if present —
+ * these only apply to bare tags. Components/pages should use vars directly.
+ * ========================================================================== */
+html {
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body { font-feature-settings: "ss01" on, "cv11" on; }
+
+::selection { background: var(--carma-500); color: #fff; }
+
+/* Headings — extrabold, tight tracking, the Carma look. */
+h1 {
+  font-size: var(--text-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.1;
+  color: var(--fg-1);
+}
+h2 {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.15;
+  color: var(--fg-1);
+}
+h3 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-snug);
+  line-height: 1.25;
+  color: var(--fg-1);
+}
+h4 {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--fg-1);
+}
+p {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--fg-3);
+}
+small, .text-eyebrow {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--fg-4);
+}
+a {
+  color: var(--carma-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+a:hover { color: var(--carma-800); }
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+code {
+  background: var(--neutral-100);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+hr { border: none; border-top: 1px solid var(--border-1); }
+
+/* The Carma wordmark — used in nav and login. */
+.carma-wordmark {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-1);
+  line-height: 1;
+}
+.carma-wordmark .dot { color: var(--carma-500); }
+
+/* Universal focus ring — gold, accessible, mouse-clicks unaffected. */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid rgba(212, 175, 55, 0.55);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+/* Tactile press feedback used app-wide. */
+button:not(:disabled):active,
+a[role="button"]:active { transform: scale(0.985); }

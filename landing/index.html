@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carma — Un blog empoderat</title>
+  <meta name="description" content="Enganxa una URL. Carma clona la identitat visual del teu lloc web i et lliura un blog amb editor d'estil Notion en 30 segons. Sense codi.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            carma: {
+              50:  '#fdfaef', 100: '#fbf3d6', 200: '#f7e4ac', 300: '#f2d179',
+              400: '#eeb849', 500: '#d4af37', 600: '#b58f27', 700: '#906d1c',
+              800: '#78591a', 950: '#1c1405',
+            },
+            page: '#F9F8F6',
+            ink:  '#171717',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          boxShadow: {
+            premium: '0 30px 70px -10px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.01)',
+            gold:    '0 10px 30px -6px rgba(212, 175, 55, 0.35)',
+            goldlg:  '0 24px 60px -12px rgba(212, 175, 55, 0.45)',
+            card:    '0 18px 40px -18px rgba(0, 0, 0, 0.18)',
+            inner1:  'inset 0 1px 0 rgba(255,255,255,0.6)',
+          },
+          borderRadius: {
+            '4xl': '2rem',
+            '5xl': '2.5rem',
+          },
+          keyframes: {
+            'fade-up':   { '0%': { opacity:0, transform:'translateY(14px)' }, '100%': { opacity:1, transform:'translateY(0)' } },
+            'float':     { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
+            'shimmer':   { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+            'caret':     { '0%,49%': { opacity: 1 }, '50%,100%': { opacity: 0 } },
+            'glow':      { '0%,100%': { opacity: 0.55 }, '50%': { opacity: 0.85 } },
+            'rotate-slow':{ '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+          },
+          animation: {
+            'fade-up':  'fade-up 0.7s cubic-bezier(0.16,1,0.3,1) both',
+            'float':    'float 6s ease-in-out infinite',
+            'shimmer':  'shimmer 3s linear infinite',
+            'caret':    'caret 1.05s steps(1) infinite',
+            'glow':     'glow 4s ease-in-out infinite',
+            'rotate-slow': 'rotate-slow 18s linear infinite',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { background: #F9F8F6; color: #171717; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    ::selection { background: #d4af37; color: #fff; }
+
+    /* Signature gold gradient button */
+    .btn-gold {
+      background-image: linear-gradient(90deg, #b58f27 0%, #d4af37 50%, #b58f27 100%);
+      background-size: 200% 100%;
+      transition: background-position .4s ease, transform .15s ease, box-shadow .3s ease;
+    }
+    .btn-gold:hover { background-position: 100% 0; }
+    .btn-gold:active { transform: scale(0.985); }
+
+    /* Faux iridescent gold border on the Premium pricing card */
+    .gold-ring {
+      position: relative;
+      background: #fff;
+      border-radius: 2rem;
+      isolation: isolate;
+    }
+    .gold-ring::before {
+      content: ""; position: absolute; inset: -1.5px;
+      background: linear-gradient(135deg, #f7e4ac 0%, #d4af37 35%, #fdfaef 55%, #b58f27 75%, #f2d179 100%);
+      border-radius: inherit;
+      z-index: -1;
+    }
+
+    /* Premium press feedback applied app-wide */
+    button:not(:disabled):active { transform: scale(0.985); }
+
+    /* Hero atmospheric gold halos */
+    .halo {
+      position: absolute;
+      border-radius: 9999px;
+      filter: blur(140px);
+      pointer-events: none;
+    }
+    /* Slow drift on the hero halos for a "magical atmosphere" feel */
+    @keyframes drift-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-30px) scale(1.06); } }
+    @keyframes drift-b { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,40px) scale(1.08); } }
+    @keyframes drift-c { 0%,100% { transform: translate(-50%,0) scale(1); } 50% { transform: translate(calc(-50% + 30px),20px) scale(1.04); } }
+    .halo-drift-a { animation: drift-a 18s ease-in-out infinite; }
+    .halo-drift-b { animation: drift-b 22s ease-in-out infinite; }
+    .halo-drift-c { animation: drift-c 20s ease-in-out infinite; }
+
+    /* Section anchors: account for the floating nav */
+    section[id] { scroll-margin-top: 110px; }
+
+    /* Shimmering gold text — drifts indefinitely over a wide gradient */
+    .shimmer-gold {
+      background: linear-gradient(100deg, #906d1c 0%, #d4af37 25%, #f7e4ac 50%, #d4af37 75%, #906d1c 100%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+              background-clip: text;
+      color: transparent;
+      animation: shimmer-text 5.5s linear infinite;
+    }
+    @keyframes shimmer-text {
+      0%   { background-position: 220% 0; }
+      100% { background-position: -220% 0; }
+    }
+
+    /* Scroll-reveal: hidden by default, revealed when intersected */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(28px);
+      transition:
+        opacity 0.9s cubic-bezier(0.16,1,0.3,1),
+        transform 0.9s cubic-bezier(0.16,1,0.3,1);
+      transition-delay: var(--reveal-delay, 0ms);
+    }
+    [data-reveal].in-view { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) {
+      [data-reveal] { opacity: 1; transform: none; transition: none; }
+      .halo-drift-a, .halo-drift-b, .halo-drift-c, .shimmer-gold { animation: none !important; }
+    }
+
+    /* Cursor-following soft spotlight inside the URL input */
+    .pointer-spot {
+      position: absolute; inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%),
+                                   rgba(212,175,55,0.18), transparent 65%);
+      opacity: 0; transition: opacity 0.4s ease;
+    }
+    .pointer-host:hover .pointer-spot,
+    .pointer-host:focus-within .pointer-spot { opacity: 1; }
+
+    /* Animated caret in the URL input */
+    .caret::after {
+      content: "";
+      display: inline-block;
+      width: 2px; height: 1.1em;
+      background: #d4af37;
+      margin-left: 4px;
+      vertical-align: -0.18em;
+      animation: caret 1.05s steps(1) infinite;
+    }
+    @keyframes caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+    /* Soft top-of-card highlight */
+    .top-highlight {
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 30px 70px -10px rgba(0,0,0,0.06);
+    }
+
+    /* Bento card hover lift */
+    .bento {
+      transition: transform .35s cubic-bezier(0.16,1,0.3,1), box-shadow .35s cubic-bezier(0.16,1,0.3,1);
+    }
+    .bento:hover { transform: translateY(-4px); box-shadow: 0 26px 56px -22px rgba(0,0,0,0.25); }
+
+    /* Hero headline word stagger */
+    .word { display: inline-block; opacity: 0; transform: translateY(28px); animation: fade-up 0.85s cubic-bezier(0.16,1,0.3,1) forwards; }
+    @keyframes fade-up { 0% { opacity: 0; transform: translateY(28px); } 100% { opacity: 1; transform: translateY(0); } }
+
+    /* Hide scrollbar on the toolbar mock */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { scrollbar-width: none; }
+
+    /* Eyebrow chip used everywhere */
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(212,175,55,0.10);
+      border: 1px solid rgba(212,175,55,0.30);
+      color: #906d1c;
+      font-size: 11px; font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .eyebrow .dot {
+      width: 6px; height: 6px; border-radius: 999px;
+      background: #d4af37;
+      box-shadow: 0 0 8px rgba(212,175,55,0.8);
+      animation: glow 2.5s ease-in-out infinite;
+    }
+  </style>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Inline Lucide-style icons (only the ones we need).
+     Stroke 1.75 matches Lucide defaults; size from `className`.
+     ───────────────────────────────────────────────────────────────────── -->
+<script type="text/babel" data-presets="env,react">
+const Icon = ({ children, className = "w-5 h-5", strokeWidth = 1.75 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round"
+       strokeLinejoin="round" className={className} aria-hidden="true">
+    {children}
+  </svg>
+);
+
+const Wand = (p) => <Icon {...p}>
+  <path d="m15 4 1.5 1.5L18 4l-1.5-1.5L15 4ZM4 20l9-9M20 8l1.5 1.5L23 8l-1.5-1.5L20 8ZM18 14l1.5 1.5L21 14l-1.5-1.5L18 14ZM10 6l1.5 1.5L13 6l-1.5-1.5L10 6Z"/>
+</Icon>;
+const Sparkles = (p) => <Icon {...p}>
+  <path d="m12 3-1.9 5.1L5 10l5.1 1.9L12 17l1.9-5.1L19 10l-5.1-1.9L12 3ZM5 17l-.95 2.55L1.5 20.5l2.55.95L5 24l.95-2.55L8.5 20.5l-2.55-.95L5 17ZM19 16l-.7 1.9L16.4 18.6l1.9.7.7 1.9.7-1.9 1.9-.7-1.9-.7L19 16Z"/>
+</Icon>;
+const Globe = (p) => <Icon {...p}>
+  <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>
+</Icon>;
+const Pencil = (p) => <Icon {...p}>
+  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z"/>
+</Icon>;
+const Palette = (p) => <Icon {...p}>
+  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+  <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.5 0 1-.4 1-1v-.5c0-.6.2-1.1.6-1.5.4-.4.9-.6 1.5-.6H17a5 5 0 0 0 5-5c0-5.5-4.5-10-10-10Z"/>
+</Icon>;
+const Languages = (p) => <Icon {...p}>
+  <path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/>
+</Icon>;
+const Rocket = (p) => <Icon {...p}>
+  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2zM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+</Icon>;
+const Check = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
+const ArrowRight = (p) => <Icon {...p}><path d="M5 12h14M12 5l7 7-7 7"/></Icon>;
+const ArrowDown = (p) => <Icon {...p}><path d="M12 5v14M19 12l-7 7-7-7"/></Icon>;
+const ChevronRight = (p) => <Icon {...p}><path d="m9 18 6-6-6-6"/></Icon>;
+const Plug = (p) => <Icon {...p}><path d="M12 22v-5M9 8V2M15 8V2M18 8v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8h12Z"/></Icon>;
+const Boxes = (p) => <Icon {...p}><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5l-5-3-4.03 1.92ZM12 19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 11l-5 3ZM7 11l5-3-5-3-5 3v3.24M17 11l5-3-5-3-5 3"/></Icon>;
+const Sliders = (p) => <Icon {...p}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></Icon>;
+const Search = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></Icon>;
+const Slash = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></Icon>;
+const Lock = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Icon>;
+const Menu = (p) => <Icon {...p}><path d="M3 6h18M3 12h18M3 18h18"/></Icon>;
+const Settings = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></Icon>;
+const LogOut = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></Icon>;
+const FileText = (p) => <Icon {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></Icon>;
+const X = (p) => <Icon {...p}><path d="M18 6 6 18M6 6l12 12"/></Icon>;
+
+Object.assign(window, { Icon, Wand, Sparkles, Globe, Pencil, Palette, Languages, Rocket, Check, ArrowRight, ArrowDown, ChevronRight, Plug, Boxes, Sliders, Search, Slash, Lock, Menu, X, Settings, LogOut, FileText });
+</script>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Sub-components: nav, hero, mockup, how-it-works, bento, pricing, footer
+     ───────────────────────────────────────────────────────────────────── -->
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef } = React;
+
+/* ───── Wordmark ───── */
+function Wordmark({ size = "text-2xl", dark = false }) {
+  return (
+    <span className={`${size} font-extrabold tracking-[-0.04em] leading-none ${dark ? "text-white" : "text-ink"}`}>
+      Carma<span className="text-carma-500">.</span>
+    </span>
+  );
+}
+
+/* ───── Top Nav ───── */
+function Nav() {
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  const navLinks = [
+    { href: '#com-funciona',    label: 'Com funciona'    },
+    { href: '#editor',          label: "L'editor"         },
+    { href: '#caracteristiques',label: 'Característiques' },
+    { href: '#preus',           label: 'Preus'            },
+  ];
+
+  return (
+    <>
+      <header className="fixed top-0 inset-x-0 z-50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-8 pt-4 sm:pt-5">
+          <div className={`flex items-center justify-between gap-3 rounded-full bg-white/85 backdrop-blur-xl border transition-all duration-300 px-3 sm:px-5 py-2 sm:py-2.5 ${
+            scrolled
+              ? 'border-neutral-200/80 shadow-[0_12px_36px_-16px_rgba(0,0,0,0.18)]'
+              : 'border-neutral-200/40 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.06)]'
+          }`}>
+            <a href="#top" className="flex items-center gap-2.5 pl-1.5 shrink-0">
+              <Wordmark size="text-xl" />
+            </a>
+            <nav className="hidden lg:flex items-center gap-6 text-[13px] font-semibold text-neutral-600">
+              {navLinks.map(l => (
+                <a key={l.href} href={l.href} className="hover:text-ink transition-colors">{l.label}</a>
+              ))}
+            </nav>
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <a href="#" className="hidden md:inline-flex text-[13px] font-bold text-neutral-600 hover:text-ink px-3 py-2 rounded-full transition-colors">Entrar</a>
+              <a href="#hero-input" className="btn-gold inline-flex items-center gap-1.5 text-white text-[12px] sm:text-[13px] font-bold pl-3.5 sm:pl-4 pr-2.5 sm:pr-3 py-2 rounded-full shadow-gold whitespace-nowrap">
+                <span className="hidden sm:inline">Provar gratis</span>
+                <span className="sm:hidden">Provar</span>
+                <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.5}/>
+              </a>
+              <button
+                onClick={() => setOpen(!open)}
+                aria-label={open ? 'Tancar menú' : 'Obrir menú'}
+                aria-expanded={open}
+                className="lg:hidden ml-0.5 w-9 h-9 flex items-center justify-center rounded-full hover:bg-neutral-100 text-neutral-700 transition-colors"
+              >
+                {open ? <X className="w-4 h-4"/> : <Menu className="w-4 h-4"/>}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile drawer — separate from the pill so it can fade backdrop independently */}
+      <div
+        className={`lg:hidden fixed inset-0 z-40 transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setOpen(false)}
+      >
+        <div className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"/>
+      </div>
+      <aside
+        className={`lg:hidden fixed top-0 right-0 z-50 h-full w-[84vw] max-w-[340px] bg-white shadow-[0_24px_60px_-12px_rgba(0,0,0,0.3)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-100">
+          <Wordmark size="text-xl"/>
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Tancar menú"
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-neutral-100 text-neutral-500 transition-colors"
+          >
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+        <nav className="p-4 flex flex-col gap-0.5 text-[15px] font-bold">
+          {navLinks.map(l => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between px-4 py-3.5 rounded-2xl hover:bg-neutral-50 text-neutral-700 transition-colors"
+            >
+              {l.label}
+              <ChevronRight className="w-4 h-4 text-neutral-300"/>
+            </a>
+          ))}
+        </nav>
+        <div className="absolute inset-x-0 bottom-0 p-5 border-t border-neutral-100 bg-white">
+          <a href="#" className="block text-center px-4 py-3 rounded-2xl border border-neutral-200 text-[14px] font-bold text-neutral-700 hover:bg-neutral-50 mb-2.5">Entrar</a>
+          <a href="#hero-input" onClick={() => setOpen(false)} className="btn-gold flex items-center justify-center gap-2 text-white text-[14px] font-extrabold tracking-tight px-4 py-3.5 rounded-2xl shadow-gold">
+            <Wand className="w-4 h-4" strokeWidth={2}/> Provar gratis
+          </a>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+Object.assign(window, { Wordmark, Nav });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef } = React;
+
+/* ───── The signature URL Input.
+       Placeholder is animated — types and deletes through samples — so the
+       real input value stays fully editable for the user. ───── */
+function UrlInput({ value, onChange, onSubmit, id = "hero-input", ctaLabel = "Genera el meu blog", ctaLabelShort = "Generar" }) {
+  const samples = ["la-teva-marca.cat", "restaurant-ferreteria.com", "atelierdejoieria.cat", "vinyetapetita.cat"];
+  const [phase, setPhase] = React.useState({ i: 0, dir: 1, idx: 0 });
+  const [focused, setFocused] = React.useState(false);
+  const formRef = React.useRef(null);
+
+  const handleMove = (e) => {
+    const r = formRef.current?.getBoundingClientRect();
+    if (!r) return;
+    formRef.current.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    formRef.current.style.setProperty('--my', `${e.clientY - r.top}px`);
+  };
+
+  // Compute the visible placeholder for THIS render from phase state, so it
+  // matches what was just animated (no off-by-one frame).
+  const animatedPlaceholder = "https://" + samples[phase.i].slice(0, phase.idx);
+
+  React.useEffect(() => {
+    if (value || focused) return;
+    const cur = samples[phase.i];
+    const speed = phase.dir === 1 ? 65 : 28;
+    const pause = phase.dir === 1 && phase.idx === cur.length ? 1500 : 0;
+    const t = setTimeout(() => {
+      setPhase((p) => {
+        const c = samples[p.i];
+        if (p.dir === 1 && p.idx < c.length) return { ...p, idx: p.idx + 1 };
+        if (p.dir === 1 && p.idx === c.length) return { ...p, dir: -1 };
+        if (p.dir === -1 && p.idx > 0) return { ...p, idx: p.idx - 1 };
+        return { i: (p.i + 1) % samples.length, dir: 1, idx: 0 };
+      });
+    }, speed + pause);
+    return () => clearTimeout(t);
+  }, [phase, value, focused]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit?.(value.trim() || "https://la-teva-web.cat");
+  };
+
+  return (
+    <form
+      ref={formRef}
+      id={id}
+      onSubmit={handleSubmit}
+      onMouseMove={handleMove}
+      className="pointer-host relative w-full max-w-2xl mx-auto"
+    >
+      {/* Outer halo */}
+      <div className="absolute inset-0 -m-2 rounded-[2rem] bg-carma-300/30 blur-2xl pointer-events-none animate-glow"></div>
+      <div className={`relative flex items-center bg-white rounded-[1.75rem] border ${focused ? "border-carma-400" : "border-neutral-200/80"} shadow-premium p-2 sm:p-2.5 gap-2 transition-colors overflow-hidden`}>
+        <div className="pointer-spot rounded-[1.75rem]"></div>
+        <div className="relative hidden sm:flex items-center gap-2 pl-3 pr-1 text-neutral-300">
+          <Globe className="w-5 h-5"/>
+          <div className="w-px h-6 bg-neutral-200"/>
+        </div>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={animatedPlaceholder}
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="off"
+          className="relative flex-1 min-w-0 bg-transparent outline-none px-3 sm:px-1 py-3 text-base sm:text-lg font-medium text-ink placeholder:text-neutral-300"
+        />
+        <button
+          type="submit"
+          className="btn-gold relative shrink-0 inline-flex items-center gap-2 text-white font-bold text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl shadow-gold"
+        >
+          <Wand className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2}/>
+          <span className="hidden sm:inline">{ctaLabel}</span>
+          <span className="sm:hidden">{ctaLabelShort}</span>
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* ───── Hero ───── */
+function Hero({ onGenerate }) {
+  const [url, setUrl] = useState("");
+
+  return (
+    <section id="top" className="relative overflow-hidden pt-32 sm:pt-40 pb-16 sm:pb-24">
+      {/* Atmospheric halos */}
+      <div className="halo halo-drift-a bg-carma-400/25" style={{ width: 720, height: 720, top: -260, right: -180 }}></div>
+      <div className="halo halo-drift-b bg-carma-300/15" style={{ width: 680, height: 680, bottom: -300, left: -240 }}></div>
+      <div className="halo halo-drift-c bg-carma-200/30" style={{ width: 420, height: 420, top: 80, left: "30%", transform: "translateX(-50%)" }}></div>
+
+      {/* Subtle radial grid */}
+      <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
+           style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #171717 1px, transparent 0)", backgroundSize: "32px 32px" }}></div>
+
+      <div className="relative mx-auto max-w-5xl px-5 sm:px-8 text-center">
+        <span className="eyebrow animate-fade-up">
+          <span className="dot"></span> CMS Headless · Estimat al detall
+        </span>
+
+        <h1 className="mt-7 sm:mt-9 font-extrabold tracking-[-0.035em] text-[44px] leading-[1.02] sm:text-[68px] sm:leading-[1.0] md:text-[82px] text-ink">
+          <span className="word" style={{ animationDelay: '60ms' }}>El</span>{' '}
+          <span className="word" style={{ animationDelay: '140ms' }}>teu</span>{' '}
+          <span className="word" style={{ animationDelay: '220ms' }}>blog.</span>
+          <br className="sm:hidden"/>
+          <span className="inline-block">
+            {' '}<span className="word" style={{ animationDelay: '320ms' }}>Amb</span>{' '}
+            <span className="word" style={{ animationDelay: '400ms' }}>la</span>{' '}
+            <span className="word" style={{ animationDelay: '480ms' }}>teva</span>{' '}
+            <span className="word relative" style={{ animationDelay: '560ms' }}>
+              <span className="shimmer-gold relative z-10">ànima</span>
+              <svg viewBox="0 0 220 14" className="absolute -bottom-2 left-0 w-full h-3 text-carma-400" preserveAspectRatio="none" aria-hidden>
+                <path d="M2 9 C 60 1, 160 1, 218 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
+              </svg>
+            </span><span className="word" style={{ animationDelay: '640ms' }}>.</span>
+          </span>
+        </h1>
+
+        <p className="mt-7 max-w-2xl mx-auto text-base sm:text-lg font-medium text-neutral-500 leading-relaxed animate-fade-up" style={{ animationDelay: '140ms' }}>
+          Enganxa l'URL del teu lloc web. Carma copia el teu disseny — header, footer, colors, tipografia — i et lliura un blog amb editor d'estil Notion en 30 segons. <span className="text-ink font-semibold">Sense codi. Sense plantilles. Sense renunciar a la teva marca.</span>
+        </p>
+
+        <div className="mt-10 animate-fade-up" style={{ animationDelay: '220ms' }}>
+          <UrlInput
+            value={url}
+            onChange={setUrl}
+            onSubmit={onGenerate}
+          />
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">
+            Gratuït · Sense targeta · Funciona amb WordPress, Webflow, Squarespace, HTML
+          </p>
+        </div>
+
+        {/* Trust strip */}
+        <div className="mt-10 sm:mt-14 flex items-center justify-center gap-x-8 gap-y-3 flex-wrap animate-fade-up opacity-90" style={{ animationDelay: '320ms' }}>
+          {["L'Atelier", "Ferreteria Roca", "Vinya Petita", "Òptica Vidal", "Bòria Galeria"].map((b, i) => (
+            <span key={i} className="text-sm font-bold tracking-tight text-neutral-300 select-none">{b}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Mockup */}
+      <div className="relative mt-16 sm:mt-24 mx-auto max-w-6xl px-5 sm:px-8 animate-fade-up" style={{ animationDelay: '380ms' }}>
+        <BrowserMockup />
+      </div>
+    </section>
+  );
+}
+
+Object.assign(window, { UrlInput, Hero });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── The "magic" browser mockup that wraps a Carma blog post in the client's chrome ───── */
+function BrowserMockup() {
+  return (
+    <div className="relative">
+      {/* Soft glow under */}
+      <div className="absolute -inset-x-10 -inset-y-6 bg-carma-300/15 blur-[80px] rounded-[3rem] pointer-events-none"></div>
+
+      <div className="relative bg-white rounded-3xl sm:rounded-[2rem] shadow-premium border border-neutral-200/60 overflow-hidden">
+        {/* Browser chrome */}
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-3.5 border-b border-neutral-100 bg-white">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#FF5F57]"></span>
+            <span className="w-3 h-3 rounded-full bg-[#FEBC2E]"></span>
+            <span className="w-3 h-3 rounded-full bg-[#28C840]"></span>
+          </div>
+          <div className="flex-1 flex justify-center">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 bg-neutral-100 rounded-lg text-xs font-mono text-neutral-500">
+              <Lock className="w-3 h-3"/> <span>la-teva-marca.cat</span><span className="text-neutral-300">/blog</span>
+            </div>
+          </div>
+          <div className="w-8 hidden sm:block"></div>
+        </div>
+
+        {/* CLIENT site chrome — header, replicated by Carma */}
+        <div className="px-6 sm:px-10 py-4 border-b border-neutral-100 flex items-center justify-between bg-[#fffdfa]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-ink to-neutral-700 flex items-center justify-center text-white text-[11px] font-extrabold">LM</div>
+            <span className="text-sm font-extrabold tracking-tight text-ink">la teva marca</span>
+            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-carma-50 text-[9px] font-bold uppercase tracking-wider text-carma-700 border border-carma-200/60" title="Clonat de la teva web">
+              <Sparkles className="w-2.5 h-2.5"/> Clonat
+            </span>
+          </div>
+          <nav className="hidden md:flex items-center gap-6 text-[12px] font-semibold text-neutral-600">
+            <span>Botiga</span>
+            <span>Història</span>
+            <span className="text-ink">Blog</span>
+            <span>Contacte</span>
+          </nav>
+          <div className="hidden md:block w-8 h-8 rounded-full bg-neutral-100"></div>
+        </div>
+
+        {/* Article body — the Carma payload */}
+        <div className="grid md:grid-cols-[1fr_2fr] gap-0">
+          {/* Side rail */}
+          <div className="hidden md:flex flex-col gap-4 p-7 border-r border-neutral-100 bg-[#fbf9f3]/40">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-carma-700">Diari</span>
+            <span className="text-xs font-bold text-neutral-700">Editorial</span>
+            <div className="space-y-2 text-[11px] text-neutral-400 font-medium leading-relaxed">
+              <p>Els nostres apunts setmanals d'ofici i materials.</p>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {["Tots els articles", "Procés", "Materials", "Convidats"].map((s, i) => (
+                <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] font-bold ${i===0 ? 'bg-white border border-neutral-200 text-ink' : 'text-neutral-500'}`}>
+                  <ChevronRight className="w-3 h-3 opacity-50"/> {s}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Article */}
+          <div className="p-7 sm:p-10">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-carma-700 mb-3">
+              <span>21 maig · 5 min</span>
+              <span className="text-neutral-300">·</span>
+              <span className="text-neutral-400">Procés</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink leading-tight mb-3">L'art de plegar l'or — apunts d'un ofici antic</h2>
+            <p className="text-sm font-medium text-neutral-500 leading-relaxed mb-5">
+              La feina comença a les sis del matí, quan el taller encara fa olor a fred. El batafull ressona contra el banc i l'or, com sempre, escolta abans de cedir…
+            </p>
+
+            {/* fake editor blocks */}
+            <div className="space-y-2.5">
+              <div className="h-2 rounded-full bg-neutral-100 w-[92%]"></div>
+              <div className="h-2 rounded-full bg-neutral-100 w-[86%]"></div>
+              <div className="h-2 rounded-full bg-neutral-100 w-[78%]"></div>
+            </div>
+
+            <div className="my-6 border-l-[3px] border-carma-500 pl-4 py-1 text-sm italic text-neutral-600">
+              «Cada peça és un acte privat de paciència.» — la mestra Argilaga
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 mb-6">
+              <div className="aspect-[4/3] rounded-xl bg-gradient-to-br from-carma-100 to-carma-200"></div>
+              <div className="aspect-[4/3] rounded-xl bg-gradient-to-br from-neutral-100 to-neutral-200"></div>
+              <div className="aspect-[4/3] rounded-xl bg-gradient-to-br from-carma-50 to-carma-100"></div>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="h-2 rounded-full bg-neutral-100 w-[88%]"></div>
+              <div className="h-2 rounded-full bg-neutral-100 w-[64%]"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating "what happened" pills */}
+      <FloatingPill className="hidden sm:flex absolute -left-6 top-24" delay="0s">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.7)]"></span>
+        <span>Header clonat</span>
+      </FloatingPill>
+      <FloatingPill className="hidden sm:flex absolute -right-4 top-44" delay=".4s">
+        <Palette className="w-3.5 h-3.5 text-carma-600"/>
+        <span>Paleta extreta · 6 colors</span>
+      </FloatingPill>
+      <FloatingPill className="hidden md:flex absolute -right-6 bottom-24" delay=".8s">
+        <Languages className="w-3.5 h-3.5 text-carma-600"/>
+        <span>CA · ES · EN llestos</span>
+      </FloatingPill>
+    </div>
+  );
+}
+
+function FloatingPill({ children, className = "", delay = "0s" }) {
+  return (
+    <div
+      className={`${className} items-center gap-2 px-3.5 py-2 bg-white rounded-full shadow-[0_18px_40px_-18px_rgba(0,0,0,0.30)] border border-neutral-200/60 text-[11px] font-bold tracking-tight text-neutral-700 animate-float`}
+      style={{ animationDelay: delay }}
+    >
+      {children}
+    </div>
+  );
+}
+
+Object.assign(window, { BrowserMockup, FloatingPill });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── How It Works — three steps ───── */
+function HowItWorks() {
+  const steps = [
+    { n: "01", icon: <Globe className="w-6 h-6"/>, title: "Enganxa la teva URL", body: "Una sola adreça. Res més. Carma visita la teva web exactament com ho faria un visitant, sense tocar el teu codi.", tag: "10 segons" },
+    { n: "02", icon: <Wand className="w-6 h-6"/>, title: "Clonem el teu disseny", body: "Header, footer, tipografies, paleta i variables CSS. Carma destil·la la teva identitat en un tema viu i editable.", tag: "20 segons" },
+    { n: "03", icon: <Pencil className="w-6 h-6"/>, title: "Importa, edita i publica", body: "Importa els articles que ja tens (Markdown, WordPress, RSS) o comença en blanc amb l'editor d'estil Notion. Publica al subdomini o connecta el teu via API.", tag: "Tot el temps que vulguis" },
+  ];
+  return (
+    <section id="com-funciona" className="relative py-24 sm:py-32 px-5 sm:px-8">
+      <div className="mx-auto max-w-6xl text-center">
+        <span className="eyebrow" data-reveal><span className="dot"></span> La màgia explicada</span>
+        <h2 className="mt-6 text-4xl sm:text-5xl font-extrabold tracking-tight text-ink" data-reveal style={{'--reveal-delay':'80ms'}}>
+          Tres passos. <span className="text-neutral-400">Cap excusa.</span>
+        </h2>
+        <p className="mt-5 max-w-xl mx-auto text-base font-medium text-neutral-500 leading-relaxed" data-reveal style={{'--reveal-delay':'160ms'}}>
+          Carma fa el dur perquè tu només hagis d'escriure. De l'URL al primer article publicat, en menys del que dura un cafè.
+        </p>
+      </div>
+
+      <div className="relative mx-auto max-w-6xl mt-16 grid md:grid-cols-3 gap-5">
+        {/* The connecting line */}
+        <div className="hidden md:block absolute top-12 left-[16%] right-[16%] h-px bg-gradient-to-r from-transparent via-carma-300 to-transparent"></div>
+
+        {steps.map((s, i) => (
+          <div key={i} data-reveal style={{'--reveal-delay':`${i*120}ms`}} className="relative bg-white rounded-3xl border border-neutral-200/60 p-7 shadow-[0_6px_24px_-12px_rgba(0,0,0,0.10)] hover:shadow-premium transition-shadow">
+            <div className="flex items-start justify-between mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-carma-100 to-carma-50 border border-carma-200/60 flex items-center justify-center text-carma-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                {s.icon}
+              </div>
+              <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-neutral-300">{s.n}</span>
+            </div>
+            <h3 className="text-xl font-extrabold tracking-tight text-ink mb-2">{s.title}</h3>
+            <p className="text-sm font-medium text-neutral-500 leading-relaxed mb-5">{s.body}</p>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-carma-700 bg-carma-50 px-2.5 py-1 rounded-full border border-carma-200/60">
+              <Sparkles className="w-3 h-3"/> {s.tag}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+Object.assign(window, { HowItWorks });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── Bento grid features ───── */
+function Bento() {
+  return (
+    <section id="caracteristiques" className="relative py-24 sm:py-32 px-5 sm:px-8">
+      {/* Section halo */}
+      <div className="halo bg-carma-400/15 absolute" style={{ width: 600, height: 600, top: 100, right: -200 }}></div>
+
+      <div className="relative mx-auto max-w-6xl">
+        <div className="text-center max-w-2xl mx-auto">
+          <span className="eyebrow" data-reveal><span className="dot"></span> Característiques</span>
+          <h2 className="mt-6 text-4xl sm:text-5xl font-extrabold tracking-tight text-ink" data-reveal style={{'--reveal-delay':'80ms'}}>
+            Petits detalls. <span className="text-neutral-400">Diferència gegant.</span>
+          </h2>
+          <p className="mt-5 text-base font-medium text-neutral-500 leading-relaxed" data-reveal style={{'--reveal-delay':'160ms'}}>
+            Tot el que necessites per escriure i publicar amb caràcter. Res del que no.
+          </p>
+        </div>
+
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-6 gap-5">
+          {/* HERO BENTO: Notion-style editor */}
+          <div data-reveal style={{'--reveal-delay':'80ms'}} className="bento md:col-span-4 md:row-span-2 rounded-3xl bg-white border border-neutral-200/60 shadow-premium overflow-hidden">
+            <div className="p-8 sm:p-10">
+              <div className="flex items-center gap-2 mb-5">
+                <span className="px-2.5 py-1 text-[10px] font-extrabold tracking-[0.16em] uppercase rounded-full bg-carma-50 text-carma-700 border border-carma-200/60">Editor</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink leading-tight">
+                Editor d'estil Notion.<br/>
+                <span className="text-neutral-400">Escriure ha de ser fàcil.</span>
+              </h3>
+              <p className="mt-4 max-w-md text-sm font-medium text-neutral-500 leading-relaxed">
+                Comandes amb <kbd className="px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-neutral-100 border border-neutral-200">/</kbd>, blocs arrossegables, callouts, galeries, taules i taula de continguts automàtica. Tot dins d'una pàgina que respira.
+              </p>
+            </div>
+            <SlashCommandMock />
+          </div>
+
+          {/* Visual editor — Theme Studio with tabs */}
+          <div data-reveal style={{'--reveal-delay':'160ms'}} className="bento md:col-span-2 rounded-3xl bg-gradient-to-br from-ink to-[#1a1a1a] text-white p-7 sm:p-8 overflow-hidden relative">
+            <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-carma-500/20 blur-3xl"></div>
+            <div className="relative">
+              <Sliders className="w-7 h-7 text-carma-400 mb-5"/>
+              <h3 className="text-xl font-extrabold tracking-tight leading-tight">Theme Studio<br/><span className="text-neutral-400">a temps real.</span></h3>
+              <p className="mt-3 text-[13px] font-medium text-neutral-300 leading-relaxed">Ajusta colors, tipografies i layout. Carma re-pinta el preview al mateix moment — abans i tot de fer clic a "Desar".</p>
+              <ThemeStudioMock/>
+            </div>
+          </div>
+
+          {/* Languages */}
+          <div data-reveal style={{'--reveal-delay':'240ms'}} className="bento md:col-span-2 rounded-3xl bg-white border border-neutral-200/60 p-7 sm:p-8 overflow-hidden shadow-[0_6px_24px_-12px_rgba(0,0,0,0.08)]">
+            <Languages className="w-7 h-7 text-carma-600 mb-5"/>
+            <h3 className="text-xl font-extrabold tracking-tight text-ink leading-tight">Multi-idioma nadiu<br/>+ traducció IA.</h3>
+            <p className="mt-3 text-[13px] font-medium text-neutral-500 leading-relaxed">Català de naixement. Català, castellà i anglès amb un clic. Sense duplicar articles, sense plugins.</p>
+            <div className="mt-5 flex items-center gap-1.5">
+              {[
+                { code: "CA", flag: "🇦🇩", active: true },
+                { code: "ES", flag: "🇪🇸" },
+                { code: "EN", flag: "🇬🇧" },
+                { code: "FR", flag: "🇫🇷", soon: true },
+              ].map((l) => (
+                <div key={l.code} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold border ${l.active ? "bg-carma-50 text-carma-800 border-carma-200" : "bg-neutral-50 text-neutral-400 border-neutral-200"} ${l.soon ? "opacity-60" : ""}`}>
+                  <span>{l.flag}</span> <span>{l.code}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* SEO headless */}
+          <div data-reveal style={{'--reveal-delay':'320ms'}} className="bento md:col-span-4 rounded-3xl border border-neutral-200/60 bg-gradient-to-br from-[#fbf9f3] to-white p-8 sm:p-10 overflow-hidden relative">
+            <div className="grid md:grid-cols-2 gap-6 items-center">
+              <div>
+                <Plug className="w-7 h-7 text-carma-600 mb-5"/>
+                <h3 className="text-2xl font-extrabold tracking-tight text-ink leading-tight">Poder SEO headless.</h3>
+                <p className="mt-3 text-sm font-medium text-neutral-500 leading-relaxed max-w-md">
+                  Desplega via API al teu propi domini per concentrar tota l'autoritat a Google. Sense subdominis ni redireccions que matin el teu rànquing.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {["REST + Webhooks", "JSON-LD", "Sitemap viu", "OG dinàmic"].map(t => (
+                    <span key={t} className="px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-tight bg-white border border-neutral-200 text-neutral-600">{t}</span>
+                  ))}
+                </div>
+              </div>
+              <ApiSnippet/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─ Slash command popover mock ─ */
+function SlashCommandMock() {
+  const items = [
+    { i: <Pencil className="w-4 h-4"/>, label: "Text", k: "Escriu lliurement" },
+    { i: <span className="font-extrabold text-[13px]">H1</span>, label: "Títol 1", k: "Capçalera gran" },
+    { i: <Sparkles className="w-4 h-4"/>, label: "Callout", k: "Crida d'atenció amb icona" },
+    { i: <Boxes className="w-4 h-4"/>, label: "Galeria", k: "Carrusel d'imatges" },
+    { i: <Languages className="w-4 h-4"/>, label: "Traduir amb IA", k: "Converteix el bloc actual", pro: true },
+  ];
+  return (
+    <div className="relative mx-8 mb-8 sm:mx-10 sm:mb-10 rounded-2xl bg-white border border-neutral-200 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)] overflow-hidden">
+      <div className="px-6 py-5 text-[15px] font-medium text-neutral-700 leading-relaxed border-b border-neutral-100">
+        Escriu aquí o teclegeja <kbd className="px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-neutral-100 border border-neutral-200">/</kbd> per inserir un bloc<span className="text-neutral-300">…</span>
+      </div>
+      <div className="bg-[#fbfbfa] border-t border-neutral-100">
+        <div className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-neutral-400">Inserir bloc</div>
+        <div className="px-2 pb-3">
+          {items.map((it, i) => (
+            <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${i===2 ? "bg-carma-50/60" : ""}`}>
+              <div className="w-9 h-9 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-neutral-700">{it.i}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-extrabold text-ink">{it.label}</span>
+                  {it.pro && <span className="text-[9px] font-extrabold tracking-widest uppercase text-carma-700 bg-carma-50 border border-carma-200/70 px-1.5 py-0.5 rounded">Premium</span>}
+                </div>
+                <div className="text-[11px] text-neutral-400 font-medium">{it.k}</div>
+              </div>
+              {i===2 && <ArrowRight className="w-4 h-4 text-carma-600"/>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─ Theme Studio mock — tabbed Colors / Tipografia / Layout, with live preview ─ */
+function ThemeStudioMock() {
+  const [tab, setTab] = React.useState('colors');
+  const [accent, setAccent] = React.useState('#d4af37');
+
+  const tabs = [
+    { id: 'colors', label: 'Colors' },
+    { id: 'type',   label: 'Tipografia' },
+    { id: 'layout', label: 'Layout' },
+  ];
+
+  return (
+    <div className="mt-6 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm overflow-hidden">
+      {/* Tabs */}
+      <div className="flex items-center gap-1 p-1 bg-black/30 border-b border-white/5">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex-1 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold tracking-tight transition-all ${
+              tab===t.id ? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]' : 'text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Panel content */}
+      <div className="p-4">
+        {tab === 'colors' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-neutral-400">Paleta detectada</span>
+              <span className="text-[10px] font-mono text-neutral-500">6 colors</span>
+            </div>
+            <div className="flex gap-1.5">
+              {['#1a2138','#d4af37','#f0e6c8','#e94b4b','#5b8a72','#fafaf6'].map((c,i) => (
+                <button key={i} onClick={()=>setAccent(c)} className="flex-1 h-9 rounded-lg border border-white/10 relative" style={{background: c}} title={c}>
+                  {c===accent && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-carma-400 ring-2 ring-ink shadow-[0_0_6px_rgba(212,175,55,0.8)]"></span>}
+                </button>
+              ))}
+            </div>
+            <div className="pt-1">
+              <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-neutral-400 mb-2">Accent</div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+                <div className="w-6 h-6 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] transition-colors" style={{background: accent}}></div>
+                <span className="font-mono text-[11px] text-neutral-300">{accent}</span>
+                <span className="ml-auto text-[10px] font-extrabold tracking-widest uppercase text-carma-300">Auto</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'type' && (
+          <div className="space-y-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-neutral-400">Aparellament detectat</div>
+            <div className="px-3.5 py-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                <span style={{fontFamily:'Georgia, serif'}} className="text-[22px] font-bold text-white leading-none">Aa</span>
+                <span className="font-mono text-[10px] text-neutral-400">Display · Playfair</span>
+              </div>
+              <div className="text-[11px] text-neutral-300" style={{fontFamily:'Georgia, serif'}}>Els ofeicis antics escolten abans de cedir.</div>
+            </div>
+            <div className="px-3.5 py-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                <span className="text-[22px] font-extrabold text-white leading-none tracking-tight">Aa</span>
+                <span className="font-mono text-[10px] text-neutral-400">Cos · Inter</span>
+              </div>
+              <div className="text-[11px] font-medium text-neutral-300">El taller fa olor a fred. L'or, com sempre, escolta.</div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'layout' && (
+          <div className="space-y-3.5">
+            <ThemeKnob label="Radius" value="48%" max="40px" track="linear-gradient(90deg,#eeb849,#d4af37)"/>
+            <ThemeKnob label="Densitat" value="62%" max="còmoda" track="linear-gradient(90deg,#b58f27,#eeb849)"/>
+            <ThemeKnob label="Ombra" value="36%" max="suau" track="linear-gradient(90deg,#fbf3d6,#d4af37)"/>
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex-1 h-12 rounded-md bg-white/[0.06] border border-white/10 flex items-center justify-center text-[10px] text-neutral-400 font-bold">Mínim</div>
+              <div className="flex-1 h-12 rounded-xl bg-white/[0.08] border border-white/10 flex items-center justify-center text-[10px] text-white font-extrabold ring-1 ring-carma-400/40">Actual</div>
+              <div className="flex-1 h-12 rounded-3xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-[10px] text-neutral-400 font-bold">Generós</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ThemeKnob({ label, value, max, track }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-[10px] font-extrabold tracking-[0.14em] uppercase text-neutral-400">
+        <span>{label}</span><span className="text-neutral-200 font-mono normal-case tracking-normal">{max}</span>
+      </div>
+      <div className="relative h-1.5 rounded-full bg-white/10">
+        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: value, background: track }}></div>
+        <div className="absolute -top-1 h-3.5 w-3.5 rounded-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.5)]" style={{ left: `calc(${value} - 7px)` }}></div>
+      </div>
+    </div>
+  );
+}
+
+/* ─ API snippet ─ */
+function ApiSnippet() {
+  return (
+    <div className="rounded-2xl bg-[#0f0f0f] text-[12px] font-mono text-neutral-300 overflow-hidden shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] border border-neutral-900">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-white/[0.02]">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]"></span>
+        <span className="ml-2 text-[10px] font-bold tracking-widest uppercase text-neutral-500">GET · /v1/posts</span>
+      </div>
+      <pre className="p-4 leading-relaxed">
+<span className="text-neutral-500">// La teva web — Next.js, Astro, Nuxt…</span>
+{`
+`}<span className="text-pink-300">const</span> posts <span className="text-pink-300">=</span> <span className="text-pink-300">await</span> <span className="text-sky-300">fetch</span>(
+  <span className="text-amber-200">'https://carma.cat/v1/posts'</span>,
+  {`{ headers: { Authorization: `}<span className="text-amber-200">'Bearer •••'</span>{` } }`}
+).<span className="text-sky-300">then</span>(r =&gt; r.<span className="text-sky-300">json</span>());
+{`
+`}<span className="text-neutral-500">// → 24 articles, JSON-LD inclòs, idiomes resolts.</span>
+      </pre>
+    </div>
+  );
+}
+
+Object.assign(window, { Bento, SlashCommandMock, ThemeStudioMock, ThemeKnob, ApiSnippet });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── Pricing ───── */
+function Pricing() {
+  const plans = [
+    {
+      name: "Gratuït",
+      tagline: "Comença sense compromís.",
+      price: "0",
+      suffix: "€/mes",
+      cta: "Crear un blog",
+      featured: false,
+      bullets: [
+        "Allotjat a client.carma.cat",
+        "Editor d'estil Notion (blocs estàndard)",
+        "Personalització visual del tema",
+        "Català + 1 idioma traduït manualment",
+        "Comunitat i suport per correu",
+      ],
+    },
+    {
+      name: "Premium",
+      tagline: "Per a marques que volen tot el SEO.",
+      price: "19",
+      suffix: "€/mes",
+      cta: "Començar la prova de 14 dies",
+      featured: true,
+      bullets: [
+        "Connexió API al teu domini propi",
+        "Tots els blocs Premium (IA, taula, CTA)",
+        "Traduccions IA amb un clic — il·limitades",
+        "Gestió d'equips amb rols",
+        "Suport prioritari · 4h de resposta",
+      ],
+    },
+  ];
+  return (
+    <section id="preus" className="relative py-24 sm:py-32 px-5 sm:px-8">
+      <div className="halo bg-carma-300/25 absolute" style={{ width: 600, height: 600, top: -100, left: "50%", transform: "translateX(-50%)" }}></div>
+
+      <div className="relative mx-auto max-w-6xl">
+        <div className="text-center max-w-2xl mx-auto">
+          <span className="eyebrow" data-reveal><span className="dot"></span> Preus simples</span>
+          <h2 className="mt-6 text-4xl sm:text-5xl font-extrabold tracking-tight text-ink" data-reveal style={{'--reveal-delay':'80ms'}}>
+            Un preu honest. <span className="text-neutral-400">Una promesa clara.</span>
+          </h2>
+          <p className="mt-5 text-base font-medium text-neutral-500 leading-relaxed" data-reveal style={{'--reveal-delay':'160ms'}}>
+            Sense lletres petites, sense addons que apareixen al checkout, sense xantatges al núvol.
+          </p>
+        </div>
+
+        <div className="mt-14 grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          {plans.map((p, i) => (
+            <div key={i} data-reveal style={{'--reveal-delay':`${i*120}ms`}}><PricingCard {...p}/></div>
+          ))}
+        </div>
+
+        <p className="mt-10 text-center text-xs font-bold tracking-[0.16em] uppercase text-neutral-400">
+          Tots els preus en € · IVA inclòs · Cancel·la quan vulguis
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PricingCard({ name, tagline, price, suffix, cta, featured, bullets }) {
+  const Wrapper = featured ? "div" : "div";
+  return (
+    <Wrapper className={featured ? "gold-ring p-[1.5px] rounded-[2rem]" : ""}>
+      <div className={`relative rounded-[2rem] bg-white border ${featured ? "border-transparent" : "border-neutral-200/60"} p-8 sm:p-10 h-full flex flex-col ${featured ? "shadow-goldlg" : "shadow-[0_6px_24px_-12px_rgba(0,0,0,0.10)]"}`}>
+        {featured && (
+          <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-ink text-white text-[10px] font-extrabold tracking-[0.16em] uppercase shadow-[0_10px_20px_-8px_rgba(0,0,0,0.4)]">
+            <Sparkles className="w-3 h-3 text-carma-400"/> Més popular
+          </span>
+        )}
+
+        <div className="flex items-baseline justify-between mb-1">
+          <h3 className={`text-2xl font-extrabold tracking-tight ${featured ? "text-carma-700" : "text-ink"}`}>{name}</h3>
+          {featured && <Sparkles className="w-5 h-5 text-carma-500"/>}
+        </div>
+        <p className="text-sm font-medium text-neutral-500 mb-7">{tagline}</p>
+
+        <div className="flex items-baseline gap-1.5 mb-7">
+          <span className="text-6xl font-extrabold tracking-[-0.035em] text-ink">{price}</span>
+          <span className="text-sm font-bold text-neutral-400">{suffix}</span>
+        </div>
+
+        <ul className="space-y-3.5 mb-9">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-3 text-sm font-medium text-neutral-700">
+              <span className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${featured ? "bg-carma-100 text-carma-700" : "bg-neutral-100 text-neutral-500"}`}>
+                <Check className="w-3 h-3" strokeWidth={3}/>
+              </span>
+              {b}
+            </li>
+          ))}
+        </ul>
+
+        <a href="#hero-input" className={`mt-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-extrabold tracking-tight transition-all ${
+          featured
+            ? "btn-gold text-white shadow-gold"
+            : "bg-white text-ink border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
+        }`}>
+          {cta} <ArrowRight className="w-4 h-4" strokeWidth={2.5}/>
+        </a>
+      </div>
+    </Wrapper>
+  );
+}
+
+Object.assign(window, { Pricing, PricingCard });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── Final CTA + Footer ───── */
+function FinalCta({ onGenerate }) {
+  const [url, setUrl] = useState("");
+  return (
+    <section className="relative px-5 sm:px-8 pb-12">
+      <div className="relative mx-auto max-w-6xl rounded-[2.5rem] bg-ink text-white overflow-hidden p-10 sm:p-16">
+        {/* Atmospheric */}
+        <div className="absolute -top-32 -right-32 w-[420px] h-[420px] rounded-full bg-carma-500/20 blur-[120px]"></div>
+        <div className="absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full bg-carma-400/10 blur-[120px]"></div>
+        {/* Grid */}
+        <div className="absolute inset-0 opacity-[0.06] pointer-events-none"
+             style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)", backgroundSize: "32px 32px" }}></div>
+
+        <div className="relative grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-[11px] font-extrabold tracking-[0.14em] uppercase text-carma-200">
+              <Sparkles className="w-3 h-3 text-carma-300"/> 30 segons al primer blog
+            </span>
+            <h2 className="mt-6 text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">
+              La teva marca,<br/>
+              <span className="bg-gradient-to-r from-carma-300 via-carma-400 to-carma-200 bg-clip-text text-transparent">amb un blog que en parla la llengua.</span>
+            </h2>
+            <p className="mt-5 max-w-md text-base font-medium text-neutral-300 leading-relaxed">
+              Comença gratis. Sense targeta. Sense compromisos. Si no t'enamores, no passa res — has perdut un cafè.
+            </p>
+          </div>
+
+          <div className="[&>form>div]:!bg-white">
+            <UrlInput
+              id="footer-input"
+              value={url}
+              onChange={setUrl}
+              onSubmit={onGenerate}
+              ctaLabel="Provar gratis"
+              ctaLabelShort="Provar"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  const cols = [
+    { title: "Producte", links: ["Com funciona", "Característiques", "Preus", "Canvis i versions", "Estat del servei"] },
+    { title: "Recursos", links: ["Documentació", "Guies", "API", "Plantilles", "Comunitat"] },
+    { title: "Empresa", links: ["Sobre Carma", "Manifest", "Contacte", "Premsa", "Treballa-hi"] },
+    { title: "Legal", links: ["Termes d'ús", "Privacitat", "Cookies", "Avís legal", "RGPD"] },
+  ];
+  return (
+    <footer className="px-5 sm:px-8 pb-12">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 py-12 border-t border-neutral-200/60">
+          <div className="col-span-2 md:col-span-2">
+            <Wordmark size="text-2xl"/>
+            <p className="mt-5 text-sm font-medium text-neutral-500 leading-relaxed max-w-xs">
+              La gestora de continguts que estima el teu lloc web. Fet a Barcelona, escrit en català.
+            </p>
+            <div className="mt-5 flex items-center gap-2">
+              <a href="#" className="w-9 h-9 rounded-full bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-ink hover:border-neutral-300" aria-label="X">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor"><path d="M18.244 2H21.5l-7.5 8.578L22.79 22h-6.844l-5.36-7.012L4.4 22H1.144l8.027-9.18L1.21 2h7.014l4.847 6.408L18.244 2Zm-1.2 18.063h1.894L7.022 3.85H5.001L17.044 20.06Z"/></svg>
+              </a>
+              <a href="#" className="w-9 h-9 rounded-full bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-ink hover:border-neutral-300" aria-label="LinkedIn">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M4 4h4v16H4V4Zm2-2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm6 6h3.8v2.2h.06c.53-1 1.83-2.06 3.76-2.06 4.02 0 4.76 2.65 4.76 6.1V20h-4v-5.43c0-1.3-.02-2.97-1.81-2.97-1.82 0-2.1 1.42-2.1 2.88V20H12V8Z"/></svg>
+              </a>
+              <a href="#" className="w-9 h-9 rounded-full bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-ink hover:border-neutral-300" aria-label="GitHub">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.63 22.41c.58.1.79-.25.79-.55v-2c-3.21.7-3.89-1.39-3.89-1.39-.53-1.34-1.29-1.7-1.29-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.72 1.27 3.39.97.1-.75.4-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.6.23 2.78.11 3.07.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.66.8.55A11.5 11.5 0 0 0 12 .5Z"/></svg>
+              </a>
+            </div>
+          </div>
+
+          {cols.map((c, i) => (
+            <div key={i}>
+              <h4 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-neutral-400 mb-4">{c.title}</h4>
+              <ul className="space-y-2.5">
+                {c.links.map((l, j) => (
+                  <li key={j}><a href="#" className="text-sm font-semibold text-neutral-600 hover:text-ink transition-colors">{l}</a></li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3 py-6 border-t border-neutral-200/60 text-xs font-semibold text-neutral-400">
+          <span>© 2026 Carma SCCL · Fet amb daurat a Barcelona</span>
+          <div className="flex items-center gap-5">
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]"></span> Tots els sistemes operatius</span>
+            <span>v0.42</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+Object.assign(window, { FinalCta, Footer });
+</script>
+
+<!-- EditorPreview + ProductTour live in separate JSX files -->
+<script type="text/babel" data-presets="env,react" src="editor-preview.jsx"></script>
+<script type="text/babel" data-presets="env,react" src="product-tour.jsx"></script>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     GenerateModal — the "Generar el meu blog" flow:
+     start → connect with GitHub / email → animated progress → ready
+     ───────────────────────────────────────────────────────────────────── -->
+<script type="text/babel" data-presets="env,react">
+function GenerateModal({ url, onClose }) {
+  const [phase, setPhase] = React.useState('start'); // 'start' | 'progress' | 'ready'
+  const [stage, setStage] = React.useState(0);
+
+  const displayUrl = url.replace(/^https?:\/\//i, "");
+
+  const steps = [
+    { label: 'Connectant el teu compte',         detail: 'OAuth · només lectura' },
+    { label: `Visitant ${displayUrl}`,           detail: 'Carregant la pàgina pública' },
+    { label: 'Llegint capçalera i peu',          detail: '<header>, <nav>, <footer>' },
+    { label: 'Extreient la paleta',              detail: '6 colors detectats' },
+    { label: 'Detectant les tipografies',        detail: 'Serif + sans' },
+    { label: 'Generant el tema',                 detail: 'Variables CSS · tokens' },
+  ];
+
+  React.useEffect(() => {
+    if (phase !== 'progress') return;
+    if (stage >= steps.length) {
+      const t = setTimeout(() => setPhase('ready'), 700);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setStage((s) => s + 1), 800);
+    return () => clearTimeout(t);
+  }, [stage, phase, steps.length]);
+
+  // Lock body scroll
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Escape closes
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const start = () => { setStage(0); setPhase('progress'); };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-900/45 backdrop-blur-sm animate-fade-up"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-premium overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        style={{ animation: 'fade-up 0.4s cubic-bezier(0.16,1,0.3,1) both' }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Tancar"
+          className="absolute top-5 right-5 z-10 w-9 h-9 rounded-full bg-neutral-50 hover:bg-neutral-100 text-neutral-400 hover:text-neutral-900 flex items-center justify-center transition-colors"
+        >
+          <X className="w-4 h-4"/>
+        </button>
+
+        {phase === 'start'    && <StartPanel    url={url} displayUrl={displayUrl} onContinue={start}/>}
+        {phase === 'progress' && <ProgressPanel displayUrl={displayUrl} stage={stage} steps={steps}/>}
+        {phase === 'ready'    && <ReadyPanel    displayUrl={displayUrl}/>}
+      </div>
+    </div>
+  );
+}
+
+function StartPanel({ url, displayUrl, onContinue }) {
+  return (
+    <div className="p-9 pt-12 sm:p-11 sm:pt-12">
+      <div className="flex items-start gap-4 mb-7">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-carma-100 to-carma-50 border border-carma-200/60 flex items-center justify-center text-carma-700 shrink-0">
+          <Wand className="w-5 h-5" strokeWidth={2}/>
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-xl font-extrabold tracking-tight text-ink mb-1">Comencem!</h3>
+          <p className="text-sm font-medium text-neutral-500 leading-relaxed">Per clonar la teva web i guardar els teus articles ens cal un compte. Connecta amb GitHub o el teu correu.</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 mb-6 px-3.5 py-3 rounded-2xl bg-neutral-50 border border-neutral-200">
+        <Globe className="w-4 h-4 text-neutral-400 shrink-0"/>
+        <span className="text-[13px] font-mono text-neutral-600 truncate">{displayUrl}</span>
+        <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-neutral-200 text-[9.5px] font-extrabold uppercase tracking-wider text-neutral-500 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Llest
+        </span>
+      </div>
+
+      <button
+        onClick={onContinue}
+        className="w-full mb-2.5 flex items-center justify-center gap-2.5 px-5 py-4 rounded-2xl bg-ink text-white text-sm font-extrabold tracking-tight hover:bg-neutral-800 transition-colors shadow-[0_10px_24px_-10px_rgba(0,0,0,0.5)]"
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden><path d="M12 .5a11.5 11.5 0 0 0-3.63 22.41c.58.1.79-.25.79-.55v-2c-3.21.7-3.89-1.39-3.89-1.39-.53-1.34-1.29-1.7-1.29-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.72 1.27 3.39.97.1-.75.4-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.6.23 2.78.11 3.07.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.66.8.55A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        Continuar amb GitHub
+      </button>
+      <button
+        onClick={onContinue}
+        className="w-full flex items-center justify-center gap-2.5 px-5 py-4 rounded-2xl bg-white border border-neutral-200 text-ink text-sm font-extrabold tracking-tight hover:bg-neutral-50 hover:border-neutral-300 transition-colors"
+      >
+        Continuar amb el correu
+      </button>
+
+      <p className="mt-6 text-[11px] text-center font-medium text-neutral-400 leading-relaxed">
+        Només llegim les dades públiques de la teva web. <span className="text-neutral-500 font-semibold">Sense escriure res al teu codi.</span>
+      </p>
+    </div>
+  );
+}
+
+function ProgressPanel({ displayUrl, stage, steps }) {
+  return (
+    <div className="p-9 pt-12 sm:p-11 sm:pt-12">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-br from-carma-100 to-carma-50 border border-carma-200/60 flex items-center justify-center text-carma-700 shrink-0">
+          <span className="absolute inset-0 rounded-2xl border-2 border-carma-400/70 border-r-transparent animate-rotate-slow"></span>
+          <Wand className="w-4 h-4 relative" strokeWidth={2}/>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-extrabold tracking-tight text-ink truncate">Clonant {displayUrl}</h3>
+          <p className="text-xs font-medium text-neutral-400">Trigarà uns segons…</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {steps.map((s, i) => {
+          const done = i < stage;
+          const active = i === stage;
+          return (
+            <div key={i}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all ${
+                done ? 'bg-green-50/50 border-green-100' :
+                active ? 'bg-carma-50/50 border-carma-200/70' :
+                'bg-neutral-50/40 border-neutral-100 opacity-55'
+              }`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                done ? 'bg-green-500 text-white' :
+                active ? 'bg-white border-2 border-carma-400' :
+                'bg-white border-2 border-neutral-200'
+              }`}>
+                {done && <Check className="w-3 h-3" strokeWidth={3.5}/>}
+                {active && <span className="w-1.5 h-1.5 rounded-full bg-carma-500 animate-pulse"></span>}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={`text-[12.5px] font-extrabold tracking-tight ${done ? 'text-green-800' : active ? 'text-ink' : 'text-neutral-500'}`}>{s.label}</div>
+                <div className={`text-[10.5px] font-medium truncate ${done ? 'text-green-700/70' : 'text-neutral-400'}`}>{s.detail}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Detected assets preview — appears as the relevant steps complete */}
+      {stage >= 4 && (
+        <div className="mt-5 px-3.5 py-3 rounded-2xl bg-gradient-to-br from-carma-50 to-white border border-carma-200/60 animate-fade-up">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-carma-700 mb-2">Detectat al teu lloc</div>
+          <div className="flex gap-1.5 mb-3">
+            {['#1a2138','#d4af37','#f0e6c8','#e94b4b','#5b8a72','#fafaf6'].map((c,i)=>(
+              <div key={i} className="flex-1 h-7 rounded-md border border-white/40 shadow-sm" style={{background:c}} title={c}></div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-bold text-neutral-600">
+            <span style={{fontFamily:'Georgia, serif'}}>Playfair Display</span>
+            <span className="text-neutral-300">+</span>
+            <span className="font-extrabold tracking-tight">Inter</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReadyPanel({ displayUrl }) {
+  return (
+    <div className="p-9 pt-12 sm:p-11 sm:pt-12 text-center">
+      <div className="relative mx-auto w-16 h-16 rounded-3xl bg-gradient-to-br from-carma-100 to-white border border-carma-200/60 flex items-center justify-center text-carma-700 mb-6 shadow-gold">
+        <Check className="w-7 h-7" strokeWidth={2.5}/>
+        <span className="absolute -top-1 -right-1"><Sparkles className="w-5 h-5 text-carma-500"/></span>
+      </div>
+      <h3 className="text-2xl font-extrabold tracking-tight text-ink mb-2">Llest. El teu blog t'espera.</h3>
+      <p className="text-sm font-medium text-neutral-500 leading-relaxed max-w-sm mx-auto mb-7">
+        Hem clonat la identitat de <span className="font-mono text-neutral-700">{displayUrl}</span> i hem creat un primer article d'exemple. Ara només queda escriure.
+      </p>
+      <a
+        href="#"
+        className="btn-gold inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-white text-sm font-extrabold tracking-tight shadow-gold"
+      >
+        Entrar a l'espai de treball <ArrowRight className="w-4 h-4" strokeWidth={2.5}/>
+      </a>
+      <div className="mt-5 text-[11px] font-extrabold tracking-[0.16em] uppercase text-neutral-400">
+        Gratis · Sense targeta · Cancel·la quan vulguis
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { GenerateModal, StartPanel, ProgressPanel, ReadyPanel });
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* ───── App ───── */
+function App() {
+  const [generateUrl, setGenerateUrl] = useState(null); // null = closed, string = open
+  const onGenerate = (raw) => {
+    const url = (raw || "").trim() || "https://la-teva-web.cat";
+    const withProto = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    setGenerateUrl(withProto);
+  };
+
+  // Reveal-on-scroll for anything tagged [data-reveal]
+  useEffect(() => {
+    const els = document.querySelectorAll('[data-reveal]:not(.in-view)');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -60px 0px' });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <>
+      <Nav/>
+      <main>
+        <Hero onGenerate={onGenerate}/>
+        <HowItWorks/>
+        <EditorPreview/>
+        <ProductTour/>
+        <Bento/>
+        <Pricing/>
+        <FinalCta onGenerate={onGenerate}/>
+        <Footer/>
+      </main>
+      {generateUrl !== null && (
+        <GenerateModal url={generateUrl} onClose={() => setGenerateUrl(null)} />
+      )}
+    </>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+
+</body>
+</html>

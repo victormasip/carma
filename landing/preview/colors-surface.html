@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-page); padding: 24px 28px; font-family: var(--font-sans); }
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .slot { display: flex; flex-direction: column; gap: 8px; }
+  .slot .surface { height: 96px; border-radius: 18px; border: 1px solid var(--border-1); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.08em; }
+  .name { font-size: 12px; font-weight: 800; color: var(--fg-1); }
+  .hex { font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="slot"><div class="surface" style="background:#F9F8F6">Page</div><div class="name">--bg-page</div><div class="hex">#F9F8F6 — warm canvas</div></div>
+  <div class="slot"><div class="surface" style="background:#ffffff">Card</div><div class="name">--bg-card</div><div class="hex">#FFFFFF — floating</div></div>
+  <div class="slot"><div class="surface" style="background:rgba(212,175,55,0.06);">Gold tint 6%</div><div class="name">--bg-tint</div><div class="hex">carma-500 / 6%</div></div>
+  <div class="slot"><div class="surface" style="background:#fdfaef">Gold tint 50</div><div class="name">--carma-50</div><div class="hex">#fdfaef — selection</div></div>
+</div>
+</body>
+</html>

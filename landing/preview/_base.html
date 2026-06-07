@@ -1,0 +1,33 @@
+<!-- Shared base for preview cards. Pull-in via <link rel="stylesheet"> from each card. -->
+<style>
+  @import url("../colors_and_type.css");
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-page);
+    font-family: var(--font-sans);
+    color: var(--fg-1);
+  }
+  .card {
+    padding: 28px 32px;
+    box-sizing: border-box;
+    min-height: 100%;
+  }
+  .row { display: flex; gap: 12px; align-items: center; }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .grid { display: grid; gap: 12px; }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-4);
+  }
+  .mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); }
+  .swatch {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-1);
+    overflow: hidden;
+  }
+</style>
