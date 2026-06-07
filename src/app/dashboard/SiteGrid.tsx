@@ -10,6 +10,7 @@ import { deleteSite } from '@/lib/actions/sites'
 import { useConfirm } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
+import { formatDate, formatNumber } from '@/lib/format'
 
 export type SiteWithCounts = {
   id: string
@@ -141,7 +142,7 @@ function SiteCard({
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-bold leading-tight text-text transition-colors group-hover:text-accent">{site.name}</h3>
-          <p className="mt-0.5 text-xs text-subtle">Creat el {new Date(site.created_at).toLocaleDateString('ca-ES')}</p>
+          <p className="mt-0.5 text-xs text-subtle">Creat el {formatDate(site.created_at)}</p>
         </div>
         <span className="ml-auto flex h-7 w-7 shrink-0 -translate-x-1 items-center justify-center rounded-lg text-subtle opacity-0 transition-all group-hover:translate-x-0 group-hover:bg-accent-soft group-hover:text-accent group-hover:opacity-100">
           <ArrowUpRight className="h-4 w-4" />
@@ -186,7 +187,7 @@ function InlineStat({ icon, value, label, tone = 'neutral' }: { icon: React.Reac
   return (
     <span className="inline-flex items-center gap-1.5 text-sm">
       <span className={accent}>{icon}</span>
-      <span className="font-bold tabular-nums text-text">{value.toLocaleString('ca-ES')}</span>
+      <span className="font-bold tabular-nums text-text">{formatNumber(value)}</span>
       <span className="text-subtle">{label}</span>
     </span>
   )

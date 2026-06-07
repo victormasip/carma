@@ -14,6 +14,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { publicBlogUrl } from '@/lib/sites/domain'
+import { formatDate } from '@/lib/format'
 
 // Code-split the heavy, off-the-default-path surfaces so they stay OUT of the
 // site-detail route's initial JS bundle. The default tab is "Articles", so the
@@ -148,7 +149,7 @@ export default function SiteDetailClient({
               {isSuperAdmin && <SiteAdminActions siteId={siteId} siteName={siteName} />}
             </div>
             <p className="text-sm text-muted mt-1.5">
-              Creat el {new Date(siteCreatedAt).toLocaleDateString('ca-ES')}
+              Creat el {formatDate(siteCreatedAt)}
             </p>
           </div>
         </div>

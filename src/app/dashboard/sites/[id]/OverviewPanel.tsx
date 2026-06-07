@@ -10,6 +10,7 @@
 import { useRef, useState } from 'react'
 import { Eye, Users, FileText, TrendingUp, TrendingDown, ArrowUpRight, BarChart3, Loader2 } from 'lucide-react'
 import { getSiteStats } from '@/lib/actions/analytics'
+import { formatNumber } from '@/lib/format'
 import type { SiteStats } from '@/lib/analytics/read'
 import { cn } from '@/lib/cn'
 
@@ -120,7 +121,7 @@ export default function OverviewPanel({
                   <p className="text-sm font-semibold text-text truncate">{p.title}</p>
                   {p.slug && <p className="text-xs text-subtle font-mono truncate">/{p.slug}</p>}
                 </div>
-                <span className="text-sm font-bold text-text tabular-nums shrink-0">{p.views.toLocaleString('ca-ES')}</span>
+                <span className="text-sm font-bold text-text tabular-nums shrink-0">{formatNumber(p.views)}</span>
                 {p.slug && (
                   <a
                     href={`/render/${siteId}/${p.slug}`}
@@ -165,7 +166,7 @@ function StatTile({
         {loading
           ? <div className="h-7 w-16 rounded-md bg-surface-subtle animate-pulse" />
           : <p className="text-2xl font-bold text-text leading-none tabular-nums">
-              {(value ?? 0).toLocaleString('ca-ES')}{sub && <span className="text-sm font-medium text-subtle ml-1">{sub}</span>}
+              {formatNumber(value ?? 0)}{sub && <span className="text-sm font-medium text-subtle ml-1">{sub}</span>}
             </p>}
         <p className="text-xs font-medium text-subtle mt-1.5">{label}</p>
       </div>

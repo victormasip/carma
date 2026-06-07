@@ -21,6 +21,7 @@ import Badge from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { normalizeUrl } from '@/lib/onboarding/url'
+import { formatDate } from '@/lib/format'
 import {
   CAPTURE_STEPS, parseSseFrame,
   type AnalyzeResult, type CaptureStepId, type CaptureStepStatus,
@@ -798,7 +799,7 @@ function LabDashboard({
 
                 <div className="mt-auto flex items-center gap-1.5 text-xs text-subtle pt-1">
                   <Clock className="w-3 h-3" />
-                  {new Date(s.updated_at).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {formatDate(s.updated_at, 'medium')}
                 </div>
               </Card>
             )

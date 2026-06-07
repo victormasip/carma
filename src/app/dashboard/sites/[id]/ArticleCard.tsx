@@ -20,6 +20,7 @@ import {
 import type { PostListItem } from '@/lib/actions/posts'
 import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { cn } from '@/lib/cn'
+import { formatDate } from '@/lib/format'
 
 // ── Inline, click-to-edit text field ─────────────────────────────────────────
 function InlineEdit({
@@ -112,7 +113,7 @@ function DateEdit({ value, onCommit }: { value: string; onCommit: (iso: string) 
   const toInput = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10) }
   const label = (() => {
     const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ca-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+    return Number.isNaN(d.getTime()) ? '—' : formatDate(d, 'medium')
   })()
 
   // Commit on pick: keep the original time-of-day, swap only the calendar date.
