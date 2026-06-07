@@ -22,34 +22,118 @@ export function isValidHttpUrl(raw: string): boolean {
   }
 }
 
+// Is a 32-bit IPv4 address (as a single unsigned int) in a private / loopback /
+// link-local / reserved range that must never be reachable via SSRF?
+function isPrivateIpv4(n: number): boolean {
+  const a = (n >>> 24) & 0xff
+  const b = (n >>> 16) & 0xff
+  return (
+    a === 0 ||                          // 0.0.0.0/8 "this network"
+    a === 10 ||                         // 10.0.0.0/8 private
+    a === 127 ||                        // 127.0.0.0/8 loopback
+    (a === 169 && b === 254) ||         // 169.254.0.0/16 link-local (incl. cloud metadata)
+    (a === 172 && b >= 16 && b <= 31) ||// 172.16.0.0/12 private
+    (a === 192 && b === 168) ||         // 192.168.0.0/16 private
+    (a === 100 && b >= 64 && b <= 127) ||// 100.64.0.0/10 CGNAT
+    (a === 192 && b === 0) ||           // 192.0.0.0/24 IETF protocol assignments
+    (a === 198 && (b === 18 || b === 19)) || // 198.18.0.0/15 benchmarking
+    a >= 224                            // 224.0.0.0/4 multicast + 240.0.0.0/4 reserved
+  )
+}
+
+// Parse a host that is an IPv4 literal in ANY of the forms a browser/libc accepts
+// (dotted-decimal, dotted-hex/octal, and the 1/2/3-part shorthands, plus a single
+// 32-bit decimal/hex), returning the 32-bit value — or null if it isn't IPv4.
+// This is what closes the classic SSRF bypass where 169.254.169.254 is written as
+// 0xa9fea9fe / 2852039166 / 0251.0376.0251.0376 to slip past a literal blocklist.
+function parseIpv4(host: string): number | null {
+  const parts = host.split('.')
+  if (parts.length === 0 || parts.length > 4) return null
+
+  const nums: number[] = []
+  for (const p of parts) {
+    if (p === '') return null
+    let v: number
+    if (/^0x[0-9a-f]+$/i.test(p)) v = parseInt(p, 16)
+    else if (/^0[0-7]+$/.test(p)) v = parseInt(p, 8)
+    else if (/^[0-9]+$/.test(p)) v = parseInt(p, 10)
+    else return null
+    if (!Number.isFinite(v) || v < 0) return null
+    nums.push(v)
+  }
+
+  // The last part absorbs the remaining bytes (inet_aton semantics):
+  // a       → 32-bit | a.b → b is 24-bit | a.b.c → c is 16-bit | a.b.c.d → 8-bit each.
+  const last = nums[nums.length - 1]
+  const lead = nums.slice(0, -1)
+  if (lead.some(x => x > 0xff)) return null
+  const maxLast = [0xffffffff, 0xffffff, 0xffff, 0xff][lead.length]
+  if (last > maxLast) return null
+
+  let n = last >>> 0
+  for (let i = 0; i < lead.length; i++) {
+    n = (n + (lead[i] * Math.pow(256, 4 - 1 - i))) >>> 0
+  }
+  return n >>> 0
+}
+
+// Extract an embedded IPv4 from an IPv4-mapped/compatible IPv6 host
+// (::ffff:127.0.0.1 or its hex form ::ffff:7f00:1, and ::a.b.c.d), if present.
+function embeddedIpv4FromIpv6(host: string): number | null {
+  // Dotted IPv4 tail, e.g. ::ffff:169.254.169.254
+  const dotted = host.match(/(\d{1,3}(?:\.\d{1,3}){3})$/)
+  if (dotted) return parseIpv4(dotted[1])
+  // Hextet form ::ffff:a9fe:a9fe — take the final two 16-bit groups.
+  const groups = host.split(':').filter(Boolean)
+  if (groups.length >= 2) {
+    const g1 = groups[groups.length - 2]
+    const g2 = groups[groups.length - 1]
+    if (/^[0-9a-f]{1,4}$/i.test(g1) && /^[0-9a-f]{1,4}$/i.test(g2)) {
+      const hasMapped = /(?:^|:)0*f{4}:/i.test(host) || /^::/.test(host)
+      if (hasMapped) return (((parseInt(g1, 16) << 16) >>> 0) + parseInt(g2, 16)) >>> 0
+    }
+  }
+  return null
+}
+
 /**
- * Best-effort SSRF guard: reject obvious loopback / private / link-local hosts.
+ * SSRF guard: reject loopback / private / link-local / reserved destinations,
+ * across every IP-literal encoding (dotted, decimal, hex, octal, IPv4-mapped
+ * IPv6) — not just the canonical text form. This matters because several callers
+ * are now reachable WITHOUT a trusted session (the public /api/onboarding/detect
+ * + /preview funnel) or by any signed-up user (import/analyze), so an attacker
+ * could otherwise pivot the server onto internal services or the cloud metadata
+ * endpoint (169.254.169.254) by encoding the IP.
  *
- * Note: this is a literal-hostname check and does NOT resolve DNS, so a public
- * hostname that resolves to a private IP is not caught here. Full protection
- * would require DNS pinning; that is out of scope for the current threat model
- * (superadmin-only, trusted operators).
+ * Note: this is still a literal-host check and does NOT resolve DNS, so a public
+ * hostname that resolves to a private IP (DNS rebinding) is not caught here. Full
+ * protection would require DNS pinning at fetch time; that remains out of scope.
  */
 export function isSafeUrl(raw: string): boolean {
   try {
     const host = new URL(raw).hostname.toLowerCase().replace(/^\[|\]$/g, '')
     if (!host) return false
 
-    // IPv4 + hostname ranges
-    const blockedV4OrName = [
-      /^localhost$/, /\.localhost$/, /\.local$/,
-      /^127\./, /^0\.0\.0\.0$/, /^10\./,
-      /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./,
-    ]
-    if (blockedV4OrName.some(r => r.test(host))) return false
+    // Hostname blocklist (non-IP): loopback + mDNS/.local + internal TLDs.
+    if (/^localhost$/.test(host) || /\.localhost$/.test(host) || /\.local$/.test(host)) return false
+    if (/\.internal$/.test(host) || host === 'metadata' || host === 'metadata.google.internal') return false
 
-    // IPv6: loopback / unspecified / link-local (fe80::/10) / unique-local (fc00::/7)
+    // IPv6 (contains a colon).
     if (host.includes(':')) {
-      if (host === '::1' || host === '::') return false
-      if (/^fe80:/.test(host)) return false
-      if (/^f[cd][0-9a-f]{2}:/.test(host) || /^f[cd]:/.test(host)) return false
+      if (host === '::1' || host === '::') return false       // loopback / unspecified
+      if (/^fe80:/.test(host)) return false                    // link-local fe80::/10
+      if (/^f[cd][0-9a-f]{2}:/.test(host) || /^f[cd]:/.test(host)) return false // unique-local fc00::/7
+      if (/^ff[0-9a-f]{0,2}:/.test(host)) return false         // multicast ff00::/8
+      const mapped = embeddedIpv4FromIpv6(host)
+      if (mapped !== null && isPrivateIpv4(mapped)) return false
+      return true
     }
 
+    // IPv4 in any encoding (dotted/decimal/hex/octal/shorthand).
+    const v4 = parseIpv4(host)
+    if (v4 !== null) return !isPrivateIpv4(v4)
+
+    // A regular hostname.
     return true
   } catch {
     return false

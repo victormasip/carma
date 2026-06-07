@@ -105,19 +105,35 @@ export async function fetchSiteStats(admin: Admin, siteId: string, days = 30): P
   return base
 }
 
-/** Per-site view counts over the last `days`, for the dashboard cards. One small
- *  head-count query per site in parallel — accurate and row-cap-free. */
+/** Per-site view counts over the last `days`, for the dashboard cards.
+ *
+ *  Single round-trip: one grouped aggregation in the database via the
+ *  `site_view_counts` RPC (migration 020), index-backed and row-cap-free. If the
+ *  function isn't present yet (pre-migration) we fall back to the previous
+ *  per-site head-count fan-out so the dashboard keeps working unchanged. */
 export async function fetchSitesViewCounts(
   admin: Admin, siteIds: string[], days = 30,
 ): Promise<Record<string, number>> {
   const since = sinceIso(days)
-  const ids = siteIds.slice(0, 60) // bound the fan-out
+  const ids = siteIds.slice(0, 60) // bound the fan-out / payload
   const out: Record<string, number> = {}
+  if (ids.length === 0) return out
+  for (const id of ids) out[id] = 0
+
+  const { data, error } = await admin.rpc('site_view_counts', { p_site_ids: ids, p_since: since })
+  if (!error && Array.isArray(data)) {
+    for (const row of data as { site_id: string; views: number }[]) {
+      out[row.site_id] = Number(row.views) || 0
+    }
+    return out
+  }
+
+  // Fallback (function missing / not yet migrated): one head-count per site.
   await Promise.all(ids.map(async id => {
-    const { count, error } = await admin
+    const { count, error: e } = await admin
       .from('page_views').select('id', { count: 'exact', head: true })
       .eq('site_id', id).gte('created_at', since)
-    out[id] = error ? 0 : (count ?? 0)
+    out[id] = e ? 0 : (count ?? 0)
   }))
   return out
 }
