@@ -10,7 +10,7 @@
 //   · Right slide-over for everything contextual (Ajustos / SEO / AI). The
 //     canvas reclaims the viewport when the drawer is closed.
 
-import { useState, useCallback, useMemo, useTransition, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Save, Eye, EyeOff, Loader2, Tag, X, ImageIcon,
@@ -34,6 +34,9 @@ import Link from 'next/link'
 
 // Code-split the heavy rich-text editor so it doesn't bloat the initial bundle.
 const TipTapEditor = lazy(() => import('./TipTapEditor'))
+
+// Background autosave debounce — how long after the last edit we persist.
+const AUTOSAVE_MS = 900
 
 // Debounce so SEO analysis only runs when typing pauses (not on every keystroke).
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -255,12 +258,11 @@ function buildLlmsExcerpt(input: { title: string; description: string; contentHt
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function PostEditorClient({ siteId, siteName, post, siteLocales, siteDefaultLocale, canTranslate = false }: Props) {
+export default function PostEditorClient({ siteId, siteName, post, siteDefaultLocale, canTranslate = false }: Props) {
   const isNew = !post
   const router = useRouter()
   const { toast } = useToast()
   const confirm = useConfirm()
-  const [isPending, startTransition] = useTransition()
 
   const defaultLocale = useMemo(
     () => normalizeLocale(post?.default_locale ?? siteDefaultLocale, DEFAULT_LOCALE),
@@ -269,21 +271,19 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
 
   // Per-locale text state
   const [localeData, setLocaleData] = useState<Record<Locale, LocaleFields>>(() => initLocaleData(post, defaultLocale))
-  // ONE-SHOT initial language detection: if the article is an existing post
-  // whose content is clearly in a non-default language (e.g. Spanish content on
-  // a Catalan-default site), jump straight to that tab. Lazy initializer so we
-  // don't have to setState in an effect (forbidden in React 19 strict).
-  const [activeLocale, setActiveLocale] = useState<Locale>(() => {
-    if (!post) return defaultLocale
-    const src = initLocaleData(post, defaultLocale)[defaultLocale]
-    const sample = `${src.title}\n${src.contentHtml}`
-    const { locale } = detectLocale(sample)
-    if (locale && locale !== defaultLocale) return locale
-    return defaultLocale
-  })
+  // Open on the locale where the content ACTUALLY lives — the post's
+  // `default_locale` (set correctly at import time). The base columns
+  // (title/content) are stored under `default_locale`, so opening there always
+  // shows the imported text. We do NOT auto-detect-and-switch: that jumped to an
+  // EMPTY non-default tab (the "opens an empty Catalan tab" bug). Content
+  // language is surfaced non-destructively by the advisory pill instead.
+  const [activeLocale, setActiveLocale] = useState<Locale>(defaultLocale)
+  // Tabs to show: the default locale + ONLY the extra locales that actually carry
+  // a translation. We deliberately do NOT pre-open every configured site locale —
+  // a single-language article should show a single tab (extra languages are added
+  // on demand with the "+" button).
   const [shownLocales, setShownLocales] = useState<Locale[]>(() => {
     const set = new Set<Locale>([defaultLocale])
-    for (const l of siteLocales ?? []) if ((LOCALES as readonly string[]).includes(l)) set.add(l as Locale)
     if (post) {
       for (const loc of LOCALES) {
         if (loc === defaultLocale) continue
@@ -358,12 +358,14 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
   const [isPublished, setIsPublished] = useState(post?.is_published ?? false)
   const [date, setDate] = useState(post?.created_at ? post.created_at.slice(0, 10) : '')
   const [drawerOpen, setDrawerOpen] = useState(true)
-  // New posts open straight to the AI tab so "Genera un article SEO" is right
-  // there; existing posts open on Ajustos.
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>(isNew ? 'ai' : 'settings')
+  // The writing canvas is ALWAYS the primary view; the drawer is a secondary
+  // tool. It opens on Ajustos (content/settings) for both new and existing posts
+  // — never on AI, which is an assistive tool the user reaches for deliberately.
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>('settings')
   const [error, setError] = useState<string | null>(null)
-  // Transient "Desat" confirmation shown on the Save button after an in-place save.
-  const [savedFlash, setSavedFlash] = useState(false)
+  // Autosave status — drives the top-bar indicator that replaced the Save button.
+  const [currentPostId, setCurrentPostId] = useState<string | null>(post?.id ?? null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // Writing coach state. The analysis is per-language, so we key it by the
   // locale it was computed for and treat it as null whenever the user has
@@ -656,37 +658,74 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
     }
   }
 
-  // Real-time save (SPA — never reload the editor).
-  //   · Existing post → update IN PLACE; the user stays exactly where they are,
-  //     with a transient "Desat" confirmation on the Save button. No navigation.
-  //   · New post → create, then replace the URL with the article's edit route
-  //     ONCE (so the next save updates instead of creating a duplicate). We don't
-  //     bounce back to the site list anymore.
-  const handleSave = () => {
-    setError(null)
+  // ── ZERO-CLICK AUTOSAVE ────────────────────────────────────────────────────
+  // No Save button: every edit (content, metadata, publish, SEO, per-locale) is
+  // serialized and persisted in the background, debounced. The FIRST save on a
+  // brand-new post CREATES it (then promotes the URL to its edit route); every
+  // later save UPDATES in place. Saves run through a `savingRef` mutex + a "save
+  // until the latest snapshot is persisted" loop, so a burst of edits can never
+  // create duplicates or drop the trailing change.
+  const serialized = JSON.stringify(buildData())
+  const lastSavedRef = useRef(serialized)
+  // `latestRef` always mirrors the newest serialized document; it's updated inside
+  // the effect below (never during render). `currentPostIdRef` is updated inside
+  // runSave after a create (and re-initialised on the post-create remount).
+  const latestRef = useRef(serialized)
+  const currentPostIdRef = useRef(currentPostId)
+  const savingRef = useRef(false)
+
+  const runSave = useCallback(async () => {
+    if (savingRef.current) return
+    savingRef.current = true
+    try {
+      // Drain: keep saving until what we persisted equals the latest snapshot.
+      while (latestRef.current !== lastSavedRef.current) {
+        const payload = latestRef.current
+        const data = JSON.parse(payload) as PostData
+        if (!data.title?.trim()) break // a title is required before we persist
+        setSaveState('saving')
+        const pid = currentPostIdRef.current
+        const result: { error?: string; id?: string } = pid
+          ? await updatePost(pid, siteId, data)
+          : await createPost(siteId, data)
+        if (result.error) { setSaveState('error'); return }
+        lastSavedRef.current = payload
+        if (!pid && result.id) {
+          currentPostIdRef.current = result.id
+          setCurrentPostId(result.id)
+          // Promote /posts/new → /posts/<id>/edit so a refresh/Back is correct.
+          router.replace(`/dashboard/sites/${siteId}/posts/${result.id}/edit`)
+        }
+      }
+      setSaveState('saved')
+    } finally {
+      savingRef.current = false
+    }
+  }, [siteId, router])
+
+  // Debounced trigger: whenever the document differs from what we last persisted,
+  // schedule a save. We keep `latestRef` in sync here (inside the effect, not at
+  // render) so an in-flight save's drain loop always sees the freshest snapshot.
+  // The "saving" state is set by runSave itself when the request actually fires.
+  useEffect(() => {
+    latestRef.current = serialized
+    if (serialized === lastSavedRef.current) return
+    if (!localeData[defaultLocale].title.trim()) return
+    const handle = setTimeout(() => { void runSave() }, AUTOSAVE_MS)
+    return () => clearTimeout(handle)
+  }, [serialized, localeData, defaultLocale, runSave])
+
+  // Reassurance affordance: clicking the status pill flushes a save immediately.
+  // A missing default-locale title is the only hard requirement, surfaced inline.
+  const forceSave = () => {
     if (!localeData[defaultLocale].title.trim()) {
       const msg = `El títol en ${LOCALE_META[defaultLocale].native} és obligatori`
       setError(msg)
       if (activeLocale !== defaultLocale) setActiveLocale(defaultLocale)
       return
     }
-    startTransition(async () => {
-      const data = buildData()
-      if (isNew) {
-        const result = await createPost(siteId, data)
-        if (result.error || !result.id) { setError(result.error ?? 'No s\'ha pogut crear l\'article'); return }
-        toast(`Article creat${isPublished ? ' i publicat' : ' com a esborrany'}`, 'success')
-        // Promote the new-post editor into the edit route for this id, keeping the
-        // user in the editor. `replace` so Back doesn't return to the empty form.
-        router.replace(`/dashboard/sites/${siteId}/posts/${result.id}/edit`)
-        return
-      }
-      const result = await updatePost(post!.id, siteId, data)
-      if (result.error) { setError(result.error); return }
-      setSavedFlash(true)
-      window.setTimeout(() => setSavedFlash(false), 2000)
-      toast('Article desat', 'success')
-    })
+    setError(null)
+    void runSave()
   }
 
   const headerTitle = localeData[defaultLocale].title
@@ -734,7 +773,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
                       title={`${LOCALE_META[loc].label} · ${pct}% complet${loc === defaultLocale ? ' · idioma per defecte' : ''}`}
                       className={cn(
                         'cursor-pointer flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-semibold transition-colors',
-                        isActive ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
+                        isActive ? 'bg-surface text-text shadow-card ring-1 ring-accent/40' : 'text-muted hover:text-text',
                       )}
                     >
                       <span className="text-sm leading-none">{LOCALE_META[loc].flag}</span>
@@ -855,24 +894,11 @@ export default function PostEditorClient({ siteId, siteName, post, siteLocales, 
               <PanelRight className="w-3.5 h-3.5" />
             </button>
 
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isPending || !localeData[defaultLocale].title.trim()}
-              className={cn(
-                'cursor-pointer flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-                savedFlash && !isPending
-                  ? 'bg-success text-on-accent'
-                  : 'bg-accent hover:bg-accent-hover text-on-accent',
-              )}
-            >
-              {isPending
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : savedFlash
-                  ? <CheckCircle2 className="w-3.5 h-3.5" />
-                  : <Save className="w-3.5 h-3.5" />}
-              {isPending ? 'Desant…' : savedFlash ? 'Desat' : 'Desar'}
-            </button>
+            <AutosaveIndicator
+              state={saveState}
+              hasTitle={!!localeData[defaultLocale].title.trim()}
+              onForce={forceSave}
+            />
           </div>
         </div>
       </header>
@@ -1720,5 +1746,37 @@ function ScoreRing({ pct, ring }: { pct: number; ring: string }) {
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-text">{pct}</span>
     </div>
+  )
+}
+
+// Top-bar autosave status. Replaces the manual Save button: content + metadata
+// persist automatically; this just reflects the state and lets the user flush a
+// save on demand (clicking it) for reassurance.
+function AutosaveIndicator({
+  state, hasTitle, onForce,
+}: {
+  state: 'idle' | 'saving' | 'saved' | 'error'
+  hasTitle: boolean
+  onForce: () => void
+}) {
+  const view =
+    state === 'saving' ? { icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />, label: 'Desant…', cls: 'text-muted' }
+    : state === 'error' ? { icon: <AlertCircle className="w-3.5 h-3.5" />, label: 'Reintentar', cls: 'text-danger' }
+    : state === 'saved' ? { icon: <CheckCircle2 className="w-3.5 h-3.5 text-success" />, label: 'Desat', cls: 'text-muted' }
+    : hasTitle ? { icon: <CheckCircle2 className="w-3.5 h-3.5 text-success" />, label: 'Desat', cls: 'text-muted' }
+    : { icon: <Save className="w-3.5 h-3.5" />, label: 'Es desa sol', cls: 'text-subtle' }
+  return (
+    <button
+      type="button"
+      onClick={onForce}
+      title="Es desa automàticament · clica per desar ara"
+      className={cn(
+        'cursor-pointer flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold hover:bg-surface-hover transition-colors',
+        view.cls,
+      )}
+    >
+      {view.icon}
+      <span className="hidden sm:inline">{view.label}</span>
+    </button>
   )
 }

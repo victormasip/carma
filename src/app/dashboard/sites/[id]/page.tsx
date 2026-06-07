@@ -12,7 +12,8 @@ export default async function SiteDetailsPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const [{ id: siteId }, { tab: qTab }] = await Promise.all([params, searchParams])
+  const [{ id: siteId }, { tab: qTab, clone: qClone }] = await Promise.all([params, searchParams])
+  const autoCloneUrl = typeof qClone === 'string' && qClone ? qClone : undefined
 
   const supabase = await createClient()
   const admin = createAdminClient()
@@ -23,13 +24,17 @@ export default async function SiteDetailsPage({
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   const isSuperAdmin = profile?.role === 'superadmin'
 
-  const { data: site, error: siteError } = await (isSuperAdmin ? admin : supabase)
-    .from('sites')
-    .select('id, name, api_key, created_at')
-    .eq('id', siteId)
-    .single()
+  // Select the site, including `subdomain` (migration 021). 42703-safe: if the
+  // column isn't present yet we retry without it so the page still renders.
+  const siteSel = (cols: string) =>
+    (isSuperAdmin ? admin : supabase).from('sites').select(cols).eq('id', siteId).single()
+  let { data: site, error: siteError } = await siteSel('id, name, api_key, created_at, subdomain')
+  if (siteError?.code === '42703') {
+    ;({ data: site, error: siteError } = await siteSel('id, name, api_key, created_at'))
+  }
 
   if (siteError || !site) redirect('/dashboard')
+  const siteRow = site as unknown as { id: string; name: string; api_key: string; created_at: string; subdomain?: string | null }
 
   // Fetch all tab data in parallel — enables instant client-side tab switching.
   // Posts are paginated (first page only) so the full table is never loaded.
@@ -64,9 +69,11 @@ export default async function SiteDetailsPage({
   // All tabs are valid deep-link targets for everyone; locked ones render an
   // upsell panel for free clients rather than the real content.
   const validTabs = ['resum', 'articles', 'tema', 'connexio', 'usuaris']
+  // No explicit ?tab= opens the FIRST tab (Articles) — the content workspace —
+  // not Resum, which now lives after Tema in the IA.
   const defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
     ? (qTab as 'resum' | 'articles' | 'tema' | 'connexio' | 'usuaris')
-    : 'resum'
+    : 'articles'
 
   // A pristine site (no theme captured, no posts) gets the onboarding chooser.
   const isNewSite = !themeResult.data && (postsResult.total ?? 0) === 0
@@ -74,9 +81,10 @@ export default async function SiteDetailsPage({
   return (
     <SiteDetailClient
       siteId={siteId}
-      siteName={site.name}
-      siteCreatedAt={site.created_at}
-      apiKey={site.api_key}
+      siteName={siteRow.name}
+      siteCreatedAt={siteRow.created_at}
+      apiKey={siteRow.api_key}
+      subdomain={siteRow.subdomain ?? undefined}
       isSuperAdmin={isSuperAdmin}
       isNewSite={isNewSite}
       initialPosts={postsResult.posts}
@@ -93,6 +101,7 @@ export default async function SiteDetailsPage({
       initialTheme={themeResult.data ?? null}
       initialStats={initialStats}
       defaultTab={defaultTab}
+      autoCloneUrl={autoCloneUrl}
       siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
     />
   )

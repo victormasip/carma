@@ -6,6 +6,7 @@ import { Plus, Globe, Search, Check } from 'lucide-react'
 import { createSite } from '@/lib/actions/sites'
 import { Modal, ModalClose } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import { Input } from '@/components/ui/input'
 
 type Client = { id: string; email: string }
 
@@ -112,13 +113,13 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
               ) : (
                 <div className="space-y-2">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-subtle pointer-events-none" />
-                    <input
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-subtle pointer-events-none z-10" />
+                    <Input
                       type="text"
                       value={clientSearch}
                       onChange={e => setClientSearch(e.target.value)}
                       placeholder="Cerca per email…"
-                      className="w-full h-9 pl-8 pr-3 bg-surface-subtle border border-border rounded-lg text-xs font-medium focus:outline-none focus:border-accent focus:bg-surface transition-colors text-text placeholder:text-subtle"
+                      className="h-9 pl-8 pr-3 rounded-lg bg-surface-subtle text-xs"
                     />
                   </div>
 

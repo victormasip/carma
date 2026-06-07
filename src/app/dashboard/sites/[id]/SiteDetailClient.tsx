@@ -6,19 +6,25 @@ import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, Loader2, Layou
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import ApiDocsCard from './ApiDocsCard'
 import PostsManager from './PostsManager'
-import ImportModal from './ImportModal'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
 import SiteOnboarding from './SiteOnboarding'
-import OverviewPanel from './OverviewPanel'
 import { LockBadge, PremiumPanel } from './PremiumGate'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
+import { publicBlogUrl } from '@/lib/sites/domain'
 
-// Code-split the Theme Studio (LLM Magic Wand + visual chrome editor) — heavy
-// and only needed on the Tema tab, so it stays out of the dashboard's main bundle.
+// Code-split the heavy, off-the-default-path surfaces so they stay OUT of the
+// site-detail route's initial JS bundle. The default tab is "Articles", so the
+// chart (OverviewPanel), the import modal and the Theme Studio are fetched on
+// demand — each is conditionally rendered already, so this changes nothing
+// visually/behaviourally beyond a brief load the first time it's opened.
+// (SiteOnboarding stays a static import: it's the critical first-run funnel and
+// must mount + auto-fire the clone with zero extra latency.)
 const ThemeManager = lazy(() => import('./ThemeManager'))
+const OverviewPanel = lazy(() => import('./OverviewPanel'))
+const ImportModal = lazy(() => import('./ImportModal'))
 import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioContext'
 import type { PostsMeta } from './PostsManager'
 import type { PostListItem } from '@/lib/actions/posts'
@@ -34,6 +40,7 @@ type Props = {
   siteName: string
   siteCreatedAt: string
   apiKey: string
+  subdomain?: string
   isSuperAdmin: boolean
   isNewSite: boolean
   initialPosts: Post[]
@@ -43,29 +50,35 @@ type Props = {
   initialTheme: Theme | null
   initialStats: SiteStats | null
   defaultTab: TabKey
+  /** When present (self-serve funnel), auto-starts the Magic Wand on this URL. */
+  autoCloneUrl?: string
   siteDefaultLocale?: string
 }
 
 type SectionDef = { key: TabKey; label: string; desc: string; icon: typeof FileText; premium?: boolean }
+// Order: content first, then design (Tema), then stats (Resum) — per the launch
+// IA, "Resum" deliberately sits AFTER "Tema".
 const SECTION_DEFS: SectionDef[] = [
-  { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'articles', label: 'Articles', desc: 'Contingut',     icon: FileText },
   { key: 'tema',     label: 'Tema',     desc: 'Disseny',       icon: Palette },
+  { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'connexio', label: 'Connexió', desc: 'API i embed',   icon: Plug,  premium: true },
   { key: 'usuaris',  label: 'Usuaris',  desc: 'Equip',         icon: Users, premium: true },
 ]
 
 export default function SiteDetailClient({
-  siteId, siteName, siteCreatedAt, apiKey,
+  siteId, siteName, siteCreatedAt, apiKey, subdomain,
   isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
-  initialStats, defaultTab, siteDefaultLocale,
+  initialStats, defaultTab, autoCloneUrl, siteDefaultLocale,
 }: Props) {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab)
   const [showImport, setShowImport] = useState(false)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
-  const showOnboarding = isNewSite && isSuperAdmin && !onboardingDone
+  // Onboarding is for any pristine site — superadmins provisioning a client site
+  // AND self-serve users landing on their freshly-created first blog.
+  const showOnboarding = isNewSite && !onboardingDone
   const wpImportIntent = useRef(false)
 
   // Resync the active tab when the server-provided defaultTab changes (e.g.
@@ -80,7 +93,8 @@ export default function SiteDetailClient({
 
   const switchTab = (tab: TabKey) => {
     setActiveTab(tab)
-    const url = tab === 'resum'
+    // Articles is the default workspace, so it owns the clean URL; the rest carry ?tab=.
+    const url = tab === 'articles'
       ? `/dashboard/sites/${siteId}`
       : `/dashboard/sites/${siteId}?tab=${tab}`
     window.history.replaceState({}, '', url)
@@ -90,7 +104,10 @@ export default function SiteDetailClient({
   const handleMagicWandStarted = () => {
     wpImportIntent.current = true
     setOnboardingDone(true)
-    switchTab('tema')
+    // Self-serve (arrived with a clone URL): drop the user straight onto Articles —
+    // the site already exists and the clone + any import run in the background.
+    // Manual capture (operator) stays on Tema to watch the theme assemble.
+    switchTab(autoCloneUrl ? 'articles' : 'tema')
   }
   const handleTemplateApplied = (templateName: string) => {
     setOnboardingDone(true)
@@ -136,12 +153,17 @@ export default function SiteDetailClient({
           </div>
         </div>
 
-        {/* Prominent "Veure lloc". Fresh ?v= cache-buster at click time. */}
+        {/* Prominent "Veure lloc". Opens the site's own subdomain when available
+            (falls back to /render/<id>), with a fresh ?v= cache-buster at click time. */}
         <a
           href={`/render/${siteId}`}
           onClick={(e) => {
             e.preventDefault()
-            window.open(`/render/${siteId}?v=${Date.now()}`, '_blank', 'noopener,noreferrer')
+            const v = Date.now()
+            const subUrl = subdomain
+              ? publicBlogUrl(subdomain, { currentHost: window.location.host, path: `/?v=${v}` })
+              : null
+            window.open(subUrl ?? `/render/${siteId}?v=${v}`, '_blank', 'noopener,noreferrer')
           }}
           target="_blank"
           rel="noopener noreferrer"
@@ -165,6 +187,8 @@ export default function SiteDetailClient({
         {showOnboarding && (
           <SiteOnboarding
             siteName={siteName}
+            initialUrl={autoCloneUrl}
+            autoStart={!!autoCloneUrl}
             onMagicWandStarted={handleMagicWandStarted}
             onTemplateApplied={handleTemplateApplied}
             onDismiss={() => setOnboardingDone(true)}
@@ -176,12 +200,18 @@ export default function SiteDetailClient({
 
           <div className="min-w-0">
             {activeTab === 'resum' && (
-              <OverviewPanel
-                siteId={siteId}
-                totalArticles={initialPostsMeta.total}
-                publishedArticles={initialPostsMeta.published}
-                initialStats={initialStats}
-              />
+              <Suspense fallback={
+                <div className="flex items-center justify-center py-20 text-subtle">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              }>
+                <OverviewPanel
+                  siteId={siteId}
+                  totalArticles={initialPostsMeta.total}
+                  publishedArticles={initialPostsMeta.published}
+                  initialStats={initialStats}
+                />
+              </Suspense>
             )}
 
             {activeTab === 'articles' && (
@@ -191,7 +221,7 @@ export default function SiteDetailClient({
                 initialPosts={initialPosts}
                 initialMeta={initialPostsMeta}
                 isSuperAdmin={isSuperAdmin}
-                onImport={isSuperAdmin ? () => setShowImport(true) : undefined}
+                onImport={() => setShowImport(true)}
               />
             )}
 
@@ -230,12 +260,14 @@ export default function SiteDetailClient({
         </div>
       </ThemeStudioProvider>
 
-      {showImport && isSuperAdmin && (
-        <ImportModal
-          siteId={siteId}
-          autoDiscoverUrl={importUrl ?? undefined}
-          onClose={() => { setShowImport(false); setImportUrl(null) }}
-        />
+      {showImport && (
+        <Suspense fallback={null}>
+          <ImportModal
+            siteId={siteId}
+            autoDiscoverUrl={importUrl ?? undefined}
+            onClose={() => { setShowImport(false); setImportUrl(null) }}
+          />
+        </Suspense>
       )}
     </div>
   )

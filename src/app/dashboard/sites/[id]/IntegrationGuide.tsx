@@ -1533,9 +1533,9 @@ function Warning({ children, small = false }: { children: ReactNode; small?: boo
 
 function Note({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
-      <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-      <div className="text-xs text-blue-800 leading-relaxed">{children}</div>
+    <div className="bg-accent-soft border border-accent/20 rounded-lg p-3 flex items-start gap-2">
+      <Info className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+      <div className="text-xs text-muted leading-relaxed">{children}</div>
     </div>
   )
 }

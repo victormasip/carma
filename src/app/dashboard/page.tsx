@@ -1,13 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { Globe, ArrowUpRight, FileText, Users, Inbox, ExternalLink, PenLine, CheckCircle2, Eye } from 'lucide-react'
-import Link from 'next/link'
+import { Globe, FileText, Users, Inbox, CheckCircle2, Eye } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import NewSiteModal from './NewSiteModal'
 import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
 import { fetchSitesViewCounts } from '@/lib/analytics/read'
+import SiteGrid from './SiteGrid'
+import AddSiteButton from './AddSiteButton'
 
 type SiteWithCounts = { id: string; name: string; created_at: string; total: number; published: number; views: number }
 
@@ -45,14 +46,18 @@ export default async function DashboardHome() {
 
     return (
       <div className="space-y-8">
-        <PageHeader title="Els meus Llocs" description="Gestiona el contingut dels teus llocs web." />
+        <PageHeader
+          title="Els meus Llocs"
+          description="Gestiona el contingut dels teus llocs web."
+          actions={<AddSiteButton />}
+        />
         <StatHero items={[
           { icon: <Eye className="w-4 h-4" />, label: 'Vistes · 30 dies', value: totals.views, tone: 'accent' },
           { icon: <Globe className="w-4 h-4" />, label: 'Llocs', value: sitesWithCounts.length },
           { icon: <FileText className="w-4 h-4" />, label: 'Articles', value: totals.total },
           { icon: <CheckCircle2 className="w-4 h-4" />, label: 'Publicats', value: totals.published, tone: 'success' },
         ]} />
-        <SiteGrid sites={sitesWithCounts} />
+        <SiteGrid sites={sitesWithCounts} canManage={false} />
       </div>
     )
   }
@@ -105,7 +110,7 @@ export default async function DashboardHome() {
                 description="Afegeix el teu primer lloc per començar a generar contingut."
               />
             ) : (
-              <SiteGrid sites={sitesWithCounts} />
+              <SiteGrid sites={sitesWithCounts} canManage={true} />
             )}
           </section>
 
@@ -197,63 +202,3 @@ function SectionTitle({ icon, title, count }: { icon: React.ReactNode; title: st
   )
 }
 
-function SiteGrid({ sites }: { sites: SiteWithCounts[] }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-      {sites.map(site => (
-        <SiteCard key={site.id} site={site} />
-      ))}
-    </div>
-  )
-}
-
-// Interactive bento card. The whole surface navigates to the site (a stretched,
-// absolutely-positioned link), while the action buttons sit above it (z-10) and
-// navigate to their own targets — so one card exposes three direct actions
-// without nesting <a> inside <a>.
-function SiteCard({ site }: { site: SiteWithCounts }) {
-  return (
-    <div className="group relative bg-surface border border-border rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 hover:border-border-strong hover:shadow-[0_18px_40px_-20px_rgba(0,0,0,0.25)] hover:-translate-y-0.5">
-      <Link href={`/dashboard/sites/${site.id}`} aria-label={site.name} className="absolute inset-0 z-0 rounded-2xl" />
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-soft to-surface-subtle text-accent flex items-center justify-center text-base font-bold shrink-0 uppercase border border-border">
-            {site.name.charAt(0) || '·'}
-          </span>
-          <div className="min-w-0">
-            <h3 className="font-bold text-[15px] text-text truncate leading-tight group-hover:text-accent transition-colors">{site.name}</h3>
-            <p className="text-xs text-subtle mt-0.5">Creat el {new Date(site.created_at).toLocaleDateString('ca-ES')}</p>
-          </div>
-        </div>
-        <span className="w-7 h-7 rounded-lg bg-surface-subtle text-subtle flex items-center justify-center shrink-0 group-hover:bg-accent-soft group-hover:text-accent transition-colors">
-          <ArrowUpRight className="w-4 h-4" />
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <Badge tone="accent"><Eye className="w-3 h-3" />{site.views.toLocaleString('ca-ES')} {site.views === 1 ? 'vista' : 'vistes'} · 30d</Badge>
-        <Badge tone="neutral"><FileText className="w-3 h-3" />{site.total} {site.total === 1 ? 'article' : 'articles'}</Badge>
-        {site.published > 0 && <Badge tone="success" dot>{site.published} publicat{site.published !== 1 ? 's' : ''}</Badge>}
-      </div>
-
-      <div className="flex items-center gap-1.5 mt-auto pt-3 border-t border-border">
-        <Link
-          href={`/dashboard/sites/${site.id}/posts/new`}
-          className="relative z-10 flex-1 flex items-center justify-center gap-1.5 h-8 text-xs font-bold text-text bg-surface border border-border hover:border-accent/40 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
-        >
-          <PenLine className="w-3.5 h-3.5" /> Escriure
-        </Link>
-        <a
-          href={`/render/${site.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Veure el lloc públic"
-          className="relative z-10 flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-bold text-muted bg-surface border border-border hover:border-accent/40 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
-        >
-          <ExternalLink className="w-3.5 h-3.5" /> Veure
-        </a>
-      </div>
-    </div>
-  )
-}

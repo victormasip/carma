@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, FileText, Globe } from 'lucide-react'
+import { LayoutDashboard, Settings, FileText, Globe, Wand2 } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 
@@ -48,7 +48,15 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
         </div>
       )}
 
-      <div className="mt-6 pt-4 border-t border-border">
+      <div className="mt-6 pt-4 border-t border-border space-y-0.5">
+        {isSuperAdmin && (
+          <NavItem
+            href="/admin/grabber-lab"
+            active={pathname.startsWith('/admin/grabber-lab')}
+            icon={<Wand2 className="w-4 h-4" />}
+            label="Grabber Lab"
+          />
+        )}
         <NavItem
           href="/dashboard/settings"
           active={isSettings}

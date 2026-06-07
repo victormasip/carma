@@ -16,7 +16,6 @@ import { useThemeStudio, type SaveStatus } from './ThemeStudioContext'
 import VisualChromeEditor from './VisualChromeEditor'
 import NavEditor from './NavEditor'
 import ThemePreview from './ThemePreview'
-import { PremiumLockOverlay } from './PremiumGate'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 
@@ -129,13 +128,14 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
           onDelete={isSuperAdmin ? handleDelete : undefined}
           hasTheme={hasTheme}
         />
-        <PremiumLockOverlay locked={!isSuperAdmin} label="Re-capturar el lloc web">
-          <EmptyGrabber
-            url={url} setUrl={setUrl}
-            blogUrl={blogUrl} setBlogUrl={setBlogUrl}
-            analyzing={analyzing} error={error} onGrab={grab}
-          />
-        </PremiumLockOverlay>
+        {/* The site owner (member) can capture/re-capture their own blog — not
+            superadmin-only. The grabber drives analyze (any-authed) + saveTheme
+            (member-gated), so a member has full access. */}
+        <EmptyGrabber
+          url={url} setUrl={setUrl}
+          blogUrl={blogUrl} setBlogUrl={setBlogUrl}
+          analyzing={analyzing} error={error} onGrab={grab}
+        />
       </div>
     )
   }
@@ -152,7 +152,7 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
         canTranslateChrome={canTranslateChrome}
         translatingChrome={translatingChrome}
         onTranslate={handleTranslateChrome}
-        onRecapture={isSuperAdmin ? () => grab() : undefined}
+        onRecapture={() => grab()}
         onDelete={isSuperAdmin ? handleDelete : undefined}
         hasTheme={hasTheme}
         detectedFramework={detectedFramework}

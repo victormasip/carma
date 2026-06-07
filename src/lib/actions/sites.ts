@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ensureUniqueSubdomain } from '@/lib/sites/subdomain'
 import { revalidatePath } from 'next/cache'
 
 type ActionResult = { error?: string }
@@ -27,9 +28,10 @@ export async function createSite(name: string, userIds: string[]): Promise<Actio
     const trimmed = name.trim()
     if (!trimmed) return { error: 'El nom és obligatori' }
 
+    const subdomain = await ensureUniqueSubdomain(admin, trimmed)
     const { data: site, error } = await admin
       .from('sites')
-      .insert({ name: trimmed })
+      .insert({ name: trimmed, ...(subdomain ? { subdomain } : {}) })
       .select('id')
       .single()
 

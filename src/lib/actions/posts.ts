@@ -581,3 +581,34 @@ export async function generateSeoArticle(
     return { error: err instanceof Error ? err.message : "Error generant l'article" }
   }
 }
+
+/**
+ * One-shot onboarding helper: generate the "Magic SEO Article" from the site's
+ * niche AND create it as a draft, returning the new post id so the UI can drop the
+ * user straight into the editor to review and publish. This powers the self-serve
+ * "no blog found → create one for free with AI" path. Member-gated via the
+ * underlying actions; `url` defaults to the site's captured reference URL.
+ */
+export async function generateAndCreateArticle(
+  siteId: string,
+  opts: { url?: string; locale?: string; publish?: boolean } = {},
+): Promise<ActionResult & { id?: string; niche?: string; strategy?: string }> {
+  const gen = await generateSeoArticle(siteId, { url: opts.url, locale: opts.locale })
+  if (gen.error || !gen.result) return { error: gen.error ?? "No s'ha pogut generar l'article" }
+  const a = gen.result
+  const created = await createPost(siteId, {
+    title: a.title,
+    slug: a.slug,
+    content: { html: a.contentHtml },
+    excerpt: a.excerpt,
+    categories: a.categories,
+    tags: a.tags,
+    seo_title: a.seoTitle,
+    seo_description: a.seoDescription,
+    focus_keyword: a.focusKeyword,
+    is_published: opts.publish ?? false,
+    default_locale: normalizeLocale(opts.locale, DEFAULT_LOCALE),
+  })
+  if (created.error || !created.id) return { error: created.error ?? "No s'ha pogut crear l'article" }
+  return { id: created.id, niche: a.niche, strategy: a.strategy }
+}

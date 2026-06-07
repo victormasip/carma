@@ -2,18 +2,21 @@
 
 import { useState, useTransition, useMemo, useRef, useCallback, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, FileText, Search, Upload, Send, X, EyeOff,
-  ChevronLeft, ChevronRight, Loader2,
+  ChevronLeft, ChevronRight, Loader2, Sparkles, PenLine,
 } from 'lucide-react'
 import {
   deletePost, togglePublish, togglePublishBulk, deletePostsBulk, updatePostFields,
-  listPosts, type PostListItem, type PostListResult,
+  listPosts, generateAndCreateArticle, type PostListItem, type PostListResult,
 } from '@/lib/actions/posts'
 import { uploadImage } from '@/lib/upload'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
 import { useKeyedSaveState } from '@/components/ui/SaveStatus'
+import Button from '@/components/ui/Button'
+import { Input } from '@/components/ui/input'
 import ArticleCard from './ArticleCard'
 
 type Filter = 'all' | 'published' | 'draft'
@@ -56,8 +59,21 @@ export default function PostsManager({
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
   const confirm = useConfirm()
+  const router = useRouter()
   // Per-card background-save indicator (saving → saved ✓ → idle, or error).
   const save = useKeyedSaveState()
+  const [generating, setGenerating] = useState(false)
+
+  // "Crea el primer article amb IA" — analyzes the site's niche and writes a draft,
+  // then drops the user into the editor to review and publish.
+  const handleGenerateAI = async () => {
+    setGenerating(true)
+    const res = await generateAndCreateArticle(siteId)
+    setGenerating(false)
+    if (res.error || !res.id) { toast(res.error ?? 'No s’ha pogut generar l’article', 'error'); return }
+    toast('Article generat amb IA ✨', 'success')
+    router.push(`/dashboard/sites/${siteId}/posts/${res.id}/edit`)
+  }
 
   // The query currently reflected in `posts`, so the search debounce can skip
   // redundant fetches and mutations can reload the right page.
@@ -91,6 +107,28 @@ export default function PostsManager({
   const changeFilter = (f: Filter) => { setFilter(f); load(1, f, search.trim()) }
   const goPage = (p: number) => { if (p >= 1 && p <= meta.pageCount && p !== meta.page) load(p, filter, search.trim()) }
   const reload = () => load(applied.current.page, applied.current.status, applied.current.q)
+
+  // ── Live refresh from the server ────────────────────────────────────────────
+  // After an import (ImportModal calls router.refresh()) — or any other server
+  // revalidate — fresh data arrives via `initialPosts`/`initialMeta`. React does
+  // NOT re-derive our local `posts` state from props, so the list would silently
+  // stay stale. Adopt the new data explicitly: replace it on the default view, or
+  // re-run the active query when the user is currently searching/filtering/paging.
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const lastInitialPosts = useRef(initialPosts)
+  useEffect(() => {
+    if (initialPosts === lastInitialPosts.current) return
+    lastInitialPosts.current = initialPosts
+    const a = applied.current
+    if (a.page === 1 && a.status === 'all' && a.q === '') {
+      setPosts(initialPosts)
+      setMeta(initialMeta)
+      setSelected(new Set())
+    } else {
+      reloadRef.current()
+    }
+  }, [initialPosts, initialMeta])
 
   const hasSelection = selected.size > 0
   const selectedPosts = useMemo(() => posts.filter(p => selected.has(p.id)), [posts, selected])
@@ -306,13 +344,13 @@ export default function PostsManager({
           {/* Toolbar: search + filters (bulk actions live in a floating bar). */}
           <div className="flex flex-col sm:flex-row gap-3 mb-5">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
-              <input
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none z-10" />
+              <Input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Cerca per títol o slug..."
-                className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-xl text-sm font-medium focus:outline-none focus:border-accent transition-all"
+                className="h-11 pl-10 pr-4 rounded-xl bg-surface font-medium"
               />
               {isPending && (
                 <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-accent animate-spin" />
@@ -334,7 +372,39 @@ export default function PostsManager({
             </div>
           </div>
 
-          {posts.length === 0 ? (
+          {posts.length === 0 && meta.total === 0 ? (
+            // A brand-new blog with no articles at all — offer the three ways in.
+            <div className="flex flex-col items-center justify-center gap-5 py-14 px-6 bg-surface border border-border rounded-2xl text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+                <FileText className="w-7 h-7" />
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-text">Encara no tens articles</h3>
+                <p className="text-sm text-muted mt-1 max-w-md leading-relaxed">
+                  Genera el primer amb IA —analitzem el teu ninxol i l’escrivim per tu—, importa’n d’existents, o escriu-ne un de nou.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <Button onClick={handleGenerateAI} loading={generating} glow iconLeft={!generating ? <Sparkles className="w-4 h-4" /> : undefined}>
+                  {generating ? 'Generant amb IA…' : 'Genera amb IA'}
+                </Button>
+                <Link
+                  href={`/dashboard/sites/${siteId}/posts/new`}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:bg-surface-hover hover:border-border-strong"
+                >
+                  <PenLine className="w-4 h-4" /> Escriure
+                </Link>
+                {onImport && (
+                  <button
+                    onClick={onImport}
+                    className="cursor-pointer inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:bg-surface-hover hover:border-border-strong"
+                  >
+                    <Upload className="w-4 h-4" /> Importar
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : posts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 bg-surface border border-border rounded-2xl text-center">
               <Search className="w-8 h-8 text-subtle mb-3" />
               <p className="text-sm font-semibold text-muted">Cap article coincideix</p>
