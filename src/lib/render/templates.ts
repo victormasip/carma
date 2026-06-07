@@ -307,7 +307,65 @@ const terra: BlogTemplate = {
   }),
 }
 
-export const BLOG_TEMPLATES: readonly BlogTemplate[] = [aperture, editorial, beacon, noir, terra]
+// ─── 0. Carma — the official house look: warm paper, gold, Plus Jakarta Sans ──
+const carma: BlogTemplate = {
+  id: 'carma',
+  name: 'Carma',
+  tagline: 'La nostra identitat de casa: paper càlid, daurat i Plus Jakarta Sans. Premium, net i acollidor.',
+  sectionTitle: 'El blog',
+  fontLinks: [GF('Plus+Jakarta+Sans:wght@400;500;600;700;800')],
+  tokens: {
+    colorPrimary: '#1c1917', colorAccent: '#f5bc00', colorBg: '#faf8f3', colorSurface: '#ffffff',
+    colorText: '#1c1917', colorMuted: '#78716c', colorBorder: '#ece8e1',
+    fontHeading: "'Plus Jakarta Sans', system-ui, sans-serif", fontBody: "'Plus Jakarta Sans', system-ui, sans-serif",
+    baseFontSize: '18px', radius: '14px', radiusLg: '24px', maxWidth: '1180px',
+    layout: 'grid', columns: '3',
+    sectionTitleColor: '#1c1917', sectionTitleSize: '2.7rem', sectionTitleWeight: '800', sectionTitleAlign: 'left',
+    headingWeight: '800', linkColor: '#a87f00', linkUnderline: 'hover', blockquoteBorderColor: '#f5bc00',
+  },
+  swatch: { bg: '#faf8f3', surface: '#ffffff', text: '#1c1917', accent: '#f5bc00', border: '#ece8e1' },
+  header: (s) => ({
+    html: `<div class="cx-ca-top"></div>
+<header class="cx-ca-h"><div class="cx-ca-in">
+  <a class="cx-ca-brand" href="#">${esc(s)}<span class="cx-ca-dot">.</span></a>
+  <nav class="cx-ca-nav">${['Inici', 'El blog', 'Sobre', 'Contacte'].map((n, i) => `<a href="#"${i === 1 ? ' class="on"' : ''}>${esc(n)}</a>`).join('')}</nav>
+  <a class="cx-ca-cta" href="#">Subscriu-te</a>
+</div></header>`,
+    css: `
+.cx-ca-top{height:3px;background:linear-gradient(90deg,#b58f27,#f5bc00 35%,#ffe27a 50%,#f5bc00 65%,#b58f27)}
+.cx-ca-h{position:sticky;top:0;z-index:20;background:rgba(250,247,240,.86);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid #ece6da}
+.cx-ca-in{display:flex;align-items:center;gap:1.5rem;max-width:1180px;margin:0 auto;padding:1.1rem 1.5rem}
+.cx-ca-brand{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:1.5rem;font-weight:800;letter-spacing:-.035em;color:#1c1917;text-decoration:none}
+.cx-ca-dot{color:#f5bc00}
+.cx-ca-nav{display:flex;align-items:center;gap:1.8rem;margin-left:auto}
+.cx-ca-nav a{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.95rem;font-weight:600;color:#57534e;text-decoration:none;padding:.35rem 0;border-bottom:2px solid transparent;transition:color .15s ease,border-color .15s ease}
+.cx-ca-nav a:hover{color:#1c1917}
+.cx-ca-nav a.on{color:#1c1917;border-color:#f5bc00}
+.cx-ca-cta{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.9rem;font-weight:800;color:#1a1400;background:linear-gradient(180deg,#ffd23d,#f0a800);padding:.58rem 1.25rem;border-radius:9999px;text-decoration:none;box-shadow:0 8px 22px -8px rgba(245,188,0,.6);transition:transform .15s ease,filter .15s ease}
+.cx-ca-cta:hover{transform:translateY(-1px);filter:brightness(1.05)}
+@media (max-width:760px){.cx-ca-nav,.cx-ca-cta{display:none}.cx-ca-in{padding:.95rem 1.15rem}}`,
+  }),
+  footer: (s) => ({
+    html: `<footer class="cx-ca-f"><div class="cx-ca-fin">
+  <div class="cx-ca-fbrand"><p class="cx-ca-fkick">El blog que estima la teva marca</p><a class="cx-ca-fb" href="#">${esc(s)}<span class="cx-ca-dot">.</span></a><p class="cx-ca-fmanifest">Històries, idees i novetats — escrites amb cura i publicades amb estil.</p></div>
+  <nav class="cx-ca-fnav"><span class="cx-ca-fh">Explora</span>${['Inici', 'El blog', 'Sobre', 'Contacte'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+</div><div class="cx-ca-fbar"><span>© ${YEAR} ${esc(s)}</span><span>Fet amb daurat a Catalunya</span></div></footer>`,
+    css: `
+.cx-ca-f{background:#1c1917;color:#e7e2d8}
+.cx-ca-fin{display:flex;flex-wrap:wrap;gap:2.5rem;justify-content:space-between;max-width:1180px;margin:0 auto;padding:3.5rem 1.5rem 2.5rem}
+.cx-ca-fkick{margin:0 0 .55rem;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.72rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#f5bc00}
+.cx-ca-fb{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:1.65rem;font-weight:800;letter-spacing:-.035em;color:#fff;text-decoration:none}
+.cx-ca-fb .cx-ca-dot{color:#f5bc00}
+.cx-ca-fmanifest{margin:.8rem 0 0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.98rem;color:#b8b1a4;max-width:26rem;line-height:1.65}
+.cx-ca-fnav{display:flex;flex-direction:column;gap:.7rem}
+.cx-ca-fh{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8a8377;margin-bottom:.3rem}
+.cx-ca-fnav a{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.95rem;font-weight:600;color:#cbc4b6;text-decoration:none}
+.cx-ca-fnav a:hover{color:#ffd23d}
+.cx-ca-fbar{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:space-between;max-width:1180px;margin:0 auto;padding:1.3rem 1.5rem;border-top:1px solid #2b2622;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:.82rem;color:#8a8377}`,
+  }),
+}
+
+export const BLOG_TEMPLATES: readonly BlogTemplate[] = [carma, aperture, editorial, beacon, noir, terra]
 
 export function getTemplate(id: string): BlogTemplate | undefined {
   return BLOG_TEMPLATES.find(t => t.id === id)

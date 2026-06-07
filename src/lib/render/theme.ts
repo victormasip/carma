@@ -429,18 +429,19 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 /* Article — magazine-grade typography with a centered prose column and
    media that "bleeds" out for breathing room. Fluid type via clamp() scales
    smoothly from phone → desktop with no breakpoints needed. */
-.carma-article{max-width:880px!important;margin:0 auto!important;padding:0 clamp(1rem,3vw,1.5rem)!important}
-.carma-back{display:inline-flex!important;align-items:center!important;gap:.4rem!important;color:var(--ct-accent)!important;font-weight:600!important;font-size:.875rem!important;margin-bottom:1.5rem!important;text-decoration:none!important}
-.carma-article-header{margin:0 0 2rem!important;max-inline-size:70ch!important;margin-inline:auto!important}
+.carma-article{max-width:880px!important;margin:0 auto!important;padding:.5rem clamp(1rem,3vw,1.5rem) 0!important}
+.carma-back{display:inline-flex!important;align-items:center!important;gap:.5rem!important;color:var(--ct-text)!important;font-weight:700!important;font-size:.95rem!important;margin-bottom:2.5rem!important;padding:.6rem 1.15rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;background:var(--ct-surface)!important;text-decoration:none!important;line-height:1!important;transition:color .15s ease,border-color .15s ease,background .15s ease!important}
+.carma-back:hover{color:var(--ct-accent)!important;border-color:var(--ct-accent)!important}
+.carma-article-header{margin:0 0 2.75rem!important;max-inline-size:70ch!important;margin-inline:auto!important}
 .carma-article-title{font-family:var(--ct-font-heading)!important;font-size:clamp(2rem,1.5rem + 2.2vw,3.25rem)!important;font-weight:800!important;margin:0 0 1rem!important;line-height:1.08!important;letter-spacing:-0.02em!important;color:var(--ct-text)!important}
 .carma-article-lede{font-size:clamp(1.05rem,1rem + 0.4vw,1.2rem)!important;line-height:1.55!important;color:var(--ct-muted)!important;margin:0 0 1.25rem!important;font-weight:400!important}
 .carma-article-meta{font-size:.85rem!important;color:var(--ct-muted)!important;margin:0!important;display:flex!important;gap:.6rem!important;flex-wrap:wrap!important;align-items:center!important}
 .carma-article-image-wrap{margin:0 0 2.25rem!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;background:var(--ct-border)!important;aspect-ratio:16/9!important}
 .carma-article-image-wrap picture,.carma-article-image-wrap img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
 .carma-article-image{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;margin:0!important;border-radius:0!important}
-.carma-article-content{font-family:var(--ct-font-body)!important;font-size:clamp(1.0625rem,1.02rem + 0.18vw,1.18rem)!important;color:var(--ct-text)!important;line-height:${t.bodyLineHeight ?? '1.75'}!important;max-inline-size:70ch!important;margin-inline:auto!important}
+.carma-article-content{font-family:var(--ct-font-body)!important;font-size:clamp(1.0625rem,1.02rem + 0.18vw,1.18rem)!important;color:var(--ct-text)!important;line-height:${t.bodyLineHeight ?? '1.8'}!important;max-inline-size:70ch!important;margin-inline:auto!important}
 .carma-article-content > *{max-inline-size:70ch!important;margin-inline:auto!important}
-.carma-article-content p{margin:${t.paragraphSpacing ?? '1.15rem'} 0!important}
+.carma-article-content p{margin:${t.paragraphSpacing ?? '1.45rem'} 0!important}
 .carma-article-content p:first-of-type{margin-top:0!important}
 .carma-article-content h2{font-family:var(--ct-font-heading)!important;font-size:clamp(1.45rem,1.25rem + 0.8vw,1.85rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2.25rem 0 .75rem!important;line-height:${t.headingLineHeight ?? '1.2'}!important;letter-spacing:-0.012em!important;color:var(--ct-text)!important}
 .carma-article-content h3{font-family:var(--ct-font-heading)!important;font-size:clamp(1.2rem,1.1rem + 0.4vw,1.45rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:1.75rem 0 .6rem!important;line-height:${t.headingLineHeight ?? '1.3'}!important;color:var(--ct-text)!important}

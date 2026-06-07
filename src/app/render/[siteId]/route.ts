@@ -5,6 +5,7 @@ import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { normalizeLocale } from '@/lib/i18n/config'
+import { isUuid } from '@/lib/sites/domain'
 
 // Reading the query string opts this handler out of static prerender (live
 // embeds carry token overrides per request). The CDN still caches per full URL
@@ -17,12 +18,17 @@ export function OPTIONS() {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ siteId: string }> }) {
-  const { siteId } = await params
+  const { siteId: param } = await params
   const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
   const rawLang = request.nextUrl.searchParams.get('lang')
   const admin = createAdminClient()
 
-  const { data: site } = await admin.from('sites').select('id, name').eq('id', siteId).single()
+  // The param is either a site UUID (canonical /render/<uuid>) or a tenant
+  // subdomain label (rewritten here from <sub>.<domain> by the middleware).
+  const siteSel = admin.from('sites').select('id, name')
+  const { data: site } = isUuid(param)
+    ? await siteSel.eq('id', param).maybeSingle()
+    : await siteSel.eq('subdomain', param).maybeSingle()
   if (!site) {
     if (isFragment) {
       return NextResponse.json({ error: 'Site no trobat' }, { status: 404, headers: FRAGMENT_CORS })
@@ -30,6 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const err = buildErrorPage('Site no trobat', 404)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
+  const siteId = site.id as string
 
   const POST_COLS = 'id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
   const fetchPosts = (cols: string) =>

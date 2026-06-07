@@ -5,6 +5,7 @@ import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { LOCALES, normalizeLocale, isLocale, type Locale } from '@/lib/i18n/config'
+import { isUuid } from '@/lib/sites/domain'
 
 // Reading the query string opts this handler out of static prerender — embeds
 // carry token/locale overrides per request.
@@ -87,17 +88,22 @@ async function resolveBySlug(
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ siteId: string; slug: string }> }) {
-  const { siteId, slug } = await params
+  const { siteId: param, slug } = await params
   const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
   const rawLang = request.nextUrl.searchParams.get('lang')
   const admin = createAdminClient()
 
-  const { data: site } = await admin.from('sites').select('id, name').eq('id', siteId).single()
+  // Param is a site UUID (canonical) or a tenant subdomain (middleware rewrite).
+  const siteSel = admin.from('sites').select('id, name')
+  const { data: site } = isUuid(param)
+    ? await siteSel.eq('id', param).maybeSingle()
+    : await siteSel.eq('subdomain', param).maybeSingle()
   if (!site) {
     if (isFragment) return NextResponse.json({ error: 'Site no trobat' }, { status: 404, headers: FRAGMENT_CORS })
     const err = buildErrorPage('Site no trobat', 404)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
+  const siteId = site.id as string
 
   const [{ data: theme }, resolution] = await Promise.all([
     admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
