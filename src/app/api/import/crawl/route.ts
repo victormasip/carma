@@ -139,9 +139,8 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'superadmin') return NextResponse.json({ error: 'Accés denegat' }, { status: 403 })
-
+  // Read-only crawl of a public URL (no DB writes) — open to any authenticated
+  // user (the write step, /api/import/articles, is what enforces site membership).
   let body: { url?: string; linkSelector?: string }
   try { body = await request.json() } catch { return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 }) }
 

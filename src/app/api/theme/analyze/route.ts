@@ -6,7 +6,7 @@ import { extractTokens } from '@/lib/scrape/tokens'
 import { absolutiseCssUrls as cssAbsUrls, splitImports, extractFontFaceCss, proxyFontsInCss } from '@/lib/scrape/clientCss'
 import { absolutise, buildExtractedHead } from '@/lib/scrape/headerFooter'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
-import { detectBlogSignature } from '@/lib/scrape/blogDetect'
+import { detectBlogSignature, findBlogIndexUrl } from '@/lib/scrape/blogDetect'
 import { isLocale } from '@/lib/i18n/config'
 import {
   sseFrame, stepFloor, stepWeight,
@@ -324,8 +324,10 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'superadmin') return NextResponse.json({ error: 'Accés denegat' }, { status: 403 })
+  // Analyze is a pure "scrape this public URL → stream theme tokens" endpoint: it
+  // binds to no site and writes nothing (the member-gated saveTheme persists the
+  // result). Any authenticated user may run it so self-serve users can clone their
+  // own site during onboarding — the SSRF guard + URL validation below stand.
 
   let body: { url?: string; blogUrl?: string }
   try { body = await request.json() } catch { return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 }) }
@@ -367,16 +369,37 @@ export async function POST(request: NextRequest) {
         running('fetch')
         const fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
         if (!fetched) { fail('fetch', "No s'ha pogut accedir a la pàgina. Comprova la URL."); return }
-        const baseUrl = new URL(referenceUrl)
+        let baseUrl = new URL(referenceUrl)
         let root: HTMLElement
         try { root = parse(fetched.body) as HTMLElement } catch {
           fail('fetch', 'No hem pogut interpretar l’HTML de la pàgina.'); return
         }
-        done('fetch', baseUrl.hostname.replace(/^www\./, ''))
+
+        // "Capture the news page, not the home": when handed a site ROOT, prefer the
+        // site's blog/news index — its chrome + styles are what the blog should
+        // mirror. An explicit Blog URL override always wins. Best-effort: any failure
+        // keeps the homepage capture. Everything downstream reads pageBody/root/baseUrl.
+        let pageBody = fetched.body
+        const isRootUrl = baseUrl.pathname === '/' || baseUrl.pathname === ''
+        const preferBlog = blogUrlOverride || (isRootUrl ? findBlogIndexUrl(root, baseUrl) : '')
+        if (preferBlog) {
+          try {
+            const blogAbs = new URL(preferBlog, baseUrl).toString()
+            if (blogAbs !== referenceUrl && isSafeUrl(blogAbs)) {
+              const blogFetched = await safeFetch(blogAbs, { timeout: 12_000 })
+              if (blogFetched) {
+                pageBody = blogFetched.body
+                root = parse(blogFetched.body) as HTMLElement
+                baseUrl = new URL(blogAbs)
+              }
+            }
+          } catch { /* keep the homepage capture */ }
+        }
+        done('fetch', baseUrl.hostname.replace(/^www\./, '') + (isRootUrl && baseUrl.pathname !== '/' ? ` · ${baseUrl.pathname}` : ''))
 
         // ── 2. ANALYZE (framework / hosting) ───────────────────────────────────
         running('analyze')
-        const detection = detectFramework(fetched.body, fetched.headers)
+        const detection = detectFramework(pageBody, fetched.headers)
         done('analyze', FRAMEWORK_LABELS[detection.framework])
 
         // ── 3. REGIONS (head assets / header / footer / title / locale) ────────
@@ -396,7 +419,7 @@ export async function POST(request: NextRequest) {
         // it down to </body> (footer + wrapper closers + late scripts), repairing
         // malformed markup so it can't swallow the page. The blog renders between
         // them; body attrs reapply the source's global background/typography.
-        const split = splitPageChrome(fetched.body, baseUrl)
+        const split = splitPageChrome(pageBody, baseUrl)
         const extractedHeader = split.top
         const extractedFooter = split.bottom
         const extractedBodyAttrs = split.bodyAttrs

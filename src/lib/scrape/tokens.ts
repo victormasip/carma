@@ -289,10 +289,16 @@ export function extractTokens(opts: {
     (varHeadingFont && cleanFontFamily(resolveVar(varHeadingFont, vars))) ||
     (headingDecl && cleanFontFamily(headingDecl)) ||
     (googleFamilies[0] ? cleanFontFamily(googleFamilies[0]) : null)
+  // Body fallback: when the site loaded SEVERAL web fonts (the classic display +
+  // text pairing, e.g. "Playfair Display" + "Inter"), and no explicit body
+  // font-family is found, the body must NOT inherit the heading's display face —
+  // pick the first Google family that ISN'T the heading. With a single font they
+  // naturally coincide and the pair is shared (as before).
+  const bodyGoogle = googleFamilies.find(f => cleanFontFamily(f) !== headingFamily) ?? googleFamilies[0]
   const bodyFamily =
     (varBodyFont && cleanFontFamily(resolveVar(varBodyFont, vars))) ||
     (bodyDecl && cleanFontFamily(bodyDecl)) ||
-    (googleFamilies[0] ? cleanFontFamily(googleFamilies[0]) : null)
+    (bodyGoogle ? cleanFontFamily(bodyGoogle) : null)
 
   if (headingFamily) tokens.fontHeading = headingFamily
   if (bodyFamily) tokens.fontBody = bodyFamily
