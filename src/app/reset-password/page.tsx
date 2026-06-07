@@ -118,7 +118,7 @@ function ResetPasswordInner() {
               <div className="p-3 text-sm rounded-lg bg-danger-soft border border-danger/20 text-danger font-medium">
                 {errorMsg}
               </div>
-              <Button fullWidth size="lg" onClick={() => router.replace('/')} iconRight={<ArrowRight className="w-4 h-4" />}>
+              <Button fullWidth size="lg" onClick={() => router.replace('/login')} iconRight={<ArrowRight className="w-4 h-4" />}>
                 Tornar al login
               </Button>
             </div>
@@ -187,7 +187,7 @@ function ResetPasswordInner() {
                 <h2 className="text-base font-semibold text-text">Contrasenya actualitzada</h2>
                 <p className="text-sm text-muted mt-1.5">Ja pots entrar amb la nova contrasenya.</p>
               </div>
-              <Button fullWidth size="lg" onClick={() => router.replace('/')} iconRight={<ArrowRight className="w-4 h-4" />}>
+              <Button fullWidth size="lg" onClick={() => router.replace('/login')} iconRight={<ArrowRight className="w-4 h-4" />}>
                 Tornar al login
               </Button>
             </div>

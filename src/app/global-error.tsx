@@ -30,7 +30,7 @@ export default function GlobalError({
             </p>
             <button
               onClick={reset}
-              style={{ marginTop: 24, padding: '10px 20px', borderRadius: 12, border: 'none', cursor: 'pointer', background: '#d4af37', color: '#1c1405', fontWeight: 600, fontSize: 14 }}
+              style={{ marginTop: 24, padding: '10px 20px', borderRadius: 12, border: 'none', cursor: 'pointer', background: '#f5bc00', color: '#1a1400', fontWeight: 600, fontSize: 14 }}
             >
               Tornar a carregar
             </button>

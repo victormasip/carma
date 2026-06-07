@@ -1,17 +1,39 @@
 @import "tailwindcss";
 
-/* ── Brand palette (Carma gold) ─────────────────────────────────────────────── */
+/* ── Brand palette (Carma gold) — vivid, yellow-leaning "super gold" ─────────── */
 @theme {
-  --color-carma-50: #fdfaef;
-  --color-carma-100: #fbf3d6;
-  --color-carma-200: #f7e4ac;
-  --color-carma-300: #f2d179;
-  --color-carma-400: #eeb849;
-  --color-carma-500: #d4af37;
-  --color-carma-600: #b58f27;
-  --color-carma-700: #906d1c;
-  --color-carma-800: #78591a;
-  --color-carma-950: #1c1405;
+  --color-carma-50:  #fffbe6;
+  --color-carma-100: #fff3bf;
+  --color-carma-200: #ffe680;
+  --color-carma-300: #ffe066;
+  --color-carma-400: #ffcf1a;
+  --color-carma-500: #f5bc00;
+  --color-carma-600: #d9a400;
+  --color-carma-700: #a87f00;
+  --color-carma-800: #855f06;
+  --color-carma-950: #1a1503;
+}
+
+/* ── Type scale — nudged UP for accessibility ────────────────────────────────
+   The dashboard historically leaned on text-xs (12px) for chrome, which fails
+   readability. We scale the whole ramp up a notch so every `text-*` utility
+   grows proportionally — structures (heights, paddings) are unaffected because
+   they're set in fixed rem/px, not ems. Reading text never drops below ~13px. */
+@theme {
+  --text-xs:    0.8125rem;  /* 13px  (was 12) — chips, labels, meta */
+  --text-xs--line-height:   1.5;
+  --text-sm:    0.9375rem;  /* 15px  (was 14) — dense body, list items */
+  --text-sm--line-height:   1.55;
+  --text-base:  1.0625rem;  /* 17px  (was 16) — default body */
+  --text-base--line-height: 1.65;
+  --text-lg:    1.1875rem;  /* 19px  (was 18) */
+  --text-lg--line-height:   1.6;
+  --text-xl:    1.375rem;   /* 22px  (was 20) — card titles */
+  --text-xl--line-height:   1.4;
+  --text-2xl:   1.625rem;   /* 26px  (was 24) */
+  --text-2xl--line-height:  1.3;
+  --text-3xl:   2rem;       /* 32px  (was 30) — page titles */
+  --text-3xl--line-height:  1.2;
 }
 
 /* ── Semantic tokens — light + dark, runtime-switchable ─────────────────────── */
@@ -47,6 +69,29 @@
   --shadow-pop:            var(--c-shadow-pop);
   --shadow-premium:        var(--c-shadow-premium);
 
+  /* ── shadcn / 21st.dev compatibility ──────────────────────────────────────
+     Maps the shadcn token names onto Carma's gold + warm palette so imported
+     components (which use bg-primary / text-muted-foreground / border-input / …)
+     render on-brand and theme-aware automatically. We deliberately do NOT
+     redefine --color-muted / --color-accent / --color-border — those already
+     exist in Carma (muted = text grey, accent = gold). */
+  --color-background:             var(--c-bg);
+  --color-foreground:             var(--c-text);
+  --color-card:                   var(--c-bg-elevated);
+  --color-card-foreground:        var(--c-text);
+  --color-popover:                var(--c-bg-elevated);
+  --color-popover-foreground:     var(--c-text);
+  --color-primary:                var(--c-accent);
+  --color-primary-foreground:     var(--c-on-accent);
+  --color-secondary:              var(--c-surface-hover);
+  --color-secondary-foreground:   var(--c-text);
+  --color-muted-foreground:       var(--c-text-subtle);
+  --color-accent-foreground:      var(--c-on-accent);
+  --color-destructive:            var(--c-danger);
+  --color-destructive-foreground: #ffffff;
+  --color-input:                  var(--c-border-strong);
+  --color-ring:                   var(--c-accent);
+
   --radius-sm:   6px;
   --radius:      10px;
   --radius-md:   12px;
@@ -70,10 +115,10 @@
   --c-border:         rgba(28, 25, 23, 0.07);
   --c-border-strong:  rgba(28, 25, 23, 0.14);
 
-  --c-accent:         #d4af37;
-  --c-accent-hover:   #b58f27;
-  --c-accent-soft:    rgba(212, 175, 55, 0.12);
-  --c-on-accent:      #1c1405;
+  --c-accent:         #f5bc00;
+  --c-accent-hover:   #d9a400;
+  --c-accent-soft:    rgba(245, 188, 0, 0.18);
+  --c-on-accent:      #1a1400;
 
   --c-success:        #10b981;
   --c-success-soft:   rgba(16, 185, 129, 0.12);
@@ -106,10 +151,10 @@
   --c-border:         rgba(255, 255, 255, 0.08);
   --c-border-strong:  rgba(255, 255, 255, 0.14);
 
-  --c-accent:         #eeb849;
-  --c-accent-hover:   #f2d179;
-  --c-accent-soft:    rgba(238, 184, 73, 0.16);
-  --c-on-accent:      #1c1405;
+  --c-accent:         #ffce2e;
+  --c-accent-hover:   #ffdc66;
+  --c-accent-soft:    rgba(255, 206, 46, 0.20);
+  --c-on-accent:      #1a1400;
 
   --c-success:        #34d399;
   --c-success-soft:   rgba(52, 211, 153, 0.16);
@@ -171,6 +216,15 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* Every interactive control gets the pointer cursor — Tailwind's preflight drops
+   it from native <button>, which left many landing/app buttons feeling dead. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label:has(> input[type="checkbox"], > input[type="radio"]),
+summary { cursor: pointer; }
+button:disabled,
+[role="button"][aria-disabled="true"] { cursor: not-allowed; }
+
 /* Tactile press feedback on interactive controls. */
 button:not(:disabled):active,
 a[role="button"]:active {
@@ -203,7 +257,7 @@ a[role="button"]:active {
   letter-spacing: -0.003em;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-.carma-editor .ProseMirror ::selection { background: rgba(212, 175, 55, 0.22); }
+.carma-editor .ProseMirror ::selection { background: rgba(245, 188, 0, 0.22); }
 /* Elegant empty-node placeholder (Placeholder extension) */
 .carma-editor .ProseMirror .is-empty::before {
   content: attr(data-placeholder);
@@ -222,19 +276,19 @@ a[role="button"]:active {
 .carma-editor .ProseMirror em { font-style: italic; }
 .carma-editor .ProseMirror u { text-decoration: underline; }
 .carma-editor .ProseMirror s { text-decoration: line-through; }
-.carma-editor .ProseMirror a { color: #b58f27; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
-.carma-editor .ProseMirror a:hover { color: #906d1c; }
+.carma-editor .ProseMirror a { color: #d9a400; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.carma-editor .ProseMirror a:hover { color: #a87f00; }
 .carma-editor .ProseMirror code { background: #f5f5f4; border-radius: 4px; padding: 0.1em 0.35em; font-family: ui-monospace, monospace; font-size: 0.85em; }
 .carma-editor .ProseMirror pre { background: #1e1e1e; color: #d4d4d4; border-radius: 0.75rem; padding: 1rem 1.15rem; overflow-x: auto; margin: 1.4em 0; font-size: 0.9em; line-height: 1.6; }
 .carma-editor .ProseMirror pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
-.carma-editor .ProseMirror blockquote { border-left: 3px solid #d4af37; margin: 1.4em 0; padding: 0.15em 0 0.15em 1.25em; color: #57534e; font-style: italic; font-size: 1.15em; }
+.carma-editor .ProseMirror blockquote { border-left: 3px solid #f5bc00; margin: 1.4em 0; padding: 0.15em 0 0.15em 1.25em; color: #57534e; font-style: italic; font-size: 1.15em; }
 .carma-editor .ProseMirror ul { list-style: disc; padding-left: 1.4em; margin: 0.85em 0; }
 .carma-editor .ProseMirror ol { list-style: decimal; padding-left: 1.4em; margin: 0.85em 0; }
 .carma-editor .ProseMirror li { margin: 0.35em 0; }
 .carma-editor .ProseMirror li p { margin: 0; }
 .carma-editor .ProseMirror hr { border: none; border-top: 2px solid #ececec; margin: 2em 0; }
 .carma-editor .ProseMirror img { max-width: 100%; border-radius: 0.75rem; margin: 1.5em 0; display: block; box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18); }
-.carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #d4af37; outline-offset: 2px; }
+.carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #f5bc00; outline-offset: 2px; }
 
 /* Callout / highlight card */
 .carma-callout {
@@ -266,7 +320,7 @@ a[role="button"]:active {
 
 /* Image gallery — editor node view (horizontal carousel, 1:1 with the public view) */
 .carma-gallery-editor { margin: 1.5em 0; }
-.carma-gallery-editor.is-selected .carma-carousel { outline: 2px solid #d4af37; outline-offset: 4px; }
+.carma-gallery-editor.is-selected .carma-carousel { outline: 2px solid #f5bc00; outline-offset: 4px; }
 .carma-carousel { position: relative; }
 .carma-carousel-track {
   display: flex; gap: 0.6rem; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -308,7 +362,7 @@ a[role="button"]:active {
 
 /* Captioned image (figure) — editor node view */
 .carma-editor .ProseMirror figure.carma-figure { margin: 1.6em 0; }
-.carma-editor .ProseMirror figure.carma-figure.is-selected { outline: 2px solid #d4af37; outline-offset: 4px; border-radius: 0.5rem; }
+.carma-editor .ProseMirror figure.carma-figure.is-selected { outline: 2px solid #f5bc00; outline-offset: 4px; border-radius: 0.5rem; }
 .carma-editor .ProseMirror figure.carma-figure img { margin: 0 0 0.5em; width: 100%; border-radius: 0.75rem; display: block; }
 .carma-editor .ProseMirror figure.carma-figure figcaption {
   text-align: center; font-size: 0.85em; color: #78716c; font-style: italic; outline: none; min-height: 1.4em;
@@ -335,23 +389,23 @@ a[role="button"]:active {
 .carma-editor .ProseMirror details.carma-toggle > :not(summary) { display: block !important; }
 
 /* Table of contents — editor */
-.carma-toc-editor { margin: 1.5em 0; border: 1px solid #e7e5e4; border-left: 3px solid #d4af37; border-radius: 0.75rem; padding: 0.9rem 1.1rem; background: #fafaf9; }
+.carma-toc-editor { margin: 1.5em 0; border: 1px solid #e7e5e4; border-left: 3px solid #f5bc00; border-radius: 0.75rem; padding: 0.9rem 1.1rem; background: #fafaf9; }
 .carma-toc-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #a8a29e; margin-bottom: 0.5rem; }
 .carma-toc-editor ul { list-style: none; margin: 0; padding: 0; }
 .carma-toc-editor li { margin: 0.1rem 0; }
 .carma-toc-editor li button { cursor: pointer; background: none; border: none; padding: 0.15rem 0; font-size: 0.92rem; color: #57534e; text-align: left; }
-.carma-toc-editor li button:hover { color: #b58f27; text-decoration: underline; }
+.carma-toc-editor li button:hover { color: #d9a400; text-decoration: underline; }
 .carma-toc-empty { font-size: 0.85rem; color: #a8a29e; margin: 0; }
 
 /* CTA button — editor */
 .carma-cta-block { margin: 1.4em 0; }
-.carma-cta-block .carma-button { display: inline-block; background: #d4af37; color: #fff !important; font-weight: 700; padding: 0.6rem 1.3rem; border-radius: 0.6rem; text-decoration: none !important; cursor: text; outline: none; }
+.carma-cta-block .carma-button { display: inline-block; background: #f5bc00; color: #fff !important; font-weight: 700; padding: 0.6rem 1.3rem; border-radius: 0.6rem; text-decoration: none !important; cursor: text; outline: none; }
 .carma-cta-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
 .carma-cta-href { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 200px; border: 1px solid #e7e5e4; border-radius: 0.5rem; padding: 0.25rem 0.6rem; background: #fff; }
 .carma-cta-href input { flex: 1; border: none; outline: none; font-size: 0.8rem; background: transparent; }
 .carma-cta-align { display: flex; gap: 0.25rem; }
 .carma-cta-align button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #e7e5e4; border-radius: 0.5rem; background: #fff; cursor: pointer; color: #78716c; }
-.carma-cta-align button.is-active { background: #d4af37; border-color: #d4af37; color: #fff; }
+.carma-cta-align button.is-active { background: #f5bc00; border-color: #f5bc00; color: #fff; }
 .carma-gallery-empty {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 1.5rem; border: 1px dashed #d6d3d1; border-radius: 0.75rem;
@@ -362,10 +416,10 @@ a[role="button"]:active {
   flex: 1; padding: 0.5rem 0.75rem; font-size: 0.8rem;
   border: 1px solid #e7e5e4; border-radius: 0.6rem; outline: none; background: #fafaf9;
 }
-.carma-gallery-add input:focus { border-color: #d4af37; background: #fff; }
+.carma-gallery-add input:focus { border-color: #f5bc00; background: #fff; }
 .carma-gallery-add button {
   display: flex; align-items: center; justify-content: center;
-  width: 36px; border-radius: 0.6rem; background: #d4af37; color: #fff; cursor: pointer;
+  width: 36px; border-radius: 0.6rem; background: #f5bc00; color: #fff; cursor: pointer;
 }
 
 /* ── Editor dark-mode overrides ─────────────────────────────────────────────
@@ -373,12 +427,12 @@ a[role="button"]:active {
    blog (.carma-root rendered on /render) stays driven by the customer's tokens
    and is unaffected. */
 [data-theme="dark"] .carma-editor .ProseMirror { color: #f5f5f4; }
-[data-theme="dark"] .carma-editor .ProseMirror ::selection { background: rgba(238, 184, 73, 0.28); }
+[data-theme="dark"] .carma-editor .ProseMirror ::selection { background: rgba(255, 206, 46, 0.28); }
 [data-theme="dark"] .carma-editor .ProseMirror .is-empty::before { color: #4b4640; }
-[data-theme="dark"] .carma-editor .ProseMirror a { color: #eeb849; }
-[data-theme="dark"] .carma-editor .ProseMirror a:hover { color: #f2d179; }
+[data-theme="dark"] .carma-editor .ProseMirror a { color: #ffce2e; }
+[data-theme="dark"] .carma-editor .ProseMirror a:hover { color: #ffdc66; }
 [data-theme="dark"] .carma-editor .ProseMirror code { background: rgba(255,255,255,0.08); color: #f5f5f4; }
-[data-theme="dark"] .carma-editor .ProseMirror blockquote { color: #a8a29e; border-color: #eeb849; }
+[data-theme="dark"] .carma-editor .ProseMirror blockquote { color: #a8a29e; border-color: #ffce2e; }
 [data-theme="dark"] .carma-editor .ProseMirror hr { border-color: rgba(255,255,255,0.08); }
 [data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption { color: #a8a29e; }
 [data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption:empty::before { color: #4b4640; }
@@ -391,7 +445,7 @@ a[role="button"]:active {
 [data-theme="dark"] .carma-toc-empty { color: #6b655d; }
 [data-theme="dark"] .carma-gallery-empty { color: #6b655d; border-color: rgba(255,255,255,0.14); }
 [data-theme="dark"] .carma-gallery-add input { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); color: #f5f5f4; }
-[data-theme="dark"] .carma-gallery-add input:focus { background: rgba(255,255,255,0.06); border-color: #eeb849; }
+[data-theme="dark"] .carma-gallery-add input:focus { background: rgba(255,255,255,0.06); border-color: #ffce2e; }
 [data-theme="dark"] .carma-carousel-arrow { background: #25221f; color: #f5f5f4; border-color: rgba(255,255,255,0.14); }
 [data-theme="dark"] .carma-carousel-arrow:hover { background: #f5f5f4; color: #1c1917; }
 [data-theme="dark"] .carma-carousel-slide { background: rgba(255,255,255,0.05); }
@@ -402,3 +456,193 @@ a[role="button"]:active {
 [data-theme="dark"] .carma-callout[data-variant="success"] { background: rgba(16,185,129,0.10);  border-color: rgba(16,185,129,0.30);  color: #b6f0d8; }
 [data-theme="dark"] .carma-callout[data-variant="warning"] { background: rgba(245,158,11,0.10);  border-color: rgba(245,158,11,0.30);  color: #fde2a3; }
 [data-theme="dark"] .carma-callout[data-variant="danger"]  { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: #fbb4b4; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE "GOLD STANDARD" — premium CTAs, animated tracing border, marketing chrome.
+ * Shared by the public landing page and the dashboard's primary surfaces.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Signature gold gradient button — a wide gold gradient that slides on hover. */
+.btn-gold {
+  position: relative;
+  /* A bright gold sheen band baked into the gradient; the animation sweeps it
+     across so the button INTERIOR is always visibly alive. */
+  background-image: linear-gradient(110deg, #c79722 0%, #f5bc00 18%, #ffe27a 34%, #fff7d6 46%, #ffe27a 58%, #f5bc00 74%, #c79722 100%);
+  background-size: 250% 100%;
+  background-position: 0% 0;
+  color: #1a1400;
+  transition: transform .2s var(--ease-emphasis, ease), box-shadow .35s ease, filter .25s ease;
+  box-shadow: 0 10px 30px -6px rgba(245, 188, 0, 0.40), inset 0 1px 0 rgba(255,255,255,0.55);
+  animation: btn-gold-sheen 3.6s linear infinite;
+}
+/* The interior is ALWAYS alive — a bright band sweeps across continuously; on
+   hover it accelerates (constant motion under the cursor). */
+@keyframes btn-gold-sheen { 0% { background-position: 165% 0; } 100% { background-position: -65% 0; } }
+.btn-gold:hover { animation-duration: 1.25s; transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 18px 44px -8px rgba(245, 188, 0, 0.60), inset 0 1px 0 rgba(255,255,255,0.7); }
+.btn-gold:active { transform: scale(0.985); }
+
+/* ── Animated glowing border that traces the perimeter (CTAs + hero cards) ──
+   A conic gradient rotated via an animatable custom property, masked to a thin
+   ring. `--gold-trace-w` controls thickness; the host needs a border-radius. */
+@property --gold-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes gold-trace-spin { to { --gold-angle: 360deg; } }
+.gold-trace {
+  position: relative;
+  isolation: isolate;
+}
+.gold-trace::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: var(--gold-trace-w, 1.5px);
+  border-radius: inherit;
+  /* A full gold ring (no gaps) with two bright comets — as it rotates the light
+     travels the WHOLE border continuously, never a dead edge. */
+  background: conic-gradient(
+    from var(--gold-angle),
+    #8a6d1e 0deg,
+    #f5bc00 30deg,
+    #fff6cc 55deg,
+    #ffce2e 80deg,
+    #b58f27 120deg,
+    #8a6d1e 175deg,
+    #f5bc00 210deg,
+    #fff6cc 235deg,
+    #ffce2e 260deg,
+    #b58f27 300deg,
+    #8a6d1e 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: gold-trace-spin 3.2s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+/* A soft pulsing gold aura under the trace, for "important" cards/CTAs. */
+.gold-trace.gold-trace-aura::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 24px -3px rgba(245, 188, 0, 0.5);
+  pointer-events: none;
+  z-index: -1;
+  animation: gold-aura-pulse 3.2s ease-in-out infinite;
+}
+@keyframes gold-aura-pulse { 0%, 100% { opacity: .4; } 50% { opacity: .85; } }
+@media (prefers-reduced-motion: reduce) {
+  .gold-trace::before { animation: none; --gold-angle: 130deg; }
+  .gold-trace.gold-trace-aura::after { animation: none; opacity: .5; }
+}
+/* Hover-only trace — the ring fades in and the spin only runs while hovered, so a
+   whole grid of cards doesn't animate at once. Pair with `.gold-trace`. */
+.gold-trace.gold-trace-hover::before { opacity: 0; transition: opacity .35s ease; animation-play-state: paused; }
+.gold-trace.gold-trace-hover:hover::before { opacity: 1; animation-play-state: running; }
+
+/* Faux iridescent gold ring (static) — Premium pricing card / framed surfaces. */
+.gold-ring {
+  position: relative;
+  isolation: isolate;
+}
+.gold-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  background: linear-gradient(135deg, #fff3bf 0%, #f5bc00 35%, #fffbe6 55%, #b58f27 75%, #ffe066 100%);
+  border-radius: inherit;
+  z-index: -1;
+}
+
+/* Eyebrow chip — the signature tiny uppercase label. */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(245, 188, 0, 0.10);
+  border: 1px solid rgba(245, 188, 0, 0.30);
+  color: #a87f00;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+[data-theme="dark"] .eyebrow { color: #ffce2e; background: rgba(255, 206, 46, 0.10); border-color: rgba(255, 206, 46, 0.28); }
+.eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: #f5bc00;
+  box-shadow: 0 0 8px rgba(245, 188, 0, 0.8);
+  animation: eyebrow-glow 2.5s ease-in-out infinite;
+}
+@keyframes eyebrow-glow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Atmospheric blurred gold halos — the one decorative device. */
+.halo { position: absolute; border-radius: 9999px; filter: blur(140px); pointer-events: none; }
+@keyframes halo-drift-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-30px) scale(1.06); } }
+@keyframes halo-drift-b { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,40px) scale(1.08); } }
+.halo-drift-a { animation: halo-drift-a 18s ease-in-out infinite; }
+.halo-drift-b { animation: halo-drift-b 22s ease-in-out infinite; }
+
+/* Shimmering gold text — drifts indefinitely over a wide gradient. */
+.shimmer-gold {
+  background: linear-gradient(100deg, #a87f00 0%, #f5bc00 25%, #ffe680 50%, #f5bc00 75%, #a87f00 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  animation: shimmer-text 5.5s linear infinite;
+}
+@keyframes shimmer-text { 0% { background-position: 220% 0; } 100% { background-position: -220% 0; } }
+
+/* Scroll-reveal — hidden until intersected (App attaches .in-view via observer). */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)),
+              transform 0.9s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1));
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal].in-view { opacity: 1; transform: translateY(0); }
+
+/* Cursor-following soft spotlight (URL input, feature cards). */
+.pointer-spot {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(245,188,0,0.18), transparent 65%);
+  opacity: 0; transition: opacity 0.4s ease;
+}
+.pointer-host:hover .pointer-spot, .pointer-host:focus-within .pointer-spot { opacity: 1; }
+
+/* Animated typing caret used in the hero URL input. */
+.caret-blink::after {
+  content: ""; display: inline-block; width: 2px; height: 1.1em;
+  background: #f5bc00; margin-left: 4px; vertical-align: -0.18em;
+  animation: caret-blink 1.05s steps(1) infinite;
+}
+@keyframes caret-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+/* Card hover lift — bento + site cards. Lifts AND warms with a soft gold glow. */
+.lift { transition: transform .35s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)), box-shadow .35s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)); }
+.lift:hover { transform: translateY(-5px); box-shadow: 0 22px 50px -24px rgba(28,25,23,0.30), 0 0 34px -12px rgba(245,188,0,0.40); }
+
+/* Word-by-word hero headline stagger. */
+.hero-word { display: inline-block; opacity: 0; transform: translateY(28px); animation: hero-word-in 0.85s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)) forwards; }
+@keyframes hero-word-in { 0% { opacity: 0; transform: translateY(28px); } 100% { opacity: 1; transform: translateY(0); } }
+
+/* Section anchors clear the floating nav. */
+section[id] { scroll-margin-top: 110px; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .halo-drift-a, .halo-drift-b, .shimmer-gold, .hero-word, .btn-gold { animation: none !important; }
+  .hero-word { opacity: 1; transform: none; }
+}
