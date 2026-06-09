@@ -1153,9 +1153,9 @@ export function buildArticleFragment(theme: Theme, siteId: string, post: Post, l
   }
 }
 
-export function buildErrorPage(message: string, code = 404): { html: string; status: number } {
+export function buildErrorPage(message: string, code = 404, lang = 'ca'): { html: string; status: number } {
   const html = `<!doctype html>
-<html lang="ca">
+<html lang="${escapeHtml(lang)}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />

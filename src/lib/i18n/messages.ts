@@ -2,7 +2,7 @@
 // This is the pattern to extend for full dashboard localization — components call
 // useT() and look up keys instead of hardcoding strings.
 
-import type { Locale } from './config'
+import { DEFAULT_LOCALE, type Locale } from './config'
 
 export type Dict = Record<string, string>
 
@@ -21,6 +21,13 @@ const en: Dict = {
   'nav.theme.light': 'Light',
   'nav.theme.dark': 'Dark',
   'nav.theme.system': 'System',
+  // Public render/embed status strings (visitor-facing, served by the /render
+  // routes and the /embed loader). Localised so a non-Catalan site/host does not
+  // surface Catalan to its visitors.
+  'render.siteNotFound': 'Site not found',
+  'render.articleNotFound': 'Article not found',
+  'embed.loading': 'Loading…',
+  'embed.loadError': 'Could not load the blog.',
 }
 
 const es: Dict = {
@@ -38,6 +45,10 @@ const es: Dict = {
   'nav.theme.light': 'Claro',
   'nav.theme.dark': 'Oscuro',
   'nav.theme.system': 'Sistema',
+  'render.siteNotFound': 'Sitio no encontrado',
+  'render.articleNotFound': 'Artículo no encontrado',
+  'embed.loading': 'Cargando…',
+  'embed.loadError': 'No se ha podido cargar el blog.',
 }
 
 const ca: Dict = {
@@ -55,6 +66,17 @@ const ca: Dict = {
   'nav.theme.light': 'Clar',
   'nav.theme.dark': 'Fosc',
   'nav.theme.system': 'Sistema',
+  'render.siteNotFound': 'Lloc no trobat',
+  'render.articleNotFound': 'Article no trobat',
+  'embed.loading': 'Carregant…',
+  'embed.loadError': 'No s\'ha pogut carregar el blog.',
 }
 
 export const MESSAGES: Record<Locale, Dict> = { en, es, ca }
+
+// Server-safe lookup for non-React contexts (route handlers, the embed loader
+// builder). Falls back to the Catalan default, then the raw key, so a missing
+// translation degrades gracefully instead of rendering "undefined".
+export function tr(locale: Locale, key: string): string {
+  return MESSAGES[locale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key] ?? key
+}

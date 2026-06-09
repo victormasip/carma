@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server'
 import { PARAM_MAP } from '@/lib/render/embedParams'
-import { LOCALES, LOCALE_META } from '@/lib/i18n/config'
+import { LOCALES, LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
+import { tr } from '@/lib/i18n/messages'
 
 // The Magic Wand embed loader.
 //
@@ -28,18 +29,21 @@ import { LOCALES, LOCALE_META } from '@/lib/i18n/config'
 
 export const dynamic = 'force-dynamic'
 
-function buildScript(origin: string, siteId: string, params: string, localesJson: string): string {
+function buildScript(origin: string, siteId: string, params: string, localesJson: string, uiLocale: string, msgJson: string): string {
   // Everything below is plain ES5-ish browser JS emitted as a string. We keep it
   // dependency-free and use string concatenation (no template literals) so it can
   // live safely inside this TS template literal.
   const ORIGIN = JSON.stringify(origin)
   const SITEID = JSON.stringify(siteId)
   const PARAMS = JSON.stringify(params ? '&' + params : '')
+  const UI = JSON.stringify(uiLocale)
 
   return `(function(){
   var ORIGIN = ${ORIGIN};
   var SITEID = ${SITEID};
   var EXTRA = ${PARAMS};
+  var UI = ${UI};
+  var MSG = ${msgJson};
   var LOC = ${localesJson};
   var CODES = LOC.codes || [];
   var ALIAS = LOC.alias || {};
@@ -47,7 +51,9 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
 
   function fragUrl(path, lang, extra){
     var sep = path.indexOf('?') >= 0 ? '&' : '?';
-    return ORIGIN + path + sep + 'format=fragment' + (lang ? ('&lang=' + lang) : '') + (extra || '');
+    // Forward UI so the content engine localises its own 404 strings to match
+    // the host's language, same as the loader's baked-in status messages.
+    return ORIGIN + path + sep + 'format=fragment' + (lang ? ('&lang=' + lang) : '') + (UI ? ('&ui=' + UI) : '') + (extra || '');
   }
 
   // Map any token (code, native name, label, region-tagged) to a supported locale.
@@ -192,14 +198,14 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
   }
 
   function load(root, url){
-    showMessage(root, 'Carregant…');
+    showMessage(root, MSG.loading);
     fetch(url, { headers: { 'Accept': 'application/json' } })
       .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(function(frag){
         if (frag && frag.error) { showMessage(root, frag.error); return; }
         render(root, frag);
       })
-      .catch(function(){ showMessage(root, 'No s\\'ha pogut carregar el blog.'); });
+      .catch(function(){ showMessage(root, MSG.loadError); });
   }
 
   function shadowOf(el){ return el.attachShadow ? el.attachShadow({ mode: 'open' }) : el; }
@@ -320,7 +326,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   const localesJson = JSON.stringify({ codes: [...LOCALES], alias })
 
-  const script = buildScript(origin, siteId, sp.toString(), localesJson)
+  // Host UI language for the loader's status strings (the WordPress plugin passes
+  // its get_locale() as ?ui). Defaults to Catalan; the content locale is decided
+  // separately by /render from ?lang / the site's default.
+  const uiLocale = normalizeLocale(request.nextUrl.searchParams.get('ui'))
+  const msgJson = JSON.stringify({
+    loading: tr(uiLocale, 'embed.loading'),
+    loadError: tr(uiLocale, 'embed.loadError'),
+  })
+
+  const script = buildScript(origin, siteId, sp.toString(), localesJson, uiLocale, msgJson)
 
   return new Response(script, {
     status: 200,

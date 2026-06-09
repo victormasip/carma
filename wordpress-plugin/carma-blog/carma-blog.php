@@ -272,6 +272,21 @@ function carma_blog_sanitize_origin( $value ) {
 	return $norm;
 }
 
+/**
+ * Map the WordPress UI locale to a Carma-supported locale for the loader's
+ * status strings ("Loading…", "Could not load…") and the render 404s. Mirrors
+ * src/lib/i18n/config.ts LOCALES; anything unsupported returns '' so Carma falls
+ * back to its own default (Catalan) instead of guessing.
+ *
+ * @return string 'ca' | 'es' | 'en' | '' (unsupported).
+ */
+function carma_blog_ui_locale() {
+	$supported = array( 'ca', 'es', 'en' );
+	// get_locale() is like 'ca', 'es_ES', 'en_US' — reduce to the base language.
+	$base = strtolower( substr( (string) get_locale(), 0, 2 ) );
+	return in_array( $base, $supported, true ) ? $base : '';
+}
+
 /* -------------------------------------------------------------------------- *
  * Token-override params — mirrors src/lib/render/embedParams.ts PARAM_MAP
  * -------------------------------------------------------------------------- */
@@ -387,7 +402,16 @@ function carma_blog_shortcode( $atts ) {
 	$origin = carma_blog_origin();
 	$params = carma_blog_build_params( $atts );
 	$uid    = wp_unique_id( 'carma-blog-' );
-	$src    = esc_url( $origin . '/embed/' . $site_id );
+
+	// Tell the loader which language to show its status strings in (this WP site's
+	// locale), so an ES/EN install never surfaces Carma's default Catalan to
+	// visitors. esc_url keeps the final src safe regardless.
+	$src_url = $origin . '/embed/' . $site_id;
+	$ui      = carma_blog_ui_locale();
+	if ( '' !== $ui ) {
+		$src_url = add_query_arg( 'ui', $ui, $src_url );
+	}
+	$src = esc_url( $src_url );
 
 	$html  = '<div class="carma-blog" id="' . esc_attr( $uid ) . '"';
 	$html .= ' data-carma-embed="' . esc_attr( $site_id ) . '"';

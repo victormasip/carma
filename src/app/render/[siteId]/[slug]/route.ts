@@ -5,6 +5,7 @@ import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { LOCALES, normalizeLocale, isLocale, type Locale } from '@/lib/i18n/config'
+import { tr } from '@/lib/i18n/messages'
 import { isUuid } from '@/lib/sites/domain'
 
 // Reading the query string opts this handler out of static prerender — embeds
@@ -91,6 +92,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { siteId: param, slug } = await params
   const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
   const rawLang = request.nextUrl.searchParams.get('lang')
+  // UI-chrome locale for the not-found strings (see the listing route): ?ui wins
+  // (host language, e.g. WP get_locale()), then ?lang, else Catalan.
+  const uiLocale = normalizeLocale(request.nextUrl.searchParams.get('ui') ?? rawLang)
   const admin = createAdminClient()
 
   // Param is a site UUID (canonical) or a tenant subdomain (middleware rewrite).
@@ -99,8 +103,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ? await siteSel.eq('id', param).maybeSingle()
     : await siteSel.eq('subdomain', param).maybeSingle()
   if (!site) {
-    if (isFragment) return NextResponse.json({ error: 'Site no trobat' }, { status: 404, headers: FRAGMENT_CORS })
-    const err = buildErrorPage('Site no trobat', 404)
+    if (isFragment) return NextResponse.json({ error: tr(uiLocale, 'render.siteNotFound') }, { status: 404, headers: FRAGMENT_CORS })
+    const err = buildErrorPage(tr(uiLocale, 'render.siteNotFound'), 404, uiLocale)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
   const siteId = site.id as string
@@ -111,8 +115,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   ])
 
   if (!resolution) {
-    if (isFragment) return NextResponse.json({ error: 'Article no trobat' }, { status: 404, headers: FRAGMENT_CORS })
-    const err = buildErrorPage('Article no trobat', 404)
+    if (isFragment) return NextResponse.json({ error: tr(uiLocale, 'render.articleNotFound') }, { status: 404, headers: FRAGMENT_CORS })
+    const err = buildErrorPage(tr(uiLocale, 'render.articleNotFound'), 404, uiLocale)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
 

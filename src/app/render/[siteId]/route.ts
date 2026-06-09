@@ -5,6 +5,7 @@ import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { normalizeLocale } from '@/lib/i18n/config'
+import { tr } from '@/lib/i18n/messages'
 import { isUuid } from '@/lib/sites/domain'
 
 // Reading the query string opts this handler out of static prerender (live
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { siteId: param } = await params
   const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
   const rawLang = request.nextUrl.searchParams.get('lang')
+  // UI-chrome locale for status strings (404s). Independent of the content
+  // locale: ?ui wins (the host's own language, e.g. WordPress get_locale()),
+  // then ?lang, else Catalan. Resolved up front so the not-found branch — which
+  // runs before we know the site's configured locale — is already localised.
+  const uiLocale = normalizeLocale(request.nextUrl.searchParams.get('ui') ?? rawLang)
   const admin = createAdminClient()
 
   // The param is either a site UUID (canonical /render/<uuid>) or a tenant
@@ -31,9 +37,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     : await siteSel.eq('subdomain', param).maybeSingle()
   if (!site) {
     if (isFragment) {
-      return NextResponse.json({ error: 'Site no trobat' }, { status: 404, headers: FRAGMENT_CORS })
+      return NextResponse.json({ error: tr(uiLocale, 'render.siteNotFound') }, { status: 404, headers: FRAGMENT_CORS })
     }
-    const err = buildErrorPage('Site no trobat', 404)
+    const err = buildErrorPage(tr(uiLocale, 'render.siteNotFound'), 404, uiLocale)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
   const siteId = site.id as string
