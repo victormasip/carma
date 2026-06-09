@@ -1,0 +1,14 @@
+/**
+ * Editor-only styling for the Carma Blog block placeholder.
+ * Front-end output is the isolated /embed render — nothing here ships to visitors.
+ */
+.wp-block-carma-blog .carma-blog-block-placeholder {
+	border: 1px dashed #c3c4c7;
+	border-radius: 8px;
+}
+
+.wp-block-carma-blog .carma-blog-block-summary {
+	margin: 8px 0 0;
+	font-size: 13px;
+	color: #50575e;
+}

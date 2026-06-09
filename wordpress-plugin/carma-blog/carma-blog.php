@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Carma Blog
  * Plugin URI:        https://carma.cat
- * Description:        Drop your Carma blog onto any WordPress page with the [carma_blog] shortcode. The blog renders in an isolated Shadow DOM, so it looks perfect regardless of your theme's CSS.
+ * Description:        Drop your Carma blog onto any WordPress page with the Carma Blog block or the [carma_blog] shortcode. The blog renders in an isolated Shadow DOM, so it looks perfect regardless of your theme's CSS.
  * Version:           0.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
@@ -12,10 +12,14 @@
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       carma-blog
  *
- * T1 of the Headless/WordPress pivot (docs/plans/2026-06-09-headless-decoupling.md):
+ * T1 + T2 of the Headless/WordPress pivot (docs/plans/2026-06-09-headless-decoupling.md):
  * a THIN client of the already-shipped Carma /embed contract. It never fetches or
  * renders Carma HTML server-side — the visitor's browser loads the isolated blog —
  * so there is NO SSRF / admin-HTML-injection surface (see plan finding E3).
+ *
+ * Two authoring entry points, ONE renderer: the [carma_blog] shortcode and the Carma
+ * Blog Gutenberg block (block/). The block is static — its save() emits the same
+ * shortcode, which do_shortcode() runs through carma_blog_shortcode() below.
  *
  * Security model (E2): the two stored settings (site ID + origin) are sanitised on
  * save AND escaped on every output, the origin is pinned to an allowlist, and the
@@ -112,11 +116,28 @@ add_action( 'admin_menu', 'carma_blog_settings_page' );
 add_action( 'init', 'carma_blog_boot' );
 
 /**
- * Late-bind the shortcode + load translations.
+ * Late-bind the shortcode + block + load translations.
  */
 function carma_blog_boot() {
 	load_plugin_textdomain( 'carma-blog', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 	add_shortcode( 'carma_blog', 'carma_blog_shortcode' );
+	carma_blog_register_block();
+}
+
+/**
+ * Register the Carma Blog Gutenberg block (T2 — DX1 hero path).
+ *
+ * The block is STATIC: its save() emits the very same `[carma_blog ...]` shortcode
+ * handled above, so there is exactly one front-end renderer (the shortcode runs via
+ * do_shortcode()). No render_callback, no server-side fetch — the SSRF-free contract
+ * from T1 (finding E3) is unchanged. block.json carries all metadata + the editor
+ * script/style; register_block_type reads it from the /block directory.
+ */
+function carma_blog_register_block() {
+	// register_block_type() with a block.json directory needs WP 5.8+ (our floor).
+	if ( function_exists( 'register_block_type' ) && file_exists( __DIR__ . '/block/block.json' ) ) {
+		register_block_type( __DIR__ . '/block' );
+	}
 }
 
 function carma_blog_register_settings() {
