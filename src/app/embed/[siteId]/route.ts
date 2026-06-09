@@ -15,6 +15,16 @@ import { LOCALES, LOCALE_META } from '@/lib/i18n/config'
 // /render route (format=fragment), hoists font stylesheets to the host <head>,
 // and handles intra-blog navigation (listing ⇄ article) by swapping the shadow
 // content in place — no full page reload.
+//
+// Mounting (two paths):
+//   · Mount divs (preferred, used by the Carma WordPress plugin): the host emits
+//     one or more `<div data-carma-embed="<siteId>" data-carma-params="…">` and the
+//     loader renders EACH into its own shadow root. Placement never depends on
+//     document.currentScript, so it survives WP script optimizers (defer/combine)
+//     and works for several embeds on one page.
+//   · Legacy bare <script> (the dashboard's classic snippet): no mount div, so the
+//     loader positions relative to its own <script> tag (document.currentScript),
+//     honouring an optional data-carma-target. Unchanged behaviour.
 
 export const dynamic = 'force-dynamic'
 
@@ -35,14 +45,9 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
   var ALIAS = LOC.alias || {};
   var current = document.currentScript;
 
-  // Current view, so the cloned header's language switcher can re-render the
-  // SAME page in another locale (not navigate away).
-  var currentPath = '/render/' + SITEID;
-  var currentLang = '';
-
-  function fragUrl(path, lang){
+  function fragUrl(path, lang, extra){
     var sep = path.indexOf('?') >= 0 ? '&' : '?';
-    return ORIGIN + path + sep + 'format=fragment' + (lang ? ('&lang=' + lang) : '') + EXTRA;
+    return ORIGIN + path + sep + 'format=fragment' + (lang ? ('&lang=' + lang) : '') + (extra || '');
   }
 
   // Map any token (code, native name, label, region-tagged) to a supported locale.
@@ -104,6 +109,10 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
     var host = document.createElement('div');
     host.className = 'carma-embed';
     host.setAttribute('data-carma-embed', SITEID);
+    // Flag the host itself (not just the script) as mounted, so a second
+    // identical legacy <script> — whose start() scan now sees this created div —
+    // skips it instead of calling attachShadow() on an already-shadowed node.
+    host.setAttribute('data-carma-mounted', '1');
     var targetSel = current && current.getAttribute('data-carma-target');
     var anchor = targetSel ? document.querySelector(targetSel) : null;
     if (anchor) { anchor.appendChild(host); }
@@ -193,10 +202,15 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
       .catch(function(){ showMessage(root, 'No s\\'ha pogut carregar el blog.'); });
   }
 
-  function start(){
-    var host = resolveMount();
-    if (!host) return;
-    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+  function shadowOf(el){ return el.attachShadow ? el.attachShadow({ mode: 'open' }) : el; }
+
+  // Mount ONE blog instance into a shadow root. Each instance keeps its OWN view
+  // state (path + locale) and its OWN param payload, so several embeds can live on
+  // one page without sharing state. NOTHING here depends on document.currentScript
+  // — placement is decided by the caller (an explicit mount div, or the legacy
+  // fallback), which is what makes the WP plugin path robust to script optimizers.
+  function mountInstance(hostEl, root, extra){
+    var st = { path: '/render/' + SITEID, lang: '' };
 
     // Delegated click handler (also covers nodes added later — no MutationObserver
     // needed). Handles BOTH our intra-blog links AND the cloned header's native
@@ -220,9 +234,9 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
       if (href.indexOf('/render/' + SITEID) === 0){
         e.preventDefault();
         var p = parseRenderHref(href);
-        currentPath = p.path; currentLang = p.lang;
-        load(root, fragUrl(currentPath, currentLang));
-        if (host.scrollIntoView) host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        st.path = p.path; st.lang = p.lang;
+        load(root, fragUrl(st.path, st.lang, extra));
+        if (hostEl && hostEl.scrollIntoView) hostEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
 
@@ -230,15 +244,49 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
       //    the CURRENT view in the chosen locale instead of leaving for the source.
       if (header){
         var loc = detectHeaderLocale(a, header);
-        if (loc && loc !== currentLang){
+        if (loc && loc !== st.lang){
           e.preventDefault();
-          currentLang = loc;
-          load(root, fragUrl(currentPath, currentLang));
+          st.lang = loc;
+          load(root, fragUrl(st.path, st.lang, extra));
         }
       }
     });
 
-    load(root, fragUrl(currentPath, currentLang));
+    load(root, fragUrl(st.path, st.lang, extra));
+  }
+
+  function start(){
+    // Preferred path: explicit mount divs (emitted by the Carma WordPress plugin,
+    // or any host wanting deterministic placement). Mount EVERY still-unmounted div
+    // for THIS site. This is robust to optimizer/defer plugins that null
+    // document.currentScript, and to combiners that dedupe identical <script> src
+    // across multiple shortcodes — one surviving execution mounts them all.
+    var divs = document.querySelectorAll('div[data-carma-embed]');
+    var sawOurDiv = false;
+    for (var i = 0; i < divs.length; i++){
+      var el = divs[i];
+      var sid = el.getAttribute('data-carma-embed');
+      if (sid && sid !== SITEID) continue; // belongs to another site's loader
+      sawOurDiv = true;
+      if (el.getAttribute('data-carma-mounted')) continue; // already handled by a sibling script
+      el.setAttribute('data-carma-mounted', '1');
+      // Per-div params override the script-baked EXTRA, so two embeds of the same
+      // site with different token tweaks never cross-contaminate.
+      var dp = el.getAttribute('data-carma-params');
+      var extra = dp != null ? (dp ? '&' + dp : '') : EXTRA;
+      mountInstance(el, shadowOf(el), extra);
+    }
+    // If ANY mount div for this site exists, the divs own placement — never fall
+    // back to the legacy path (a second identical <script> must not add a stray
+    // blog after the tag).
+    if (sawOurDiv) return;
+
+    // Legacy path: a bare <script> with no mount div (the dashboard's classic
+    // snippet, including its optional data-carma-target). Positioned relative to
+    // the script tag via document.currentScript — unchanged behaviour.
+    var host = resolveMount();
+    if (!host) return;
+    mountInstance(host, shadowOf(host), EXTRA);
   }
 
   if (document.readyState === 'loading'){
