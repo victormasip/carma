@@ -114,6 +114,10 @@ function carma_blog_origin() {
 add_action( 'admin_init', 'carma_blog_register_settings' );
 add_action( 'admin_menu', 'carma_blog_settings_page' );
 add_action( 'init', 'carma_blog_boot' );
+// Bust the cached connectivity result whenever the ID or origin changes, so the
+// settings screen re-tests against the new value instead of showing a stale badge.
+add_action( 'update_option_carma_blog_site_id', 'carma_blog_flush_conn_cache' );
+add_action( 'update_option_carma_blog_origin', 'carma_blog_flush_conn_cache' );
 
 /**
  * Late-bind the shortcode + block + load translations.
@@ -179,9 +183,18 @@ function carma_blog_render_settings() {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
+
+	// Forced re-check (nonce-protected): drop the cached result before rendering
+	// the badge so the admin gets a fresh probe. check_admin_referer() dies on a
+	// bad/missing nonce, so this cannot be triggered cross-site.
+	if ( isset( $_GET['carma_recheck'] ) && check_admin_referer( 'carma_blog_recheck' ) ) {
+		carma_blog_flush_conn_cache();
+	}
+
 	echo '<div class="wrap">';
 	echo '<h1>' . esc_html__( 'Carma Blog', 'carma-blog' ) . '</h1>';
 	echo '<p>' . esc_html__( 'Show your Carma blog on this site with the [carma_blog] shortcode (or the Carma Blog block).', 'carma-blog' ) . '</p>';
+	carma_blog_render_conn_status();
 	echo '<form action="options.php" method="post">';
 	settings_fields( 'carma_blog' );        // nonce + option_page + _wp_http_referer.
 	do_settings_sections( 'carma_blog' );
@@ -212,6 +225,179 @@ function carma_blog_field_origin() {
 		esc_html__( 'Leave blank to use the default (%s). Change this only for a self-hosted Carma.', 'carma-blog' ),
 		'<code>' . esc_html( $default ) . '</code>'
 	) . '</p>';
+}
+
+/* -------------------------------------------------------------------------- *
+ * Connectivity check (T4 / DX3) — admin-only "Connected ✓ / Invalid ID" badge
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Cache key for a given origin+site_id connectivity result.
+ *
+ * @param string $origin  Resolved Carma origin.
+ * @param string $site_id Cleaned site ID.
+ * @return string
+ */
+function carma_blog_conn_transient_key( $origin, $site_id ) {
+	return 'carma_blog_conn_' . md5( $origin . '|' . $site_id );
+}
+
+/**
+ * Verify that $site_id resolves to a real, reachable Carma site at $origin.
+ *
+ * SECURITY (re T1 finding E3): E3 forbids a server-side fetch on the FRONT END
+ * (the SSRF / remote-HTML-injection surface). This is a different animal — an
+ * ADMIN-ONLY diagnostic that (a) runs only on the settings screen behind the
+ * manage_options capability, (b) targets ONLY the allowlist-pinned Carma origin,
+ * never a visitor- or attacker-supplied URL, and (c) reads ONLY the HTTP status
+ * line; the response body is never parsed, stored, or echoed anywhere. So it adds
+ * no SSRF surface and never injects remote markup into a page.
+ *
+ * It hits /render/<id>?format=fragment, NOT /embed/<id>: the embed loader is
+ * served for ANY id (it is just a script), whereas the fragment render is what
+ * actually 404s for an unknown site — so it is the only honest existence signal.
+ *
+ * @param string $origin    Resolved Carma origin (already allowlist-validated).
+ * @param string $site_id   Cleaned site ID.
+ * @param bool   $use_cache Read the cached result when available.
+ * @return array{status:string,code:int} status ∈ empty|connected|invalid|unreachable
+ */
+function carma_blog_check_connection( $origin, $site_id, $use_cache = true ) {
+	if ( '' === $site_id ) {
+		return array(
+			'status' => 'empty',
+			'code'   => 0,
+		);
+	}
+
+	$key = carma_blog_conn_transient_key( $origin, $site_id );
+	if ( $use_cache ) {
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && isset( $cached['status'] ) ) {
+			return $cached;
+		}
+	}
+
+	$url = esc_url_raw( $origin . '/render/' . rawurlencode( $site_id ) . '?format=fragment' );
+	$res = wp_remote_get(
+		$url,
+		array(
+			'timeout'     => 8,
+			'redirection' => 2,
+			'sslverify'   => true,
+			'headers'     => array( 'Accept' => 'application/json' ),
+		)
+	);
+
+	if ( is_wp_error( $res ) ) {
+		$out = array(
+			'status' => 'unreachable',
+			'code'   => 0,
+		);
+	} else {
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		if ( 200 === $code ) {
+			$out = array(
+				'status' => 'connected',
+				'code'   => 200,
+			);
+		} elseif ( 404 === $code ) {
+			$out = array(
+				'status' => 'invalid',
+				'code'   => 404,
+			);
+		} else {
+			$out = array(
+				'status' => 'unreachable',
+				'code'   => $code,
+			);
+		}
+	}
+
+	// Cache definitive answers (connected / invalid) for 5 min, but a transient
+	// "unreachable" only briefly — so a momentary network blip or Carma restart
+	// doesn't pin a scary badge for 5 minutes after things recover.
+	$ttl = ( 'unreachable' === $out['status'] ) ? 30 : 5 * MINUTE_IN_SECONDS;
+	set_transient( $key, $out, $ttl );
+	return $out;
+}
+
+/**
+ * Clear the cached connectivity result for the CURRENT origin+site_id. Hooked on
+ * option updates; any stale entry under a previous value simply expires via TTL.
+ */
+function carma_blog_flush_conn_cache() {
+	delete_transient(
+		carma_blog_conn_transient_key( carma_blog_origin(), (string) get_option( 'carma_blog_site_id', '' ) )
+	);
+}
+
+/**
+ * Render the connectivity status badge on the settings screen. Uses WordPress's
+ * native admin notice colours (success/error/warning/info) so it reads as a
+ * first-class part of the backend, with actionable, localised copy.
+ */
+function carma_blog_render_conn_status() {
+	$site_id = carma_blog_clean_site_id( (string) get_option( 'carma_blog_site_id', '' ) );
+	$origin  = carma_blog_origin();
+	$conn    = carma_blog_check_connection( $origin, $site_id );
+
+	switch ( $conn['status'] ) {
+		case 'connected':
+			$class = 'notice-success';
+			$label = __( 'Connected ✓', 'carma-blog' );
+			$detail = sprintf(
+				/* translators: %s: the Carma origin URL. */
+				__( 'Your blog is live at %s and ready to embed.', 'carma-blog' ),
+				'<code>' . esc_html( $origin ) . '</code>'
+			);
+			break;
+		case 'invalid':
+			$class = 'notice-error';
+			$label = __( 'Invalid Site ID', 'carma-blog' );
+			$detail = __( 'No Carma site matches this ID. Copy the exact subdomain label or site UUID from your Carma dashboard.', 'carma-blog' );
+			break;
+		case 'unreachable':
+			$class = 'notice-warning';
+			$label = __( 'Could not reach Carma', 'carma-blog' );
+			$detail = sprintf(
+				/* translators: %s: the Carma origin URL. */
+				__( "Couldn't connect to %s. Check the origin setting and that your server can make outbound requests, then re-check.", 'carma-blog' ),
+				'<code>' . esc_html( $origin ) . '</code>'
+			);
+			break;
+		case 'empty':
+		default:
+			$class = 'notice-info';
+			$label = __( 'Not connected yet', 'carma-blog' );
+			$detail = __( 'Enter your Site ID below and save to connect your blog.', 'carma-blog' );
+			break;
+	}
+
+	// Re-check link (only meaningful once an ID is set): nonce-protected GET that
+	// busts the cache so the admin can re-test after fixing things on Carma's side.
+	$recheck = '';
+	if ( '' !== $site_id ) {
+		$recheck_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'          => 'carma-blog',
+					'carma_recheck' => '1',
+				),
+				admin_url( 'options-general.php' )
+			),
+			'carma_blog_recheck'
+		);
+		$recheck = ' <a href="' . esc_url( $recheck_url ) . '">' . esc_html__( 'Re-check', 'carma-blog' ) . '</a>';
+	}
+
+	printf(
+		'<div class="notice %1$s inline" style="margin:12px 0;padding:10px 12px"><p style="margin:0"><strong>%2$s</strong> %3$s%4$s</p></div>',
+		esc_attr( $class ),
+		esc_html( $label ),
+		wp_kses( $detail, array( 'code' => array() ) ),
+		$recheck // already escaped above (esc_url + esc_html).
+	);
 }
 
 /* -------------------------------------------------------------------------- *
