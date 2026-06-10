@@ -199,7 +199,42 @@ function carma_blog_render_settings() {
 	settings_fields( 'carma_blog' );        // nonce + option_page + _wp_http_referer.
 	do_settings_sections( 'carma_blog' );
 	submit_button();
-	echo '</form></div>';
+	echo '</form>';
+	carma_blog_render_csp_info();
+	echo '</div>';
+}
+
+/**
+ * Render the Content Security Policy guidance on the settings screen (E4 / DX4).
+ *
+ * Hosts that send a Content-Security-Policy header (security plugins, managed
+ * hosts, reverse proxies) will block the embed unless the Carma origin is
+ * allowed. We can't set the host's CSP for them — and WP per-render nonces can't
+ * cover a cross-origin script — so we surface the EXACT directives to add, with
+ * the live configured origin filled in. Tucked in a <details> so it stays out of
+ * the way until needed.
+ */
+function carma_blog_render_csp_info() {
+	$origin = carma_blog_origin();
+	// scheme://host of the origin, used for font/img examples.
+	$o = esc_html( $origin );
+
+	$directives = sprintf(
+		"script-src  %1\$s;\nconnect-src %1\$s;\nstyle-src   'unsafe-inline' %1\$s;\nfont-src    %1\$s data:;\nimg-src     %1\$s data:;",
+		$o
+	);
+
+	echo '<details class="carma-blog-csp" style="margin-top:20px;max-width:48rem">';
+	echo '<summary style="cursor:pointer;font-weight:600">' . esc_html__( 'Content Security Policy (CSP) requirements', 'carma-blog' ) . '</summary>';
+	echo '<div style="margin-top:8px">';
+	echo '<p>' . esc_html__( "If your site sends a Content-Security-Policy header, allow the Carma origin so visitors' browsers don't block the embed. Add (or merge) these directives:", 'carma-blog' ) . '</p>';
+	// $directives is built only from esc_html($origin) + static literals — safe.
+	echo '<pre style="padding:12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;overflow:auto"><code>' . $directives . '</code></pre>';
+	echo '<p class="description">' . wp_kses(
+		__( "<code>style-src 'unsafe-inline'</code> is required — the loader injects the blog's styles inline in its Shadow DOM. <code>font-src</code> and <code>img-src</code> may also need your design's asset hosts (e.g. <code>https://fonts.gstatic.com</code> for Google Fonts, or wherever your post images live).", 'carma-blog' ),
+		array( 'code' => array() )
+	) . '</p>';
+	echo '</div></details>';
 }
 
 function carma_blog_field_site_id() {
