@@ -118,6 +118,10 @@ add_action( 'init', 'carma_blog_boot' );
 // settings screen re-tests against the new value instead of showing a stale badge.
 add_action( 'update_option_carma_blog_site_id', 'carma_blog_flush_conn_cache' );
 add_action( 'update_option_carma_blog_origin', 'carma_blog_flush_conn_cache' );
+// Bust the cached account-sites list when the token or origin changes, so the
+// "Connect to Carma" dropdown re-fetches instead of showing a stale list (T6).
+add_action( 'update_option_carma_blog_api_token', 'carma_blog_flush_sites_cache' );
+add_action( 'update_option_carma_blog_origin', 'carma_blog_flush_sites_cache' );
 
 /**
  * Late-bind the shortcode + block + load translations.
@@ -147,6 +151,15 @@ function carma_blog_register_block() {
 function carma_blog_register_settings() {
 	register_setting(
 		'carma_blog',
+		'carma_blog_api_token',
+		array(
+			'type'              => 'string',
+			'sanitize_callback' => 'carma_blog_sanitize_api_token',
+			'default'           => '',
+		)
+	);
+	register_setting(
+		'carma_blog',
 		'carma_blog_site_id',
 		array(
 			'type'              => 'string',
@@ -165,6 +178,7 @@ function carma_blog_register_settings() {
 	);
 
 	add_settings_section( 'carma_blog_main', '', '__return_false', 'carma_blog' );
+	add_settings_field( 'carma_blog_api_token', __( 'Account API Token', 'carma-blog' ), 'carma_blog_field_api_token', 'carma_blog', 'carma_blog_main' );
 	add_settings_field( 'carma_blog_site_id', __( 'Site ID', 'carma-blog' ), 'carma_blog_field_site_id', 'carma_blog', 'carma_blog_main' );
 	add_settings_field( 'carma_blog_origin', __( 'Carma origin', 'carma-blog' ), 'carma_blog_field_origin', 'carma_blog', 'carma_blog_main' );
 }
@@ -237,14 +251,82 @@ function carma_blog_render_csp_info() {
 	echo '</div></details>';
 }
 
+/**
+ * Account API Token field (T6). Optional credential that unlocks the
+ * "Connect to Carma" site picker: paste your blog's Carma API key, Save, and the
+ * Site ID field below resolves and selects your blog for you (no hand-copying).
+ *
+ * Rendered as a password input so the saved key is not shoulder-surfed on the
+ * settings screen. Admin-only (manage_options), so echoing the value is fine.
+ */
+function carma_blog_field_api_token() {
+	$value = (string) get_option( 'carma_blog_api_token', '' );
+	printf(
+		'<input type="password" class="regular-text" id="carma_blog_api_token" name="carma_blog_api_token" value="%s" placeholder="%s" autocomplete="off" spellcheck="false" />',
+		esc_attr( $value ),
+		esc_attr__( 'paste your Carma API key', 'carma-blog' )
+	);
+	echo '<p class="description">' . esc_html__( "Optional. Paste your blog's Carma API key and Save to select your blog automatically below — no need to copy an ID by hand. Find it in your Carma dashboard under \"Clau API d'Accés\". Leave blank to enter a Site ID manually.", 'carma-blog' ) . '</p>';
+}
+
 function carma_blog_field_site_id() {
-	$value = (string) get_option( 'carma_blog_site_id', '' );
+	$value     = (string) get_option( 'carma_blog_site_id', '' );
+	$token     = (string) get_option( 'carma_blog_api_token', '' );
+	$effective = $value; // What the Site ID input shows; may be auto-filled below.
+
+	// T6 "Connect to Carma": when an account token is saved, resolve the blog it
+	// belongs to server-side so the user can confirm/pick it. Admin-only
+	// diagnostic, exactly like the connectivity check (T4): targets ONLY the
+	// allowlist-pinned Carma origin, never a visitor/attacker URL → no SSRF. The
+	// API key is per-site, so this list is normally a single blog; we handle 1 or
+	// many uniformly.
+	if ( '' !== $token ) {
+		$res = carma_blog_fetch_account_sites( carma_blog_origin(), $token );
+		if ( $res['ok'] && ! empty( $res['sites'] ) ) {
+			$sites  = $res['sites'];
+			$single = ( 1 === count( $sites ) );
+
+			// One blog (the normal per-site-key case) → auto-select it so the user
+			// just clicks Save. Don't override an existing saved choice.
+			if ( $single && '' === $effective ) {
+				$effective = $sites[0]['value'];
+			}
+
+			echo '<select id="carma_blog_site_picker" class="regular-text" style="margin-bottom:8px">';
+			// Only offer the empty placeholder when there is an actual choice to
+			// make; a single blog is preselected instead.
+			if ( ! $single ) {
+				echo '<option value="">' . esc_html__( '— Choose a blog —', 'carma-blog' ) . '</option>';
+			}
+			foreach ( $sites as $s ) {
+				printf(
+					'<option value="%1$s"%3$s>%2$s</option>',
+					esc_attr( $s['value'] ),
+					esc_html( $s['name'] . ' (' . $s['value'] . ')' ),
+					selected( $s['value'], $effective, false )
+				);
+			}
+			echo '</select>';
+			$pick_hint = $single
+				? __( 'We found your blog and selected it below. Just Save.', 'carma-blog' )
+				: __( 'Pick the blog to display, then Save. Your choice fills the Site ID below.', 'carma-blog' );
+			echo '<p class="description">' . esc_html( $pick_hint ) . '</p>';
+			// Sync the picker into the authoritative Site ID input (one source of
+			// truth). Static admin-only script, no injected data, so it is safe.
+			echo '<script>(function(){var p=document.getElementById("carma_blog_site_picker"),t=document.getElementById("carma_blog_site_id");if(p&&t){p.addEventListener("change",function(){if(p.value){t.value=p.value;}});}})();</script>';
+		} elseif ( $res['ok'] ) {
+			echo '<p class="description">' . esc_html__( 'No blog found for this API token.', 'carma-blog' ) . '</p>';
+		} else {
+			echo '<p class="description" style="color:#b32d2e">' . esc_html__( "Couldn't load your blog with that token. Check the Account API Token above, or enter a Site ID manually below.", 'carma-blog' ) . '</p>';
+		}
+	}
+
 	printf(
 		'<input type="text" class="regular-text" id="carma_blog_site_id" name="carma_blog_site_id" value="%s" placeholder="%s" autocomplete="off" spellcheck="false" />',
-		esc_attr( $value ),
+		esc_attr( $effective ),
 		esc_attr__( 'elmeublog', 'carma-blog' )
 	);
-	echo '<p class="description">' . esc_html__( "Your blog's subdomain label (e.g. \"elmeublog\") or its site UUID — copy it from your Carma dashboard. Lowercase letters, numbers and hyphens only.", 'carma-blog' ) . '</p>';
+	echo '<p class="description">' . esc_html__( "Your blog's subdomain label (e.g. \"elmeublog\") or its site UUID — copy it from your Carma dashboard, or pick from the list above. Lowercase letters, numbers and hyphens only.", 'carma-blog' ) . '</p>';
 }
 
 function carma_blog_field_origin() {
@@ -367,6 +449,125 @@ function carma_blog_flush_conn_cache() {
 	);
 }
 
+/* -------------------------------------------------------------------------- *
+ * Account sites lookup (T6 / DX) — "Connect to Carma" dropdown
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Cache key for a given origin+token account-sites result.
+ *
+ * @param string $origin Resolved Carma origin.
+ * @param string $token  Account API token.
+ * @return string
+ */
+function carma_blog_sites_transient_key( $origin, $token ) {
+	return 'carma_blog_sites_' . md5( $origin . '|' . $token );
+}
+
+/**
+ * Clear the cached account-sites list for the CURRENT origin+token. Hooked on
+ * option updates; stale entries under a previous value expire via TTL.
+ */
+function carma_blog_flush_sites_cache() {
+	delete_transient(
+		carma_blog_sites_transient_key( carma_blog_origin(), (string) get_option( 'carma_blog_api_token', '' ) )
+	);
+}
+
+/**
+ * Resolve the Account API Token to the blog it belongs to, so the settings
+ * screen can offer the "Connect to Carma" picker (T6). The endpoint scopes a
+ * per-site key to that single site, so this normally returns one blog; the list
+ * shape is preserved for forward-compat and handled uniformly by the caller.
+ *
+ * SECURITY (re T1 finding E3): like the connectivity check, this is an
+ * ADMIN-ONLY diagnostic that runs only on the settings screen behind
+ * manage_options, targets ONLY the allowlist-pinned Carma origin (never a
+ * visitor/attacker URL), and reads ONLY the JSON list of {id,name} pairs which
+ * are sanitised before display. No SSRF surface; no remote markup is injected.
+ *
+ * @param string $origin    Resolved Carma origin (already allowlist-validated).
+ * @param string $token     Account API token.
+ * @param bool   $use_cache Read the cached result when available.
+ * @return array{ok:bool,sites:array<int,array{value:string,name:string}>,code:int}
+ */
+function carma_blog_fetch_account_sites( $origin, $token, $use_cache = true ) {
+	$out = array(
+		'ok'    => false,
+		'sites' => array(),
+		'code'  => 0,
+	);
+
+	if ( '' === $token ) {
+		return $out;
+	}
+
+	$key = carma_blog_sites_transient_key( $origin, $token );
+	if ( $use_cache ) {
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && isset( $cached['ok'] ) ) {
+			return $cached;
+		}
+	}
+
+	$res = wp_remote_get(
+		esc_url_raw( $origin . '/api/account/sites' ),
+		array(
+			'timeout'     => 8,
+			'redirection' => 2,
+			'sslverify'   => true,
+			'headers'     => array(
+				'Accept'    => 'application/json',
+				'x-api-key' => $token,
+			),
+		)
+	);
+
+	if ( ! is_wp_error( $res ) ) {
+		$out['code'] = (int) wp_remote_retrieve_response_code( $res );
+		if ( 200 === $out['code'] ) {
+			$body = json_decode( wp_remote_retrieve_body( $res ), true );
+			if ( is_array( $body ) && isset( $body['sites'] ) && is_array( $body['sites'] ) ) {
+				foreach ( $body['sites'] as $s ) {
+					if ( ! is_array( $s ) ) {
+						continue;
+					}
+					// The dropdown value is the same identifier the [carma_blog]
+					// shortcode accepts: prefer the subdomain label, fall back to
+					// the UUID. Reuse the strict site-ID cleaner for both.
+					$raw = '';
+					if ( ! empty( $s['label'] ) ) {
+						$raw = (string) $s['label'];
+					} elseif ( ! empty( $s['subdomain'] ) ) {
+						$raw = (string) $s['subdomain'];
+					} elseif ( ! empty( $s['id'] ) ) {
+						$raw = (string) $s['id'];
+					}
+					$val = carma_blog_clean_site_id( $raw );
+					if ( '' === $val ) {
+						continue;
+					}
+					$name = isset( $s['name'] ) ? sanitize_text_field( (string) $s['name'] ) : '';
+					if ( '' === $name ) {
+						$name = $val;
+					}
+					$out['sites'][] = array(
+						'value' => $val,
+						'name'  => $name,
+					);
+				}
+				$out['ok'] = true;
+			}
+		}
+	}
+
+	// Cache a good list for 5 min; cache failures only briefly so a network blip
+	// or bad-token typo self-heals on the next render after it is fixed.
+	$ttl = $out['ok'] ? 5 * MINUTE_IN_SECONDS : 30;
+	set_transient( $key, $out, $ttl );
+	return $out;
+}
+
 /**
  * Render the connectivity status badge on the settings screen. Uses WordPress's
  * native admin notice colours (success/error/warning/info) so it reads as a
@@ -461,6 +662,43 @@ function carma_blog_sanitize_site_id( $value ) {
 			'carma_blog_site_id',
 			'carma_blog_site_id_invalid',
 			__( 'Carma: the site ID may only contain lowercase letters, numbers and hyphens.', 'carma-blog' )
+		);
+	}
+	return $clean;
+}
+
+/**
+ * An account API token is an opaque key — we never interpret it, only send it as
+ * the x-api-key HTTP header. So we don't constrain its alphabet (it may be a
+ * UUID, base64, a JWT, etc.); we only enforce a sane length and reject any
+ * whitespace or control characters, which both rules out junk input AND defuses
+ * CR/LF header injection. Returns the cleaned value, or '' if it does not match.
+ *
+ * @param string $value Raw value.
+ * @return string
+ */
+function carma_blog_clean_api_token( $value ) {
+	$v = trim( (string) $value );
+	if ( '' === $v ) {
+		return '';
+	}
+	if ( strlen( $v ) < 8 || strlen( $v ) > 500 ) {
+		return '';
+	}
+	// Any whitespace (incl. CR/LF) or control/DEL char → reject.
+	if ( preg_match( '/[\s\x00-\x1f\x7f]/', $v ) ) {
+		return '';
+	}
+	return $v;
+}
+
+function carma_blog_sanitize_api_token( $value ) {
+	$clean = carma_blog_clean_api_token( $value );
+	if ( '' === $clean && '' !== trim( (string) $value ) ) {
+		add_settings_error(
+			'carma_blog_api_token',
+			'carma_blog_api_token_invalid',
+			__( 'Carma: that API token looks malformed; it must be a single token with no spaces.', 'carma-blog' )
 		);
 	}
 	return $clean;
