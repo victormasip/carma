@@ -26,15 +26,18 @@ export const PARAM_MAP: Record<string, keyof DesignTokens> = {
   maxw: 'maxWidth',
   layout: 'layout',
   cols: 'columns',
+  feed: 'feedLayout',
 }
 
 const KEY_TO_PARAM: Partial<Record<keyof DesignTokens, string>> = Object.fromEntries(
   Object.entries(PARAM_MAP).map(([param, key]) => [key, param]),
 ) as Partial<Record<keyof DesignTokens, string>>
 
+const FEED_LAYOUT_VALUES = new Set(['standard', 'editorial', 'magazine', 'minimal', 'gridxl', 'overlay', 'compact'])
 const ALLOWED: Record<string, (v: string) => boolean> = {
   layout: v => v === 'grid' || v === 'list',
   cols: v => v === '2' || v === '3' || v === '4',
+  feed: v => FEED_LAYOUT_VALUES.has(v),
 }
 
 // Anything that looks like a stylesheet break-out or is wildly long is rejected

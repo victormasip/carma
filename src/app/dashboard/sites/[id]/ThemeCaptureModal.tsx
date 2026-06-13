@@ -12,11 +12,20 @@ import { Wand2, Loader2, Check, Minus, AlertCircle, X, RefreshCw, Info } from 'l
 import { CAPTURE_STEPS, type CaptureStepStatus } from '@/lib/render/captureProgress'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import ZenCaptureModal from './ZenCaptureModal'
 import { useThemeStudio, type CaptureNotice } from './ThemeStudioContext'
 
-export default function ThemeCaptureModal() {
+/**
+ * The Magic Wand's capture surface. Superadmins (operators) get the full
+ * technical pipeline below — every step, detail and notice — for total control.
+ * Clients get the serene single-indicator <ZenCaptureModal/> instead: same live
+ * state, no overwhelm.
+ */
+export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { capture, url, grab, closeCapture, cancelCapture } = useThemeStudio()
   const { open, phase, pct, steps, stepDetail, notices } = capture
+
+  if (!isSuperAdmin) return <ZenCaptureModal />
 
   const handleClose = () => {
     if (phase === 'running') cancelCapture()

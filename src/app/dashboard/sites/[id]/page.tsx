@@ -68,15 +68,24 @@ export default async function SiteDetailsPage({
 
   // All tabs are valid deep-link targets for everyone; locked ones render an
   // upsell panel for free clients rather than the real content.
-  const validTabs = ['resum', 'articles', 'tema', 'connexio', 'usuaris']
+  const validTabs = ['resum', 'articles', 'tema', 'moduls', 'connexio', 'usuaris']
   // No explicit ?tab= opens the FIRST tab (Articles) — the content workspace —
   // not Resum, which now lives after Tema in the IA.
   const defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
-    ? (qTab as 'resum' | 'articles' | 'tema' | 'connexio' | 'usuaris')
+    ? (qTab as 'resum' | 'articles' | 'tema' | 'moduls' | 'connexio' | 'usuaris')
     : 'articles'
 
   // A pristine site (no theme captured, no posts) gets the onboarding chooser.
   const isNewSite = !themeResult.data && (postsResult.total ?? 0) === 0
+
+  // Freemium theme-regeneration quota (migration 023; select('*') already returns
+  // the column when present, so this is 42703-safe — absent → 0 = full quota).
+  const regenCount = (themeResult.data as { regen_count?: number } | null)?.regen_count ?? 0
+
+  // Smart Modules config (migration 024; absent column → null = no modules).
+  const initialModules = (themeResult.data as { modules?: import('@/lib/modules/registry').SiteModules } | null)?.modules ?? null
+  // First published post (newest) for the Modules tab's article preview toggle.
+  const previewPostSlug = postsResult.posts.find(p => p.is_published)?.slug
 
   return (
     <SiteDetailClient
@@ -103,6 +112,9 @@ export default async function SiteDetailsPage({
       defaultTab={defaultTab}
       autoCloneUrl={autoCloneUrl}
       siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
+      regenCount={regenCount}
+      initialModules={initialModules}
+      previewPostSlug={previewPostSlug}
     />
   )
 }

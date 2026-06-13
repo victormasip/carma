@@ -1,33 +1,30 @@
+import Skeleton from '@/components/ui/Skeleton'
+
+// Route-level skeleton for the dashboard home — mirrors the bento (header →
+// metric strip → site grid) so the real content streams in with no layout jump.
 export default function DashboardLoading() {
   return (
-    <div className="space-y-8 animate-pulse">
-      <div className="flex items-end justify-between">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4">
         <div className="space-y-2.5">
-          <div className="h-8 w-72 bg-surface-hover rounded-xl" />
-          <div className="h-4 w-96 bg-surface-hover rounded-lg" />
+          <Skeleton className="h-8 w-56 rounded-xl" />
+          <Skeleton className="h-4 w-72 rounded-lg" />
         </div>
+        <Skeleton className="h-10 w-32 rounded-xl" />
       </div>
 
-      <div className="flex gap-1 bg-surface-hover p-1 rounded-2xl w-fit">
-        {[96, 80, 88].map((w, i) => (
-          <div key={i} className="h-10 bg-surface-hover rounded-xl" style={{ width: w }} />
-        ))}
+      {/* Bento metric strip — wide hero + two tiles */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Skeleton className="col-span-2 h-40 rounded-2xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-40 rounded-2xl" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Site grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-surface rounded-3xl border border-border p-7 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="h-6 w-3/4 bg-surface-hover rounded-lg" />
-              <div className="w-8 h-8 bg-surface-hover rounded-full shrink-0" />
-            </div>
-            <div className="flex gap-3">
-              <div className="h-4 w-24 bg-surface-hover rounded-lg" />
-              <div className="h-4 w-20 bg-surface-hover rounded-lg" />
-            </div>
-            <div className="h-px bg-surface-hover" />
-            <div className="h-3 w-1/3 bg-surface-hover rounded-lg" />
-          </div>
+          <Skeleton key={i} className="h-44 rounded-2xl" />
         ))}
       </div>
     </div>

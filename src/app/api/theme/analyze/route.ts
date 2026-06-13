@@ -295,6 +295,44 @@ function extractSiteName(root: HTMLElement, baseUrl: URL): string | null {
   return host ? host.charAt(0).toUpperCase() + host.slice(1) : null
 }
 
+// The brand logo, so a freshly-cloned site shows the client's mark on its
+// dashboard card instead of a letter avatar. Preference order: a real <img>
+// logo in the chrome (class/id/alt mentions "logo") → an explicit icon link
+// (apple-touch-icon, then the largest rel=icon) → og:image as a last resort.
+function extractLogo(root: HTMLElement, baseUrl: URL): string | null {
+  const abs = (href: string | null | undefined) => absolutise(href, baseUrl)
+
+  // 1) A header/nav <img> that looks like a logo.
+  for (const img of root.querySelectorAll('img')) {
+    const hay = `${img.getAttribute('class') ?? ''} ${img.getAttribute('id') ?? ''} ${img.getAttribute('alt') ?? ''}`.toLowerCase()
+    if (!/logo|brand|wordmark/.test(hay)) continue
+    const src = img.getAttribute('src') ?? img.getAttribute('data-src')
+    // Skip inline data-URIs and tracking pixels.
+    if (!src || /^data:/i.test(src)) continue
+    const url = abs(src)
+    if (url) return url
+  }
+
+  // 2) Explicit icon links — apple-touch-icon is usually a clean square mark.
+  const iconSelectors = ['link[rel="apple-touch-icon"]', 'link[rel="apple-touch-icon-precomposed"]', 'link[rel~="icon"]']
+  for (const sel of iconSelectors) {
+    for (const link of root.querySelectorAll(sel)) {
+      const href = link.getAttribute('href')
+      if (!href || /^data:/i.test(href)) continue
+      const url = abs(href)
+      if (url) return url
+    }
+  }
+
+  // 3) og:image — coarse, but better than nothing.
+  const og = root.querySelector('meta[property="og:image"]')?.getAttribute('content')
+  if (og && !/^data:/i.test(og)) {
+    const url = abs(og)
+    if (url) return url
+  }
+  return null
+}
+
 // The site's primary language from <html lang> (or og:locale), mapped to a
 // supported locale so it can seed the site's default i18n locale on capture.
 function detectLocale(root: HTMLElement): string | null {
@@ -412,6 +450,7 @@ export async function POST(request: NextRequest) {
         const sectionTitle = extractPageTitle(root)
         const detectedLocale = detectLocale(root)
         const siteName = extractSiteName(root, baseUrl)
+        const logoUrl = extractLogo(root, baseUrl)
 
         let extractedHead = buildExtractedHead(root, baseUrl)
         // The Top/Bottom sandwich: parse5 splits the page around its main content,
@@ -516,6 +555,7 @@ export async function POST(request: NextRequest) {
           section_title: sectionTitle,
           detected_locale: detectedLocale,
           site_name: siteName,
+          logo_url: logoUrl,
           blog_signature: blogSignature,
         }
         done('finalize')

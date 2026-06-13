@@ -40,6 +40,11 @@ function extractFeedLink(html: string): string | null {
   return m?.[1] ?? null
 }
 
+// Hard ceiling on how many article URLs a single discovery returns. Far above the
+// old 200 cap — effectively "unlimited" for real blogs — but bounded so a giant
+// sitemap can't produce a multi-megabyte payload or a runaway loop.
+const MAX_DISCOVER = 5000
+
 function titleFromUrl(url: string): string {
   try {
     const path = new URL(url).pathname
@@ -69,12 +74,13 @@ export async function POST(request: NextRequest) {
 
   type DiscoveredItem = { url: string; title: string; language: string | null }
 
-  // 1. Detectar WordPress via REST API
+  // 1. Detectar WordPress via REST API — paginar TOTS els articles (sense límit de
+  //    200). El sostre `MAX_DISCOVER` és només una xarxa de seguretat anti-runaway.
   const wpCheck = await safeFetchJson(`${wpApiBase}/posts?per_page=1&status=publish&_fields=id`)
   if (Array.isArray(wpCheck)) {
     const articles: DiscoveredItem[] = []
     let page = 1
-    while (articles.length < 200) {
+    while (articles.length < MAX_DISCOVER) {
       const posts = await safeFetchJson(
         `${wpApiBase}/posts?per_page=100&status=publish&page=${page}&_fields=id,title,link`
       ) as Array<{ id: number; title: { rendered: string }; link: string }> | null
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (articles.length > 0) {
-      return NextResponse.json({ method: 'wordpress', wpApiBase, articles: articles.slice(0, 200), count: articles.length })
+      return NextResponse.json({ method: 'wordpress', wpApiBase, articles: articles.slice(0, MAX_DISCOVER), count: articles.length })
     }
   }
 
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest) {
   if (sitemapXml) {
     const isSitemapIndex = sitemapXml.includes('<sitemapindex')
     if (isSitemapIndex) {
-      const subSitemaps = parseSitemapIndex(sitemapXml).slice(0, 10)
+      const subSitemaps = parseSitemapIndex(sitemapXml).slice(0, 50)
       const allUrls: DiscoveredItem[] = []
       await Promise.all(
         subSitemaps.map(async (subUrl) => {
@@ -109,14 +115,14 @@ export async function POST(request: NextRequest) {
         })
       )
       if (allUrls.length > 0) {
-        return NextResponse.json({ method: 'sitemap', articles: allUrls.slice(0, 200), count: allUrls.length })
+        return NextResponse.json({ method: 'sitemap', articles: allUrls.slice(0, MAX_DISCOVER), count: allUrls.length })
       }
     } else {
       const urls = parseSitemapUrls(sitemapXml)
       if (urls.length > 0) {
         return NextResponse.json({
           method: 'sitemap',
-          articles: urls.map(u => ({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) })).slice(0, 200),
+          articles: urls.map(u => ({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) })).slice(0, MAX_DISCOVER),
           count: urls.length,
         })
       }
@@ -139,7 +145,7 @@ export async function POST(request: NextRequest) {
     if (items.length > 0) {
       return NextResponse.json({
         method: 'rss',
-        articles: items.slice(0, 200).map(item => ({ ...item, language: detectLangFromUrl(item.url) })),
+        articles: items.slice(0, MAX_DISCOVER).map(item => ({ ...item, language: detectLangFromUrl(item.url) })),
         count: items.length,
       })
     }

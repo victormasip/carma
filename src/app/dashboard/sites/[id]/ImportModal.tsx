@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  X, Globe, Search, Loader2, CheckCircle2, XCircle, AlertCircle,
+  X, Globe, Search, Loader2, CheckCircle2, XCircle, AlertCircle, Check,
   Upload, RotateCcw, Link2, Minimize2, Maximize2, StopCircle,
   Eye, RefreshCw, Filter, Newspaper, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import Button from '@/components/ui/Button'
+import { cn } from '@/lib/cn'
 
 type DiscoveredArticle = { url: string; title: string; language?: string | null }
 type ImportResult = { url: string; success: boolean; title?: string; slug?: string; error?: string; skipped?: boolean }
@@ -29,10 +30,15 @@ const SELECTOR_FIELDS = [
   { key: 'categories', label: 'Categories' },
 ]
 
+// How many single-article import requests run in parallel for a monolingual set.
+// Each request is one article (the DB-aware i18n merge depends on that), so the
+// pool just shrinks wall-time for large imports while keeping the UI responsive.
+const IMPORT_CONCURRENCY = 4
+
 const INPUT = 'w-full h-10 px-3 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors'
 const INPUT_MONO = INPUT.replace('text-sm', 'text-xs font-mono')
 
-export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { siteId: string; onClose: () => void; autoDiscoverUrl?: string }) {
+export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperAdmin = false }: { siteId: string; onClose: () => void; autoDiscoverUrl?: string; isSuperAdmin?: boolean }) {
   const [phase, setPhase] = useState<Phase>('input')
 
   const [url, setUrl] = useState('')
@@ -41,6 +47,8 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
   const [discovered, setDiscovered] = useState<DiscoveredArticle[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [overwrite, setOverwrite] = useState(false)
+  // Imported articles are published automatically by default (opt-out below).
+  const [publish, setPublish] = useState(true)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [langFilter, setLangFilter] = useState<string>('all')
 
@@ -160,35 +168,54 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
     if (urlsToImport.length === 0) return
     cancelRef.current = false
     setPhase('importing')
-    setProgress({ done: 0, total: urlsToImport.length, current: '' })
+    const total = urlsToImport.length
+    setProgress({ done: 0, total, current: '' })
     setResults([])
     const allResults: ImportResult[] = []
 
-    for (let i = 0; i < urlsToImport.length; i++) {
-      if (cancelRef.current) break
-      const articleUrl = urlsToImport[i]
-      const articleTitle = discovered.find(a => a.url === articleUrl)?.title ?? articleUrl
-      setProgress({ done: i, total: urlsToImport.length, current: articleTitle })
+    // Each article is still one request (the DB-aware i18n merge relies on it).
+    // To import unlimited articles without freezing or taking forever, we run a
+    // bounded pool of these requests in parallel. EXCEPTION: a multilingual set
+    // is imported sequentially so language siblings can't race each other and
+    // both miss the merge (which would create a duplicate per language).
+    const isMultilingual = new Set(discovered.map(a => a.language).filter(Boolean)).size > 1
+    const concurrency = isMultilingual ? 1 : Math.min(IMPORT_CONCURRENCY, total)
 
+    let done = 0
+    let cursor = 0
+
+    const importOne = async (articleUrl: string) => {
+      const articleTitle = discovered.find(a => a.url === articleUrl)?.title ?? articleUrl
+      setProgress(p => ({ done: p.done, total, current: articleTitle }))
       try {
         const res = await fetch('/api/import/articles', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            urls: [articleUrl], siteId, overwrite,
+            urls: [articleUrl], siteId, overwrite, publish,
             ...(wpApiBase ? { wpApiBase } : {}),
             ...(hasCustomSelectors ? { selectors: customSelectors } : {}),
           }),
         })
         const data = await res.json()
-        const result = data.results?.[0] ?? { url: articleUrl, success: false, error: 'Sense resposta' }
-        allResults.push(result)
-        setResults([...allResults])
+        allResults.push(data.results?.[0] ?? { url: articleUrl, success: false, error: 'Sense resposta' })
       } catch {
         allResults.push({ url: articleUrl, success: false, error: 'Error de xarxa' })
-        setResults([...allResults])
       }
-      setProgress({ done: i + 1, total: urlsToImport.length, current: articleTitle })
+      done += 1
+      setProgress({ done, total, current: articleTitle })
+      setResults([...allResults])
     }
+
+    const worker = async () => {
+      for (;;) {
+        if (cancelRef.current) return
+        const i = cursor++
+        if (i >= total) return
+        await importOne(urlsToImport[i])
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()))
 
     setPhase('done')
     setIsMinimized(false)
@@ -229,7 +256,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
       const res = await fetch('/api/import/articles', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          urls: [manualUrl.trim()], siteId, overwrite: false,
+          urls: [manualUrl.trim()], siteId, overwrite: false, publish,
           ...(hasCustomSelectors ? { selectors: customSelectors } : {}),
         }),
       })
@@ -280,7 +307,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-text">Importar Articles</h2>
             <p className="text-xs text-muted mt-0.5 truncate">
-              {phase === 'input' && 'Tria el mètode d\'importació'}
+              {phase === 'input' && (isSuperAdmin ? 'Tria el mètode d\'importació' : 'Enganxa la teva web i tria què vols importar')}
               {phase === 'discovering' && 'Detectant articles…'}
               {phase === 'preview' && `${discovered.length} articles detectats via ${methodLabel}`}
               {phase === 'preview-manual' && `Vista prèvia · ${manualUrl}`}
@@ -308,7 +335,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
             <>
               <div className="space-y-3">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">
-                  Descoberta automàtica (WordPress · Sitemap · RSS)
+                  {isSuperAdmin ? 'Descoberta automàtica (WordPress · Sitemap · RSS)' : 'La teva pàgina web'}
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -330,10 +357,14 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                 {discoverError && <ErrorRow msg={discoverError} />}
               </div>
 
-              <Divider />
+              {/* Advanced discovery (crawl-by-selector) — operator-only, to keep the
+                  client import flow simple and uncluttered. */}
+              {isSuperAdmin && (
+                <>
+                  <Divider />
 
-              {/* Crawl */}
-              <div className="space-y-3 bg-surface-subtle border border-border rounded-xl p-4">
+                  {/* Crawl */}
+                  <div className="space-y-3 bg-surface-subtle border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2">
                   <Newspaper className="w-4 h-4 text-muted" />
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
@@ -400,14 +431,16 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                     ))}
                   </div>
                 )}
-              </div>
+                  </div>
+                </>
+              )}
 
               <Divider />
 
               {/* Manual */}
               <div className="space-y-3">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">
-                  URL manual · Article únic
+                  {isSuperAdmin ? 'URL manual · Article únic' : 'O importa un sol article'}
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -468,6 +501,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                     )}
                   </div>
 
+                  {isSuperAdmin && (
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-3">Selectors CSS</p>
                     <div className="space-y-2.5">
@@ -490,6 +524,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                       ))}
                     </div>
                   </div>
+                  )}
 
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setPhase('input')} iconLeft={<RotateCcw className="w-3.5 h-3.5" />}>Tornar</Button>
@@ -519,15 +554,23 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
                 <label className="cursor-pointer flex items-center gap-2">
                   <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} className="w-4 h-4 accent-accent rounded cursor-pointer" />
                   <span className="text-sm font-medium text-text">Tots ({selectedInFilter} / {filteredDiscovered.length})</span>
                 </label>
-                <label className="cursor-pointer flex items-center gap-2">
-                  <input type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)} className="w-4 h-4 accent-accent rounded cursor-pointer" />
-                  <span className="text-xs font-medium text-muted">Sobreescriure existents</span>
-                </label>
+                <div className="flex items-center gap-4">
+                  <label className="cursor-pointer flex items-center gap-2">
+                    <input type="checkbox" checked={publish} onChange={e => setPublish(e.target.checked)} className="w-4 h-4 accent-accent rounded cursor-pointer" />
+                    <span className="text-xs font-medium text-muted">Publicar automàticament</span>
+                  </label>
+                  {isSuperAdmin && (
+                    <label className="cursor-pointer flex items-center gap-2">
+                      <input type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)} className="w-4 h-4 accent-accent rounded cursor-pointer" />
+                      <span className="text-xs font-medium text-muted">Sobreescriure existents</span>
+                    </label>
+                  )}
+                </div>
               </div>
 
               {method === 'crawl' && (
@@ -546,18 +589,14 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl }: { site
                 </div>
               )}
 
-              <div className="border border-border rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-                {filteredDiscovered.map((article, i) => (
-                  <label key={article.url} className={`cursor-pointer flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover ${i > 0 ? 'border-t border-border' : ''}`}>
-                    <input type="checkbox" checked={selected.has(article.url)} onChange={() => toggleOne(article.url)} className="cursor-pointer w-4 h-4 accent-accent rounded mt-0.5 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-text truncate">{article.title || 'Sense títol'}</p>
-                      <p className="text-xs text-subtle truncate font-mono mt-0.5">{article.url}</p>
-                    </div>
-                    {article.language && (
-                      <span className="text-xs font-semibold uppercase bg-surface-subtle text-muted px-1.5 py-0.5 rounded shrink-0 self-center">{article.language}</span>
-                    )}
-                  </label>
+              <div className="grid max-h-[22rem] grid-cols-1 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-2">
+                {filteredDiscovered.map(article => (
+                  <ArticleCard
+                    key={article.url}
+                    article={article}
+                    selected={selected.has(article.url)}
+                    onToggle={() => toggleOne(article.url)}
+                  />
                 ))}
               </div>
 
@@ -650,6 +689,44 @@ function ErrorRow({ msg, small = false }: { msg: string; small?: boolean }) {
       <AlertCircle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
       <p className={`${small ? 'text-xs' : 'text-sm'} text-danger font-medium`}>{msg}</p>
     </div>
+  )
+}
+
+// A selectable article card — the heart of the new card-based discovery view.
+// The whole surface is the toggle (aria-pressed), with a clear gold selected
+// state, so picking which articles to import feels tactile, not like a form.
+function ArticleCard({ article, selected, onToggle }: { article: DiscoveredArticle; selected: boolean; onToggle: () => void }) {
+  let path = article.url
+  try {
+    const u = new URL(article.url)
+    path = u.hostname.replace(/^www\./, '') + (u.pathname === '/' ? '' : u.pathname)
+  } catch { /* keep raw url */ }
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={selected}
+      className={cn(
+        'group flex items-start gap-3 rounded-xl border p-3 text-left transition-all',
+        selected
+          ? 'border-accent bg-accent-soft ring-1 ring-accent/25'
+          : 'border-border bg-surface hover:border-border-strong hover:bg-surface-hover',
+      )}
+    >
+      <span className={cn(
+        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+        selected ? 'border-accent bg-accent text-on-accent' : 'border-border-strong text-transparent group-hover:border-accent',
+      )}>
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-text">{article.title || 'Sense títol'}</span>
+        <span className="mt-0.5 block truncate text-xs text-subtle">{path}</span>
+      </span>
+      {article.language && (
+        <span className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-xs font-semibold uppercase text-muted">{article.language}</span>
+      )}
+    </button>
   )
 }
 

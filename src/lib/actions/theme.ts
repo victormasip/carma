@@ -182,6 +182,30 @@ export async function translateChrome(
   }
 }
 
+/**
+ * Record a theme RE-capture (regeneration) for the freemium quota. The first
+ * capture (onboarding, before a theme exists) is NOT counted by the caller —
+ * only re-captures call this. Member-gated; 42703-safe (no `regen_count` column
+ * before migration 023 → silently treats regeneration as unlimited).
+ */
+export async function incrementThemeRegen(siteId: string): Promise<ActionResult & { count?: number }> {
+  try {
+    const admin = await assertThemeAccess(siteId)
+    const { data, error: readErr } = await admin
+      .from('site_themes').select('regen_count').eq('site_id', siteId).maybeSingle()
+    if (readErr?.code === UNDEFINED_COLUMN) return {} // pre-023 schema — no limit
+    const next = (((data?.regen_count as number | null) ?? 0)) + 1
+    const { error } = await admin.from('site_themes').update({ regen_count: next }).eq('site_id', siteId)
+    if (error) {
+      if (error.code === UNDEFINED_COLUMN) return {}
+      return { error: error.message }
+    }
+    return { count: next }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
 export async function deleteTheme(siteId: string): Promise<ActionResult> {
   try {
     const admin = await assertSuperAdmin()

@@ -9,7 +9,7 @@
 import {
   createContext, useContext, useState, useRef, useEffect, useCallback, type ReactNode,
 } from 'react'
-import { saveTheme, deleteTheme, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
+import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { addSiteLocale } from '@/lib/actions/locales'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
@@ -102,6 +102,17 @@ type ThemeStudio = {
   error: string | null
   grab: (overrideUrl?: string) => Promise<void>
   removeTheme: () => Promise<void>
+  // ── Freemium theme-regeneration quota ──
+  // The onboarding capture is free; free clients then get FREE_REGENS re-captures
+  // before the Premium lock. Superadmin/Premium = unlimited.
+  isPremium: boolean
+  regenCount: number
+  freeRegens: number
+  canRegenerate: boolean
+  // Set when a free user tries to re-capture past their quota (the UI shows an
+  // upsell instead of capturing). Cleared via clearPremiumBlock.
+  premiumBlocked: boolean
+  clearPremiumBlock: () => void
   // apply a from-scratch starter template (onboarding "template" path)
   applyTemplate: (tpl: BlogTemplate, siteName: string) => void
   // live capture progress (progressive modal)
@@ -149,8 +160,13 @@ const Ctx = createContext<ThemeStudio | null>(null)
 
 const AUTOSAVE_MS = 700
 
+// Free clients may re-capture (regenerate) their theme this many times for free
+// before the Premium lock. The initial onboarding capture does NOT count.
+const FREE_REGENS = 1
+
 export function ThemeStudioProvider({
   siteId, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
+  isPremium = false, initialRegenCount = 0,
   onCaptureSuccess,
 }: {
   siteId: string
@@ -158,10 +174,14 @@ export function ThemeStudioProvider({
   children: ReactNode
   defaultLocale?: string
   canTranslate?: boolean
+  /** Premium (today: superadmin) → unlimited theme regeneration. */
+  isPremium?: boolean
+  /** How many re-captures this site has already consumed (site_themes.regen_count). */
+  initialRegenCount?: number
   // Fired (from the capture stream's `result` event, not an effect) once a Magic
   // Wand capture lands — lets the host coordinate the post-capture flow (e.g.
   // jump to the Theme tab, offer WordPress article import).
-  onCaptureSuccess?: (info: { framework: string | null; url: string; siteName: string | null }) => void
+  onCaptureSuccess?: (info: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => void
 }) {
   // Latest-ref so grab()'s memoized callback always sees the current handler
   // without taking it as a dependency.
@@ -171,6 +191,19 @@ export function ThemeStudioProvider({
   const [active, setActive] = useState(!!initialTheme)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [savedAt, setSavedAt] = useState(0)
+
+  // ── Freemium regeneration quota ──
+  const [regenCount, setRegenCount] = useState(initialRegenCount)
+  const [premiumBlocked, setPremiumBlocked] = useState(false)
+  const canRegenerate = isPremium || regenCount < FREE_REGENS
+  // Latest-refs so grab() (memoized) reads current values without taking them as
+  // deps — same pattern as onCaptureSuccessRef/blogUrlRef below.
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const regenCountRef = useRef(regenCount)
+  regenCountRef.current = regenCount
+  const isPremiumRef = useRef(isPremium)
+  isPremiumRef.current = isPremium
 
   // The locale the BASE chrome (extracted_* / section_title) represents. Other
   // locales live in chromeI18n. editLocale is which one the UI is editing.
@@ -284,7 +317,7 @@ export function ThemeStudioProvider({
     setDetectedFramework(data.detection?.framework ?? null)
     setDetectedHosting(data.detection?.hosting ?? null)
     // Preserve any layout the user already chose; refresh the visual tokens.
-    setTokens(prev => ({ ...DEFAULT_TOKENS, ...(data.tokens ?? {}), layout: prev.layout, columns: prev.columns }))
+    setTokens(prev => ({ ...DEFAULT_TOKENS, ...(data.tokens ?? {}), layout: prev.layout, columns: prev.columns, feedLayout: prev.feedLayout }))
     setSectionTitle(data.section_title ?? '')
     setBlogSignature(data.blog_signature ?? null)
     setBlogUrl(data.blog_signature?.blogUrl ?? '')
@@ -304,6 +337,16 @@ export function ThemeStudioProvider({
   const grab = useCallback(async (overrideUrl?: string) => {
     const target = (overrideUrl ?? url).trim()
     if (!target) return
+
+    // A RE-capture (a theme already exists) is the regenerable action. The first
+    // onboarding capture is always free and never gated. Free clients past their
+    // quota get the Premium upsell instead of a capture.
+    const isRecapture = activeRef.current
+    if (isRecapture && !isPremiumRef.current && regenCountRef.current >= FREE_REGENS) {
+      setPremiumBlocked(true)
+      return
+    }
+
     if (overrideUrl !== undefined) setUrl(overrideUrl)
 
     captureAbort.current?.abort()
@@ -341,6 +384,11 @@ export function ThemeStudioProvider({
         }))
       } else if (evt.type === 'result') {
         applyResult(evt.data)
+        // A successful free re-capture consumes one regeneration of the quota.
+        if (isRecapture && !isPremiumRef.current) {
+          setRegenCount(c => c + 1)
+          void incrementThemeRegen(siteId).catch(() => {})
+        }
         setCapture(c => ({
           ...c,
           phase: 'success',
@@ -350,7 +398,7 @@ export function ThemeStudioProvider({
             CAPTURE_STEP_IDS.map(id => [id, c.steps[id] === 'skipped' ? 'skipped' : 'done']),
           ) as Record<CaptureStepId, CaptureStepStatus>,
         }))
-        onCaptureSuccessRef.current?.({ framework: evt.data.detection?.framework ?? null, url: target, siteName: evt.data.site_name ?? null })
+        onCaptureSuccessRef.current?.({ framework: evt.data.detection?.framework ?? null, url: target, siteName: evt.data.site_name ?? null, logoUrl: evt.data.logo_url ?? null })
         // Linger on the completed state briefly, then reveal the editor.
         setTimeout(() => setCapture(c => (c.phase === 'success' ? { ...c, open: false } : c)), 1300)
       } else {
@@ -412,7 +460,7 @@ export function ThemeStudioProvider({
       setAnalyzing(false)
       if (captureAbort.current === controller) captureAbort.current = null
     }
-  }, [url, applyResult])
+  }, [url, applyResult, siteId])
 
   // Dismiss the modal after the stream has ended (success or error).
   const closeCapture = useCallback(() => setCapture(c => ({ ...c, open: false })), [])
@@ -524,6 +572,8 @@ export function ThemeStudioProvider({
     saveStatus,
     savedAt,
     url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab, removeTheme,
+    isPremium, regenCount, freeRegens: FREE_REGENS, canRegenerate,
+    premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,
     capture, closeCapture, cancelCapture,
     tokens, setToken,

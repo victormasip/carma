@@ -1,16 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { Globe, FileText, Users, Inbox, CheckCircle2, Eye } from 'lucide-react'
+import { Globe, FileText, Users, CheckCircle2, Eye, Sparkles } from 'lucide-react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import NewSiteModal from './NewSiteModal'
 import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
 import { fetchSitesViewCounts } from '@/lib/analytics/read'
+import { formatNumber } from '@/lib/format'
 import SiteGrid from './SiteGrid'
 import AddSiteButton from './AddSiteButton'
 
-type SiteWithCounts = { id: string; name: string; created_at: string; total: number; published: number; views: number }
+type SiteWithCounts = { id: string; name: string; created_at: string; logo_url?: string | null; total: number; published: number; views: number }
+type SiteRow = { id: string; name: string; created_at: string; logo_url?: string | null }
 
 export default async function DashboardHome() {
   const supabase = await createClient()
@@ -23,15 +26,27 @@ export default async function DashboardHome() {
 
   // ── Client dashboard ─────────────────────────────────────────────────────────
   if (!isSuperAdmin) {
-    const { data: sitesData } = await supabase.from('sites').select('id, name, created_at').order('name')
-    const sites = (sitesData ?? []) as { id: string; name: string; created_at: string }[]
+    // 42703-safe: sites.logo_url only exists after migration 022.
+    let sitesRes = await supabase.from('sites').select('id, name, created_at, logo_url').order('name')
+    if (sitesRes.error?.code === '42703') sitesRes = await supabase.from('sites').select('id, name, created_at').order('name') as typeof sitesRes
+    const sites = (sitesRes.data ?? []) as unknown as SiteRow[]
 
     if (sites.length === 0) {
+      // Free tier is one blog. A client with zero (new, or just deleted theirs)
+      // can self-serve create one through the onboarding funnel — no dead-end.
       return (
         <EmptyState
-          icon={<Inbox className="w-7 h-7" />}
-          title="No tens llocs assignats"
-          description="Contacta amb el teu administrador perquè configuri el teu entorn."
+          icon={<Sparkles className="w-7 h-7" />}
+          title="Encara no tens cap blog"
+          description="Crea el teu blog en un minut: replica una web que ja tinguis o comença des d’una plantilla."
+          action={
+            <Link
+              href="/benvinguda"
+              className="btn-gold inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-extrabold"
+            >
+              <Sparkles className="h-4 w-4" /> Crear el meu blog
+            </Link>
+          }
         />
       )
     }
@@ -44,33 +59,39 @@ export default async function DashboardHome() {
     const sitesWithCounts = withCounts(sites, postRows, viewMap)
     const totals = aggregate(sitesWithCounts)
 
+    const isSingle = sitesWithCounts.length === 1
     return (
       <div className="space-y-8">
         <PageHeader
-          title="Els meus Llocs"
-          description="Gestiona el contingut dels teus llocs web."
+          title={isSingle ? 'El meu blog' : 'Els meus blogs'}
+          description="Tot el teu contingut, en un sol lloc."
           actions={<AddSiteButton />}
         />
-        <StatHero items={[
-          { icon: <Eye className="w-4 h-4" />, label: 'Vistes · 30 dies', value: totals.views, tone: 'accent' },
-          { icon: <Globe className="w-4 h-4" />, label: 'Llocs', value: sitesWithCounts.length },
-          { icon: <FileText className="w-4 h-4" />, label: 'Articles', value: totals.total },
-          { icon: <CheckCircle2 className="w-4 h-4" />, label: 'Publicats', value: totals.published, tone: 'success' },
-        ]} />
+        <ClientStatBento
+          views={totals.views}
+          sites={sitesWithCounts.length}
+          total={totals.total}
+          published={totals.published}
+        />
         <SiteGrid sites={sitesWithCounts} canManage={false} />
       </div>
     )
   }
 
   // ── Superadmin dashboard (bento — no more tabs) ───────────────────────────────
-  const [{ data: sites, error }, { data: clientProfiles }, { data: postRows }, { data: su }] = await Promise.all([
-    admin.from('sites').select('id, name, created_at').order('created_at', { ascending: false }),
+  // Sites are fetched first (with a 42703-safe retry for the logo_url column),
+  // then the rest in parallel.
+  const sitesSel = (cols: string) => admin.from('sites').select(cols).order('created_at', { ascending: false })
+  let sitesRes = await sitesSel('id, name, created_at, logo_url')
+  if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
+  const { data: sites, error } = sitesRes
+  const [{ data: clientProfiles }, { data: postRows }, { data: su }] = await Promise.all([
     admin.from('profiles').select('id, email').eq('role', 'client').order('email'),
     admin.from('posts').select('site_id, is_published'),
     admin.from('site_users').select('user_id'),
   ])
 
-  const siteList = (sites ?? []) as { id: string; name: string; created_at: string }[]
+  const siteList = (sites ?? []) as unknown as SiteRow[]
   const viewMap = await fetchSitesViewCounts(admin, siteList.map(s => s.id))
   const sitesWithCounts = withCounts(siteList, postRows, viewMap)
   const totals = aggregate(sitesWithCounts)
@@ -149,7 +170,7 @@ export default async function DashboardHome() {
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function withCounts(
-  sites: { id: string; name: string; created_at: string }[],
+  sites: SiteRow[],
   postRows: { site_id: string; is_published: boolean }[] | null,
   viewMap: Record<string, number>,
 ): SiteWithCounts[] {
@@ -171,6 +192,44 @@ function aggregate(sites: SiteWithCounts[]) {
 }
 
 // ── presentational ──────────────────────────────────────────────────────────
+
+// Client bento — a calm, premium metric strip. One hero tile (30-day views) and
+// two consolidated tiles. Borders give way to soft shadows; the "published" count
+// folds into Articles so there are three numbers to read, not four.
+function ClientStatBento({ views, sites, total, published }: { views: number; sites: number; total: number; published: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* Hero — 30-day views */}
+      <div className="relative col-span-2 overflow-hidden rounded-2xl bg-gradient-to-br from-accent-soft via-surface to-surface p-6 shadow-card">
+        <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-accent/15 blur-2xl" aria-hidden />
+        <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-on-accent">
+          <Eye className="h-5 w-5" />
+        </span>
+        <p className="relative mt-5 text-[2.5rem] font-bold leading-none tabular-nums text-text">{formatNumber(views)}</p>
+        <p className="relative mt-2 text-sm font-medium text-muted">Visites · últims 30 dies</p>
+      </div>
+
+      <BentoTile icon={<Globe className="h-5 w-5" />} label={sites === 1 ? 'Blog' : 'Blogs'} value={sites} />
+      <BentoTile
+        icon={<FileText className="h-5 w-5" />}
+        label="Articles"
+        value={total}
+        sub={`${formatNumber(published)} publicat${published !== 1 ? 's' : ''}`}
+      />
+    </div>
+  )
+}
+
+function BentoTile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: number; sub?: string }) {
+  return (
+    <div className="rounded-2xl bg-surface p-6 shadow-card">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">{icon}</span>
+      <p className="mt-5 text-[2rem] font-bold leading-none tabular-nums text-text">{formatNumber(value)}</p>
+      <p className="mt-2 text-sm font-medium text-muted">{label}</p>
+      {sub && <p className="mt-0.5 text-xs text-subtle">{sub}</p>}
+    </div>
+  )
+}
 
 function StatHero({ items }: { items: { icon: React.ReactNode; label: string; value: number; tone?: 'accent' | 'success' }[] }) {
   return (

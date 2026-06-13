@@ -121,6 +121,9 @@ export type AnalyzeResult = {
   detected_locale?: string | null
   /** The real brand / site name (og:site_name → application-name → domain). */
   site_name?: string | null
+  /** The brand logo URL (header logo img → favicon/apple-touch-icon → og:image),
+   *  shown on the dashboard site card. Null when none could be detected. */
+  logo_url?: string | null
   /** Detected blog/news index + native article-card style to replicate. */
   blog_signature?: BlogSignature | null
 }

@@ -15,6 +15,7 @@ import { Wand2, Palette, Globe, ArrowRight, ArrowLeft, Sparkles, Check, X } from
 import { BLOG_TEMPLATES, type BlogTemplate } from '@/lib/render/templates'
 import { useThemeStudio } from './ThemeStudioContext'
 import Button from '@/components/ui/Button'
+import Wordmark from '@/components/ui/Wordmark'
 
 function normalizeUrl(raw: string): string {
   const v = raw.trim()
@@ -62,6 +63,25 @@ export default function SiteOnboarding({
     onTemplateApplied(tpl.name)
   }
 
+  // Seamless funnel: the user arrived from signup with a target URL, so the
+  // capture has already started on mount. We never flash the chooser behind the
+  // Zen capture card — just a calm, breathing backdrop. Nothing to read, nothing
+  // to decide.
+  if (autoStart && initialUrl) {
+    return (
+      <div className="fixed inset-0 z-40 overflow-hidden bg-bg">
+        <div className="halo halo-drift-a" style={{ width: 460, height: 460, background: 'rgba(245,188,0,0.20)', top: -120, left: -80 }} aria-hidden />
+        <div className="halo halo-drift-b" style={{ width: 420, height: 420, background: 'rgba(245,188,0,0.14)', bottom: -140, right: -60 }} aria-hidden />
+        <div className="relative flex min-h-full flex-col items-center justify-center gap-4 px-6 text-center">
+          <Wordmark size="text-2xl" />
+          <p className="text-sm text-muted">
+            Estem creant <span className="font-semibold text-text">{siteName}</span>…
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-bg">
       <div className="min-h-full flex flex-col items-center justify-center px-5 py-12">
@@ -92,13 +112,13 @@ export default function SiteOnboarding({
 
               <div className="grid md:grid-cols-2 gap-5">
                 {/* Magic Wand */}
-                <div className="relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong hover:shadow-pop transition-all flex flex-col">
+                <div className="lift relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
                     <Wand2 className="w-5 h-5" />
                   </div>
-                  <h2 className="text-base font-semibold text-text mt-4">Replica una web existent</h2>
+                  <h2 className="text-base font-semibold text-text mt-4">Replica la teva web</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    Enganxa la URL del lloc del client. Injectem la seva capçalera i el seu peu originals tal qual (amb els seus estils) al voltant del blog, i n’extreiem colors i tipografies. Si és WordPress, t’oferim importar-ne els articles.
+                    Enganxa la teva adreça i la copiem: capçalera, peu, colors i tipografies. En un instant.
                   </p>
                   <div className="mt-5 space-y-2.5">
                     <div className="relative">
@@ -124,13 +144,13 @@ export default function SiteOnboarding({
                 </div>
 
                 {/* Template */}
-                <div className="relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong hover:shadow-pop transition-all flex flex-col">
+                <div className="lift relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-text text-bg-elevated flex items-center justify-center">
                     <Palette className="w-5 h-5" />
                   </div>
-                  <h2 className="text-base font-semibold text-text mt-4">Comença des d’una plantilla</h2>
+                  <h2 className="text-base font-semibold text-text mt-4">Comença amb una plantilla</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    Tria un dels nostres dissenys moderns —editorial, magazine, minimal o fosc— i tindràs un blog espectacular a l’instant, llest per editar.
+                    Tria un disseny modern —editorial, magazine, minimal o fosc— i tindràs un blog espectacular a l’instant.
                   </p>
                   <div className="mt-5 flex -space-x-2">
                     {BLOG_TEMPLATES.map(t => (

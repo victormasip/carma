@@ -2,7 +2,7 @@
 
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, Loader2, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import ApiDocsCard from './ApiDocsCard'
 import PostsManager from './PostsManager'
@@ -11,9 +11,11 @@ import ThemeCaptureModal from './ThemeCaptureModal'
 import SiteOnboarding from './SiteOnboarding'
 import { LockBadge, PremiumPanel } from './PremiumGate'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { publicBlogUrl } from '@/lib/sites/domain'
+import { updateSiteLogo } from '@/lib/actions/sites'
 import { formatDate } from '@/lib/format'
 
 // Code-split the heavy, off-the-default-path surfaces so they stay OUT of the
@@ -26,15 +28,18 @@ import { formatDate } from '@/lib/format'
 const ThemeManager = lazy(() => import('./ThemeManager'))
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
+const FeedLayoutPicker = lazy(() => import('./FeedLayoutPicker'))
+const ModulesManager = lazy(() => import('./ModulesManager'))
 import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioContext'
 import type { PostsMeta } from './PostsManager'
 import type { PostListItem } from '@/lib/actions/posts'
 import type { SiteStats } from '@/lib/analytics/read'
+import type { SiteModules } from '@/lib/modules/registry'
 
 type Post = PostListItem
 type AssignedUser = { user_id: string; email: string }
 type Client = { id: string; email: string }
-type TabKey = 'resum' | 'articles' | 'tema' | 'connexio' | 'usuaris'
+type TabKey = 'resum' | 'articles' | 'tema' | 'moduls' | 'connexio' | 'usuaris'
 
 type Props = {
   siteId: string
@@ -54,6 +59,12 @@ type Props = {
   /** When present (self-serve funnel), auto-starts the Magic Wand on this URL. */
   autoCloneUrl?: string
   siteDefaultLocale?: string
+  /** Re-captures already consumed (freemium regeneration quota). */
+  regenCount?: number
+  /** Smart Modules config (site_themes.modules). */
+  initialModules?: SiteModules | null
+  /** First published post slug, for the Modules tab's article preview. */
+  previewPostSlug?: string
 }
 
 type SectionDef = { key: TabKey; label: string; desc: string; icon: typeof FileText; premium?: boolean }
@@ -62,6 +73,7 @@ type SectionDef = { key: TabKey; label: string; desc: string; icon: typeof FileT
 const SECTION_DEFS: SectionDef[] = [
   { key: 'articles', label: 'Articles', desc: 'Contingut',     icon: FileText },
   { key: 'tema',     label: 'Tema',     desc: 'Disseny',       icon: Palette },
+  { key: 'moduls',   label: 'Mòduls',   desc: 'Funcionalitats', icon: Puzzle },
   { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'connexio', label: 'Connexió', desc: 'API i embed',   icon: Plug,  premium: true },
   { key: 'usuaris',  label: 'Usuaris',  desc: 'Equip',         icon: Users, premium: true },
@@ -70,17 +82,23 @@ const SECTION_DEFS: SectionDef[] = [
 export default function SiteDetailClient({
   siteId, siteName, siteCreatedAt, apiKey, subdomain,
   isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
-  initialStats, defaultTab, autoCloneUrl, siteDefaultLocale,
+  initialStats, defaultTab, autoCloneUrl, siteDefaultLocale, regenCount = 0,
+  initialModules = null, previewPostSlug,
 }: Props) {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab)
   const [showImport, setShowImport] = useState(false)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
+  const [showLayoutPicker, setShowLayoutPicker] = useState(false)
   // Onboarding is for any pristine site — superadmins provisioning a client site
   // AND self-serve users landing on their freshly-created first blog.
   const showOnboarding = isNewSite && !onboardingDone
   const wpImportIntent = useRef(false)
+  // True while the post-clone onboarding sequence is running (capture → optional
+  // WP import → layout picker), so the picker only appears during onboarding and
+  // not after a later manual re-capture.
+  const onboardingFlow = useRef(false)
 
   // Resync the active tab when the server-provided defaultTab changes (e.g.
   // navigating via a <Link> to ?tab=connexio). Render-time state sync.
@@ -104,6 +122,7 @@ export default function SiteDetailClient({
   // ── Onboarding coordination ──
   const handleMagicWandStarted = () => {
     wpImportIntent.current = true
+    onboardingFlow.current = true
     setOnboardingDone(true)
     // Self-serve (arrived with a clone URL): drop the user straight onto Articles —
     // the site already exists and the clone + any import run in the background.
@@ -115,12 +134,26 @@ export default function SiteDetailClient({
     switchTab('tema')
     toast(`Plantilla «${templateName}» aplicada`, 'success')
   }
-  const handleCaptureSuccess = ({ framework, url }: { framework: string | null; url: string; siteName: string | null }) => {
+  const finishLayoutPicker = () => {
+    setShowLayoutPicker(false)
+    onboardingFlow.current = false
+    switchTab('tema')
+    toast('El teu blog està llest ✨', 'success')
+  }
+  const handleCaptureSuccess = ({ framework, url, logoUrl }: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => {
     // IMPORTANT: we deliberately do NOT rename the site from scraped metadata.
     // The operator's chosen Site Name is authoritative and must never be
     // overwritten by the captured site's <title>/og:site_name/domain.
+    // The logo, however, we DO adopt — it shows on the dashboard card.
+    if (logoUrl) void updateSiteLogo(siteId, logoUrl)
     if (wpImportIntent.current && framework === 'wordpress') {
+      // WordPress: offer the article import next; the layout picker follows once
+      // the import modal closes (see ImportModal onClose below).
       setTimeout(() => { setImportUrl(url); setShowImport(true) }, 1400)
+    } else if (onboardingFlow.current) {
+      // Non-WordPress onboarding capture → straight to the layout picker once the
+      // capture modal has dismissed itself.
+      setTimeout(() => setShowLayoutPicker(true), 1500)
     }
     wpImportIntent.current = false
   }
@@ -139,14 +172,10 @@ export default function SiteDetailClient({
           </Link>
           <div className="min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              {isSuperAdmin ? (
-                <InlineSiteName siteId={siteId} siteName={siteName} />
-              ) : (
-                <h1 className="text-2xl sm:text-[28px] font-bold text-text tracking-tight truncate">
-                  {siteName}
-                </h1>
-              )}
-              {isSuperAdmin && <SiteAdminActions siteId={siteId} siteName={siteName} />}
+              {/* Clients can now rename + delete their OWN blog inline too (server
+                  actions are member-gated; UI guards delete behind a confirm). */}
+              <InlineSiteName siteId={siteId} siteName={siteName} />
+              <SiteAdminActions siteId={siteId} siteName={siteName} />
             </div>
             <p className="text-sm text-muted mt-1.5">
               Creat el {formatDate(siteCreatedAt)}
@@ -181,9 +210,11 @@ export default function SiteDetailClient({
         initialTheme={initialTheme}
         defaultLocale={siteDefaultLocale}
         canTranslate={isSuperAdmin}
+        isPremium={isSuperAdmin}
+        initialRegenCount={regenCount}
         onCaptureSuccess={handleCaptureSuccess}
       >
-        <ThemeCaptureModal />
+        <ThemeCaptureModal isSuperAdmin={isSuperAdmin} />
 
         {showOnboarding && (
           <SiteOnboarding
@@ -196,16 +227,18 @@ export default function SiteDetailClient({
           />
         )}
 
+        {showLayoutPicker && (
+          <Suspense fallback={null}>
+            <FeedLayoutPicker onDone={finishLayoutPicker} />
+          </Suspense>
+        )}
+
         <div className="space-y-6">
-          <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} />
+          <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} isSuperAdmin={isSuperAdmin} />
 
           <div className="min-w-0">
             {activeTab === 'resum' && (
-              <Suspense fallback={
-                <div className="flex items-center justify-center py-20 text-subtle">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                </div>
-              }>
+              <Suspense fallback={<SectionSkeleton />}>
                 <OverviewPanel
                   siteId={siteId}
                   totalArticles={initialPostsMeta.total}
@@ -228,12 +261,21 @@ export default function SiteDetailClient({
 
             {activeTab === 'tema' && (
               <ErrorBoundary label="El Theme Studio ha tingut un error">
-                <Suspense fallback={
-                  <div className="flex items-center justify-center py-20 text-subtle">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  </div>
-                }>
+                <Suspense fallback={<SectionSkeleton />}>
                   <ThemeManager isSuperAdmin={isSuperAdmin} />
+                </Suspense>
+              </ErrorBoundary>
+            )}
+
+            {activeTab === 'moduls' && (
+              <ErrorBoundary label="El panell de mòduls ha tingut un error">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <ModulesManager
+                    siteId={siteId}
+                    isPremium={isSuperAdmin}
+                    initialModules={initialModules}
+                    previewPostSlug={previewPostSlug}
+                  />
                 </Suspense>
               </ErrorBoundary>
             )}
@@ -265,8 +307,14 @@ export default function SiteDetailClient({
         <Suspense fallback={null}>
           <ImportModal
             siteId={siteId}
+            isSuperAdmin={isSuperAdmin}
             autoDiscoverUrl={importUrl ?? undefined}
-            onClose={() => { setShowImport(false); setImportUrl(null) }}
+            onClose={() => {
+              setShowImport(false)
+              setImportUrl(null)
+              // WordPress onboarding: after the import, continue to the layout picker.
+              if (onboardingFlow.current) setShowLayoutPicker(true)
+            }}
           />
         </Suspense>
       )}
@@ -274,18 +322,21 @@ export default function SiteDetailClient({
   )
 }
 
-// Section switcher — a row of rich cards (icon tile + label + sublabel). The
-// active card is filled in the brand accent; the content renders full-width
-// below, so heavy sections (Theme Studio split-view) get the whole canvas.
+// Section switcher. Clients get a calm, focused bento (4 core surfaces + a
+// subordinate Premium affordance) to keep cognitive load low; superadmins keep
+// the full 6-card control grid below, untouched.
 function SiteSectionCards({
-  active, onSelect, isLocked,
+  active, onSelect, isLocked, isSuperAdmin,
 }: {
   active: TabKey
   onSelect: (k: TabKey) => void
   isLocked: (s: SectionDef) => boolean
+  isSuperAdmin: boolean
 }) {
+  if (!isSuperAdmin) return <ClientSectionNav active={active} onSelect={onSelect} />
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {SECTION_DEFS.map(s => {
         const Icon = s.icon
         const activeS = s.key === active
@@ -324,6 +375,91 @@ function SiteSectionCards({
           </button>
         )
       })}
+    </div>
+  )
+}
+
+// Calm, layout-stable placeholder for a lazily-loaded section (Resum / Tema /
+// Mòduls) — a skeleton instead of a centred spinner, so nothing jumps when the
+// real panel streams in.
+function SectionSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-7 w-44 rounded-lg" />
+        <Skeleton className="h-9 w-32 rounded-xl" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-72 rounded-2xl" />
+    </div>
+  )
+}
+
+// Client section nav — 4 core surfaces as a calm bento (soft shadows, no hard
+// borders), with the Premium-only surfaces tucked into a quiet secondary row so
+// they stay reachable (each shows its upsell) without competing for attention.
+function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) => void }) {
+  const core = SECTION_DEFS.filter(s => !s.premium)
+  const premium = SECTION_DEFS.filter(s => s.premium)
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {core.map(s => {
+          const Icon = s.icon
+          const activeS = s.key === active
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onSelect(s.key)}
+              aria-current={activeS ? 'page' : undefined}
+              className={cn(
+                'group relative flex cursor-pointer flex-col items-start gap-2.5 rounded-2xl p-4 text-left transition-all duration-200',
+                activeS
+                  ? 'bg-accent-soft ring-2 ring-accent/25 shadow-sm'
+                  : 'bg-surface shadow-card hover:-translate-y-0.5 hover:shadow-pop',
+              )}
+            >
+              <span className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl transition-colors',
+                activeS ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
+              )}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className={cn('block text-sm font-bold leading-tight', activeS ? 'text-accent' : 'text-text')}>{s.label}</span>
+                <span className={cn('mt-0.5 block text-xs leading-tight', activeS ? 'text-accent/70' : 'text-subtle')}>{s.desc}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pl-0.5">
+        <span className="text-xs font-medium text-subtle">Amb Premium:</span>
+        {premium.map(s => {
+          const Icon = s.icon
+          const activeS = s.key === active
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onSelect(s.key)}
+              aria-current={activeS ? 'page' : undefined}
+              className={cn(
+                'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors',
+                activeS ? 'bg-accent-soft text-accent' : 'text-subtle hover:bg-surface-hover hover:text-muted',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {s.label}
+              <LockBadge />
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

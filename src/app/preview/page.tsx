@@ -70,7 +70,7 @@ function PreviewInner() {
             <Sparkles className="h-3.5 w-3.5" /> Previsualització · <span className="font-mono">{display}</span>
           </span>
         </div>
-        <Link href={unlockHref} className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex shrink-0 items-center rounded-xl px-4 py-2 text-sm font-extrabold no-underline">
+        <Link href={unlockHref} prefetch={false} className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex shrink-0 items-center rounded-xl px-4 py-2 text-sm font-extrabold no-underline">
           <span className="relative z-[1] inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Desbloqueja</span>
         </Link>
       </header>

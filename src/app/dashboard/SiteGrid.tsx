@@ -16,6 +16,7 @@ export type SiteWithCounts = {
   id: string
   name: string
   created_at: string
+  logo_url?: string | null
   total: number
   published: number
   views: number
@@ -137,9 +138,16 @@ function SiteCard({
             <Check className="h-3 w-3" strokeWidth={3} />
           </button>
         )}
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-soft to-surface-subtle text-base font-bold uppercase text-accent">
-          {site.name.charAt(0) || '·'}
-        </span>
+        {site.logo_url ? (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={site.logo_url} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+          </span>
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-soft to-surface-subtle text-base font-bold uppercase text-accent">
+            {site.name.charAt(0) || '·'}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-bold leading-tight text-text transition-colors group-hover:text-accent">{site.name}</h3>
           <p className="mt-0.5 text-xs text-subtle">Creat el {formatDate(site.created_at)}</p>

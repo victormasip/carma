@@ -7,6 +7,7 @@ import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { LOCALES, normalizeLocale, isLocale, type Locale } from '@/lib/i18n/config'
 import { tr } from '@/lib/i18n/messages'
 import { isUuid } from '@/lib/sites/domain'
+import { isModuleOn, type SiteModules } from '@/lib/modules/registry'
 
 // Reading the query string opts this handler out of static prerender — embeds
 // carry token/locale overrides per request.
@@ -137,22 +138,48 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     design_tokens: applyParamsToTokens(base, request.nextUrl.searchParams),
   }
 
+  // ── Smart Modules extras ──
+  // Related / prev-next need sibling posts; fetch a bounded recent window ONLY
+  // when one of those modules is on (no cost otherwise). The paywall reads an
+  // unlock cookie set by /api/leads after the reader subscribes — when locked,
+  // the content beyond the preview is stripped server-side in the renderer.
+  type Extra = NonNullable<Parameters<typeof buildArticlePage>[5]>
+  const modules = (theme?.modules ?? null) as SiteModules | null
+  let siblings: NonNullable<Extra['siblings']> = []
+  if (isModuleOn(modules, 'relatedPosts') || isModuleOn(modules, 'prevNext')) {
+    const sibCols = 'id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
+    const fetchSibs = (cols: string) => admin.from('posts')
+      .select(cols).eq('site_id', siteId).eq('is_published', true)
+      .order('created_at', { ascending: false }).limit(24)
+    const sibRes = await fetchSibs(`${sibCols}, i18n, default_locale`)
+    const rows = (sibRes.error?.code === '42703' ? (await fetchSibs(sibCols)).data : sibRes.data) ?? []
+    siblings = rows as unknown as NonNullable<Extra['siblings']>
+  }
+  const paywallOn = isModuleOn(modules, 'paywall')
+  const unlocked = !paywallOn || !!request.cookies.get(`carma_unlock_${siteId}`)?.value
+  const extra: Extra = { siblings, unlocked }
+
   if (isFragment) {
-    const fragment = buildArticleFragment(themeForRender, siteId, resolution.post, locale)
+    const fragment = buildArticleFragment(themeForRender, siteId, resolution.post, locale, extra)
     return NextResponse.json(fragment, {
       status: 200,
       headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
     })
   }
 
-  const html = buildArticlePage(themeForRender, site.name, siteId, resolution.post, locale)
+  const html = buildArticlePage(themeForRender, site.name, siteId, resolution.post, locale, extra)
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       // Browser revalidates so theme/chrome edits show immediately for the owner;
       // CDN edge still caches for visitors (see listing route for rationale).
-      'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+      // EXCEPTION: a paywalled article varies by the per-reader unlock cookie, so
+      // it must never be shared-cached (the CDN would serve one reader's unlocked
+      // copy to everyone, or a locked copy to a subscriber).
+      'Cache-Control': paywallOn
+        ? 'private, no-store'
+        : 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
     },
   })
 }

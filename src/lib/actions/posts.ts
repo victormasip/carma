@@ -217,6 +217,13 @@ export async function listPosts(
   }
 }
 
+// Push content changes to the LIVE public render. The /render routes are
+// force-dynamic (always re-read the DB) so the owner sees edits immediately;
+// revalidating the path additionally clears any Next data-cache entry keyed to it.
+function revalidateRender(siteId: string) {
+  revalidatePath(`/render/${siteId}`)
+}
+
 export async function createPost(
   siteId: string,
   data: PostData,
@@ -264,6 +271,7 @@ export async function createPost(
     if (!row) return { error: 'No s\'ha pogut crear l\'article' }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     return { id: row.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -314,6 +322,7 @@ export async function updatePost(
     }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     revalidatePath(`/dashboard/sites/${siteId}/posts/${postId}/edit`)
     return {}
   } catch (err) {
@@ -386,6 +395,7 @@ export async function updatePostFields(
     }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     revalidatePath(`/dashboard/sites/${siteId}/posts/${postId}/edit`)
     return { ...(finalSlug ? { slug: finalSlug } : {}), ...(finalDate ? { created_at: finalDate } : {}) }
   } catch (err) {
@@ -405,6 +415,7 @@ export async function deletePost(postId: string, siteId: string): Promise<Action
     if (error) return { error: error.message }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     return {}
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -427,6 +438,7 @@ export async function togglePublish(
     if (error) return { error: error.message }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     return {}
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -450,6 +462,7 @@ export async function togglePublishBulk(
 
     if (error) return { error: error.message }
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     return { count: data?.length ?? 0 }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -472,6 +485,7 @@ export async function deletePostsBulk(
 
     if (error) return { error: error.message }
     revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidateRender(siteId)
     return { count: data?.length ?? 0 }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
