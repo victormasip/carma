@@ -40,7 +40,6 @@ export default function PostsManager({
   siteName,
   initialPosts,
   initialMeta,
-  isSuperAdmin = false,
   onImport,
 }: {
   siteId: string
@@ -115,7 +114,10 @@ export default function PostsManager({
   // stay stale. Adopt the new data explicitly: replace it on the default view, or
   // re-run the active query when the user is currently searching/filtering/paging.
   const reloadRef = useRef(reload)
-  reloadRef.current = reload
+  // Keep the ref pointing at the latest `reload` without re-subscribing the
+  // refresh effect below. Assigned in an effect (not during render) to satisfy
+  // React 19's ref rules.
+  useEffect(() => { reloadRef.current = reload })
   const lastInitialPosts = useRef(initialPosts)
   useEffect(() => {
     if (initialPosts === lastInitialPosts.current) return
@@ -306,7 +308,7 @@ export default function PostsManager({
           <span className="ml-1 text-sm font-semibold text-subtle">({meta.total})</span>
         </div>
         <div className="flex items-center gap-2">
-          {isSuperAdmin && onImport && (
+          {onImport && (
             <button
               onClick={onImport}
               className="cursor-pointer flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-muted bg-surface border border-border hover:border-border-strong hover:bg-surface-subtle rounded-xl shadow-sm transition-all"
@@ -315,6 +317,19 @@ export default function PostsManager({
               Importar
             </button>
           )}
+          {/* Magic SEO Article — the AI entry point, sat right beside "Write
+              Article" and styled in the premium gold accent so it reads as a
+              first-class way to start a post. */}
+          <button
+            type="button"
+            onClick={handleGenerateAI}
+            disabled={generating}
+            title="Genera un article complet i optimitzat per SEO amb IA"
+            className="cursor-pointer flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-on-accent bg-gradient-to-br from-accent to-accent-hover rounded-xl shadow-card hover:shadow-pop hover:opacity-95 transition-all disabled:opacity-60"
+          >
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {generating ? 'Generant…' : 'Genera amb IA'}
+          </button>
           <Link
             href={`/dashboard/sites/${siteId}/posts/new`}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-text bg-surface border border-border hover:border-accent/40 hover:bg-accent-soft hover:text-accent rounded-xl shadow-sm transition-all"

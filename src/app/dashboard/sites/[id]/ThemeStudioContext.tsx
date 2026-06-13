@@ -10,7 +10,7 @@ import {
   createContext, useContext, useState, useRef, useEffect, useCallback, type ReactNode,
 } from 'react'
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
-import { addSiteLocale } from '@/lib/actions/locales'
+import { setSiteDefaultLocale } from '@/lib/actions/locales'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
@@ -207,7 +207,13 @@ export function ThemeStudioProvider({
 
   // The locale the BASE chrome (extracted_* / section_title) represents. Other
   // locales live in chromeI18n. editLocale is which one the UI is editing.
-  const chromeDefaultLocale = normalizeLocale(defaultLocaleProp ?? initialTheme?.default_locale, DEFAULT_LOCALE)
+  // Seeded from the site's configured default, but a capture that detects a
+  // different site language ADOPTS it (see applyResult) — so the header/footer/
+  // global strings localize to the site's TRUE language instead of pinning to
+  // Catalan. This is state (not a const) precisely so the capture can update it.
+  const [chromeDefaultLocale, setChromeDefaultLocale] = useState<Locale>(
+    normalizeLocale(defaultLocaleProp ?? initialTheme?.default_locale, DEFAULT_LOCALE),
+  )
   const [editLocale, setEditLocale] = useState<Locale>(chromeDefaultLocale)
   const [chromeI18n, setChromeI18n] = useState<ChromeI18n>(initialTheme?.chrome_i18n ?? {})
   const [translatingChrome, setTranslatingChrome] = useState(false)
@@ -323,12 +329,19 @@ export function ThemeStudioProvider({
     setBlogUrl(data.blog_signature?.blogUrl ?? '')
     // A fresh capture replaces the base chrome → old translations are stale.
     setChromeI18n({})
-    setEditLocale(chromeDefaultLocale)
     setActive(true)
-    // Add the detected site language as an AVAILABLE locale (non-destructive):
-    // we don't force it as the default, so a mislabeled <html lang="en"> on a
-    // Catalan site can't hijack the base language — Catalan stays the default.
-    if (data.detected_locale) void addSiteLocale(siteId, data.detected_locale).catch(() => {})
+    // Respect the site's TRUE language: when the capture detects a supported
+    // locale (from <html lang> / og:locale), ADOPT it as the chrome's base and
+    // persist it as the site default — instead of blindly leaving Catalan. The
+    // header/footer/section-title strings then localize to the real language.
+    // Falls back to the current base when nothing reliable was detected.
+    const detected = data.detected_locale ? normalizeLocale(data.detected_locale) : null
+    const nextBase = detected ?? chromeDefaultLocale
+    setChromeDefaultLocale(nextBase)
+    setEditLocale(nextBase)
+    // setSiteDefaultLocale also adds the locale to the site's available set, so
+    // this replaces the previous addSiteLocale-only call.
+    if (detected) void setSiteDefaultLocale(siteId, detected).catch(() => {})
   }, [siteId, chromeDefaultLocale])
 
   // Stream the capture pipeline over SSE, surfacing every step to the modal.

@@ -83,6 +83,13 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   const [imageUrl, setImageUrl] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
   const editorRef = useRef<Editor | null>(null)
+  // True until the first onUpdate of a content-seeded (re)mount. A freshly
+  // remounted TipTap (its `key` changes on the parent's auto language relabel /
+  // AI generate / translate) can fire one EMPTY update before its initial content
+  // settles; propagating that "" would wipe the body the parent just set into the
+  // active locale (the "title stays, content vanishes" data-loss bug). We swallow
+  // exactly that first empty echo. Real edits — and any later clear — pass through.
+  const pendingSeedRef = useRef(!!initialHtml)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -134,6 +141,13 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       },
     },
     onUpdate: ({ editor }) => {
+      // Drop the first empty update of a content-seeded (re)mount — it's the
+      // remount echo, not a real edit (see pendingSeedRef). Everything else,
+      // including a deliberate clear on any later update, propagates normally.
+      if (pendingSeedRef.current) {
+        pendingSeedRef.current = false
+        if (editor.isEmpty) return
+      }
       onChange(editor.getHTML())
     },
     onSelectionUpdate: ({ editor }) => {

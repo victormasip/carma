@@ -336,11 +336,36 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     void addSiteLocale(siteId, loc).catch(() => {})
   }
 
-  const removeLanguage = (loc: Locale) => {
-    if (loc === defaultLocale) return
+  // Remove a language from the article — INCLUDING the base (e.g. Catalan). The
+  // only hard rule is that an article must keep at least one language, so we
+  // refuse to remove the last one. Removing the current base promotes another
+  // language (preferring one that already has content) to be the new base, so the
+  // flat columns stay populated. Destructive removals confirm first.
+  const removeLanguage = async (loc: Locale) => {
+    if (shownLocales.length <= 1) return
+    const f = localeData[loc]
+    const hasContent = !!(f.title.trim() || f.contentHtml.trim() || f.excerpt.trim())
+    if (hasContent) {
+      const ok = await confirm({
+        title: `Treure ${LOCALE_META[loc].native} de l’article?`,
+        message: loc === defaultLocale
+          ? `${LOCALE_META[loc].native} és l’idioma base. En treure’l, un altre idioma passarà a ser-ho i el contingut en ${LOCALE_META[loc].native} s’eliminarà. Aquesta acció no es pot desfer.`
+          : `S’eliminarà tot el contingut en ${LOCALE_META[loc].native}. Aquesta acció no es pot desfer.`,
+        confirmLabel: 'Treure idioma',
+        cancelLabel: 'Cancel·la',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
+    const nextDefault = loc === defaultLocale
+      ? (shownLocales.find(l => l !== loc && (localeData[l].title.trim() !== '' || localeData[l].contentHtml.trim() !== ''))
+          ?? shownLocales.find(l => l !== loc)
+          ?? defaultLocale)
+      : defaultLocale
     setShownLocales(prev => prev.filter(l => l !== loc))
     setLocaleData(prev => ({ ...prev, [loc]: emptyFields() }))
-    if (activeLocale === loc) setActiveLocale(defaultLocale)
+    if (loc === defaultLocale) setDefaultLocale(nextDefault)
+    if (activeLocale === loc) setActiveLocale(nextDefault)
   }
 
   const cur = localeData[activeLocale]
@@ -580,6 +605,9 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     const target = detectedLocale
     const bucket = localeData[target]
     if (bucket.title.trim() || bucket.contentHtml.trim()) return
+    // Never relabel when the base bucket has nothing to carry over — moving
+    // emptiness across buckets could blank the article. There must be content.
+    if (!localeData[defaultLocale].contentHtml.trim() && !localeData[defaultLocale].title.trim()) return
     // Relabel: the base columns ARE this language. Move the state bucket, flip
     // the label, follow with the active tab. Autosave persists it silently.
     // setState-in-effect is deliberate here: this is an event-like transition
@@ -824,9 +852,11 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
             <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-lg p-0.5">
               {shownLocales.map(loc => {
                 const isActive = loc === activeLocale
-                const filled = localeHasContent(loc)
                 const pct = fieldsCompletionPct(localeData[loc])
-                const removable = loc !== defaultLocale && !filled
+                // Any language is removable as long as it isn't the last one —
+                // including the base (Catalan). removeLanguage promotes a new base
+                // and confirms before discarding content.
+                const removable = shownLocales.length > 1
                 const dotColor = pct >= 80 ? 'bg-success' : pct > 0 ? 'bg-warning' : 'bg-border-strong'
                 return (
                   <div key={loc} className="relative group/lang">
@@ -849,7 +879,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                     {removable && (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); removeLanguage(loc) }}
+                        onClick={(e) => { e.stopPropagation(); void removeLanguage(loc) }}
                         title={`Treure ${LOCALE_META[loc].native}`}
                         aria-label={`Treure ${LOCALE_META[loc].native}`}
                         className="cursor-pointer absolute -top-1 -right-1 w-4 h-4 rounded-full bg-bg-elevated border border-border flex items-center justify-center text-subtle hover:text-danger hover:border-danger/40 opacity-0 group-hover/lang:opacity-100 transition-opacity"

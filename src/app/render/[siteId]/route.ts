@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildListingPage, buildListingFragment, buildErrorPage } from '@/lib/render/theme'
+import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
@@ -76,15 +77,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     design_tokens: applyParamsToTokens(base, request.nextUrl.searchParams),
   }
 
+  // Preview-only (`?preview`): when a fresh site has no published posts yet,
+  // inject demo articles so the onboarding / theme-selection grid shows a full,
+  // beautiful feed instead of an empty "no articles" state. NEVER injected on the
+  // public render (no `?preview` flag), so visitors never see placeholder content.
+  const isPreview = request.nextUrl.searchParams.has('preview')
+  const realPosts = posts ?? []
+  const renderPosts =
+    isPreview && realPosts.length === 0
+      ? (buildSamplePosts(locale, site.name) as unknown as typeof realPosts)
+      : realPosts
+
   if (isFragment) {
-    const fragment = buildListingFragment(themeForRender, site.name, siteId, posts ?? [], locale)
+    const fragment = buildListingFragment(themeForRender, site.name, siteId, renderPosts, locale)
     return NextResponse.json(fragment, {
       status: 200,
       headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
     })
   }
 
-  const html = buildListingPage(themeForRender, site.name, siteId, posts ?? [], locale)
+  const html = buildListingPage(themeForRender, site.name, siteId, renderPosts, locale)
   return new Response(html, {
     status: 200,
     headers: {
