@@ -5,13 +5,16 @@ import {
   Palette, Globe, Loader2, Wand2, AlertCircle,
   Trash2, Sparkles, Plug, PanelTop, PanelBottom, FileCode2,
   Check, Cloud, CloudOff, LayoutGrid, Rows3, AlignLeft, AlignCenter, AlignRight,
-  Ruler, Crown, ChevronDown, RotateCcw, MoreHorizontal, Newspaper,
+  Ruler, Crown, ChevronDown, MoreHorizontal, Newspaper,
 } from 'lucide-react'
 import { useRef, useEffect, useState, type ReactNode, type CSSProperties } from 'react'
 import { type DesignTokens, type BlogColumns } from '@/lib/scrape/tokens'
+import { FEED_LAYOUTS } from '@/lib/render/feedLayouts'
+import { STYLE_PRESETS, type StylePreset } from '@/lib/render/stylePresets'
 import { LOCALE_META, type Locale } from '@/lib/i18n/config'
 import { useToast } from '@/components/ui/Toast'
-import { useConfirm } from '@/components/ui/Modal'
+import { useConfirm, Modal, ModalClose } from '@/components/ui/Modal'
+import { PremiumPanel } from './PremiumGate'
 import { useThemeStudio, type SaveStatus } from './ThemeStudioContext'
 import VisualChromeEditor from './VisualChromeEditor'
 import NavEditor from './NavEditor'
@@ -78,6 +81,7 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
     editLocale, setEditLocale, editLocales, chromeDefaultLocale,
     canTranslateChrome, translatingChrome, translateChrome,
     nativeCardActive, nativeCardColumns, clearNativeCard,
+    isPremium, regenCount, freeRegens, canRegenerate, premiumBlocked, clearPremiumBlock,
   } = useThemeStudio()
 
   // Default open: "design" if a theme exists (most-edited), else "heading".
@@ -158,7 +162,29 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
         detectedFramework={detectedFramework}
         siteId={siteId}
         analyzing={analyzing}
+        isPremium={isPremium}
+        canRegenerate={canRegenerate}
+        regenRemaining={Math.max(0, freeRegens - regenCount)}
       />
+
+      {/* Premium upsell when a free user has used up their free regeneration. */}
+      {premiumBlocked && (
+        <Modal open onClose={clearPremiumBlock} size="lg">
+          <div className="relative">
+            <div className="absolute top-3 right-3 z-20"><ModalClose onClose={clearPremiumBlock} /></div>
+            <PremiumPanel
+              feature="Regenera el teu tema"
+              description="Ja has fet servir la teva regeneració gratuïta. Amb Premium pots tornar a capturar i regenerar el disseny del teu blog tantes vegades com vulguis quan canviïs la teva web."
+              perks={[
+                'Regeneracions de tema il·limitades',
+                'Re-clona el disseny quan actualitzis la teva web',
+                'Traducció del header i footer amb IA',
+                'Domini propi i API en directe',
+              ]}
+            />
+          </div>
+        </Modal>
+      )}
 
       {/* Split workspace: live controls on the left, real-render preview on the right. */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,560px)] gap-5 items-start">
@@ -217,7 +243,15 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
           </div>
         )}
 
-      {/* Three accordion sections. Open one at a time to avoid the form-wall feel. */}
+      {/* Look & Feel presets — the one-click "design tool" path. Changes the
+          blog's whole personality without ever touching the captured brand
+          (colors/fonts stay from the clone). */}
+      <StylePresetsPanel tokens={tokens} setToken={setToken} />
+
+      {/* The detailed accordion is the pro path: superadmins see it directly;
+          clients get it tucked behind "Ajustos avançats" so the default view
+          stays preset-first and calm. */}
+      <MaybeAdvanced advanced={!isSuperAdmin}>
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">
         <Section
           icon={Sparkles}
@@ -247,13 +281,18 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
         <Section
           icon={LayoutGrid}
           title="Disposició"
-          summary={`${tokens.layout === 'list' ? 'Llista' : `Graella · ${tokens.columns ?? '3'} columnes`}`}
+          summary={
+            tokens.feedLayout && tokens.feedLayout !== 'standard'
+              ? (FEED_LAYOUTS.find(l => l.id === tokens.feedLayout)?.name ?? 'Personalitzat')
+              : (tokens.layout === 'list' ? 'Llista' : `Graella · ${tokens.columns ?? '3'} columnes`)
+          }
           open={openSection === 'layout'}
           onToggle={() => setOpenSection('layout')}
         >
           <LayoutPanel tokens={tokens} setToken={setToken} />
         </Section>
       </div>
+      </MaybeAdvanced>
 
       {/* Visual chrome editor — its own surface because it's a different mental model. */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">
@@ -340,6 +379,7 @@ function ThemeToolbar({
   saveStatus, editLocales, editLocale, setEditLocale, chromeDefaultLocale,
   canTranslateChrome, translatingChrome, onTranslate,
   onRecapture, onDelete, hasTheme, detectedFramework, siteId, analyzing,
+  isPremium = true, canRegenerate = true, regenRemaining = 0,
 }: {
   saveStatus: SaveStatus
   editLocales: Locale[]
@@ -355,6 +395,9 @@ function ThemeToolbar({
   detectedFramework?: string | null
   siteId?: string
   analyzing?: boolean
+  isPremium?: boolean
+  canRegenerate?: boolean
+  regenRemaining?: number
 }) {
   const multiLocale = editLocales.length > 1
 
@@ -426,17 +469,33 @@ function ThemeToolbar({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Actions */}
+      {/* Prominent Regenerate (Gold) — re-clone the design from the source site.
+          Free clients get one free regeneration; after that the click surfaces a
+          Premium upsell (handled by grab → premiumBlocked). */}
       {onRecapture && (
-        <button
-          onClick={onRecapture}
-          disabled={analyzing}
-          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-60"
-          title="Tornar a capturar des de la URL d'origen"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Re-capturar
-        </button>
+        <div className="flex items-center gap-2.5">
+          {!isPremium && (
+            <span className={cn(
+              'hidden md:inline-flex items-center gap-1 text-xs font-semibold',
+              canRegenerate ? 'text-subtle' : 'text-accent',
+            )}>
+              {canRegenerate
+                ? `${regenRemaining} regeneració${regenRemaining === 1 ? '' : 'ns'} gratuïta${regenRemaining === 1 ? '' : 'es'}`
+                : 'Límit gratuït exhaurit'}
+            </span>
+          )}
+          <Button
+            onClick={onRecapture}
+            disabled={analyzing}
+            size="md"
+            glow={canRegenerate}
+            variant={canRegenerate ? 'primary' : 'secondary'}
+            iconLeft={canRegenerate ? <Wand2 className="w-4 h-4" /> : <Crown className="w-4 h-4" />}
+            title="Tornar a capturar i regenerar el tema des de la URL d'origen"
+          >
+            Regenerar el tema
+          </Button>
+        </div>
       )}
       {onDelete && (
         <button
@@ -845,42 +904,80 @@ function LayoutPanel({
   tokens: DesignTokens
   setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
 }) {
+  const feed = tokens.feedLayout ?? 'standard'
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Structural feed presets — change only the layout, never the brand. */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Format de les targetes</p>
-        <SegmentedControl
-          value={tokens.layout === 'list' ? 'list' : 'grid'}
-          onChange={v => setToken('layout', v as 'grid' | 'list')}
-          options={[
-            { value: 'grid', icon: <LayoutGrid className="w-3.5 h-3.5" />, label: 'Graella' },
-            { value: 'list', icon: <Rows3 className="w-3.5 h-3.5" />, label: 'Llista' },
-          ]}
-        />
+        <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Estil del feed</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <FeedOption label="Estàndard" active={feed === 'standard'} onClick={() => setToken('feedLayout', 'standard')} />
+          {FEED_LAYOUTS.map(l => (
+            <FeedOption key={l.id} label={l.name} active={feed === l.id} onClick={() => setToken('feedLayout', l.id)} />
+          ))}
+        </div>
+        <p className="text-xs text-subtle mt-2 leading-relaxed">
+          Només canvia la disposició dels articles. Manté els colors i les tipografies de la teva marca.
+        </p>
       </div>
 
-      {tokens.layout !== 'list' && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Columnes (escriptori)</p>
-          <div className="flex gap-2">
-            {(['2', '3', '4'] as BlogColumns[]).map(c => (
-              <button
-                key={c}
-                onClick={() => setToken('columns', c)}
-                className={cn(
-                  'cursor-pointer flex-1 h-10 rounded-lg text-sm font-semibold border transition-colors',
-                  tokens.columns === c
-                    ? 'bg-accent border-accent text-on-accent'
-                    : 'bg-surface-subtle border-border text-muted hover:bg-surface-hover hover:text-text',
-                )}
-              >
-                {c}
-              </button>
-            ))}
+      {/* Grid/list + columns apply to the Estàndard layout (the presets define
+          their own structure). */}
+      {feed === 'standard' && (
+        <>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Format de les targetes</p>
+            <SegmentedControl
+              value={tokens.layout === 'list' ? 'list' : 'grid'}
+              onChange={v => setToken('layout', v as 'grid' | 'list')}
+              options={[
+                { value: 'grid', icon: <LayoutGrid className="w-3.5 h-3.5" />, label: 'Graella' },
+                { value: 'list', icon: <Rows3 className="w-3.5 h-3.5" />, label: 'Llista' },
+              ]}
+            />
           </div>
-        </div>
+
+          {tokens.layout !== 'list' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Columnes (escriptori)</p>
+              <div className="flex gap-2">
+                {(['2', '3', '4'] as BlogColumns[]).map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setToken('columns', c)}
+                    className={cn(
+                      'cursor-pointer flex-1 h-10 rounded-lg text-sm font-semibold border transition-colors',
+                      tokens.columns === c
+                        ? 'bg-accent border-accent text-on-accent'
+                        : 'bg-surface-subtle border-border text-muted hover:bg-surface-hover hover:text-text',
+                    )}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
+  )
+}
+
+function FeedOption({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'cursor-pointer h-10 rounded-lg text-sm font-semibold border transition-colors px-2',
+        active
+          ? 'bg-accent border-accent text-on-accent'
+          : 'bg-surface-subtle border-border text-muted hover:bg-surface-hover hover:text-text',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -1113,6 +1210,100 @@ function InlineHeading({
           Articles
         </span>
       )}
+    </div>
+  )
+}
+
+/* ── Look & Feel presets (Framer-style simplification) ─────────────────────── */
+
+/** Clients see the detailed accordion behind a collapsed disclosure; superadmins
+    see it directly (advanced=false renders children untouched). */
+function MaybeAdvanced({ advanced, children }: { advanced: boolean; children: ReactNode }) {
+  if (!advanced) return <>{children}</>
+  return (
+    <details className="group rounded-2xl border border-border bg-surface overflow-hidden">
+      <summary className="cursor-pointer flex items-center gap-2 px-6 py-4 text-sm font-semibold text-muted hover:text-text hover:bg-surface-hover transition-colors">
+        <Ruler className="w-4 h-4" />
+        Ajustos avançats
+        <span className="text-xs font-medium text-subtle hidden sm:inline">colors, tipografies i disposició al detall</span>
+        <ChevronDown className="w-4 h-4 ml-auto transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-border [&>div]:border-0 [&>div]:rounded-none">{children}</div>
+    </details>
+  )
+}
+
+/** Tiny abstract preview: a title bar + two text bars whose weight/radius hint
+    at the preset's personality. Pure CSS, no images. */
+function PresetGlyph({ preset }: { preset: StylePreset }) {
+  const r = preset.patch.radius ?? '10px'
+  const w = preset.patch.headingWeight ?? '700'
+  const heavy = Number(w) >= 750
+  return (
+    <div className="w-full rounded-lg bg-surface-subtle border border-border p-2.5 space-y-1.5" aria-hidden>
+      <div
+        className={cn('h-2.5 bg-text', heavy ? 'w-4/5 opacity-90' : 'w-3/5 opacity-70')}
+        style={{ borderRadius: r }}
+      />
+      <div className="h-1.5 w-full bg-text opacity-25" style={{ borderRadius: r }} />
+      <div className="h-1.5 w-2/3 bg-text opacity-25" style={{ borderRadius: r }} />
+    </div>
+  )
+}
+
+function StylePresetsPanel({
+  tokens,
+  setToken,
+}: {
+  tokens: DesignTokens
+  setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
+}) {
+  const active = tokens.stylePreset ?? 'original'
+
+  const apply = (preset: StylePreset) => {
+    // One batched commit: every patch entry + the marker ride the same render,
+    // and the studio's existing debounced save persists them as one change.
+    for (const [k, v] of Object.entries(preset.patch)) {
+      setToken(k as keyof DesignTokens, v as DesignTokens[keyof DesignTokens])
+    }
+    setToken('stylePreset', preset.id)
+  }
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Wand2 className="w-4 h-4 text-accent" />
+        <h3 className="text-sm font-bold text-text">Estil del blog</h3>
+      </div>
+      <p className="text-xs text-muted mb-4">
+        Tria una personalitat amb un clic. Els teus colors i tipografies capturats es conserven sempre.
+      </p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {STYLE_PRESETS.map(preset => {
+          const isActive = active === preset.id
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => apply(preset)}
+              aria-pressed={isActive}
+              className={cn(
+                'cursor-pointer text-left rounded-xl border p-3 transition-all',
+                isActive
+                  ? 'border-accent ring-2 ring-accent/25 bg-accent-soft/40'
+                  : 'border-border bg-bg-elevated hover:border-border-strong hover:-translate-y-0.5',
+              )}
+            >
+              <PresetGlyph preset={preset} />
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <span className="text-[13px] font-bold text-text">{preset.name}</span>
+                {isActive && <Check className="w-3.5 h-3.5 text-accent" />}
+              </div>
+              <p className="mt-0.5 text-[11px] leading-snug text-subtle">{preset.tagline}</p>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

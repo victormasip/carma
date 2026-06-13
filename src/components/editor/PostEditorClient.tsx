@@ -23,7 +23,7 @@ import { createPost, updatePost, translateArticle, analyzeArticleWriting, genera
 import type { WritingAnalysis } from '@/lib/writing/coach'
 import { addSiteLocale } from '@/lib/actions/locales'
 import { LOCALES, DEFAULT_LOCALE, LOCALE_META, normalizeLocale, type Locale } from '@/lib/i18n/config'
-import { detectLocale } from '@/lib/i18n/detect'
+import { detectLocale, htmlToPlain } from '@/lib/i18n/detect'
 import { useToast } from '@/components/ui/Toast'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Modal, useConfirm } from '@/components/ui/Modal'
@@ -264,9 +264,12 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   const { toast } = useToast()
   const confirm = useConfirm()
 
-  const defaultLocale = useMemo(
+  // State (not memo): real-time language detection may RELABEL the base
+  // document's language (e.g. an import stored Spanish text under `ca`). The
+  // autosave snapshot serializes `default_locale`, so updating this state
+  // silently persists the correction to the DB through the normal save path.
+  const [defaultLocale, setDefaultLocale] = useState<Locale>(
     () => normalizeLocale(post?.default_locale ?? siteDefaultLocale, DEFAULT_LOCALE),
-    [post?.default_locale, siteDefaultLocale],
   )
 
   // Per-locale text state
@@ -516,10 +519,11 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   // Derive the detected locale from debounced content + title (no state →
   // no setState-in-effect). The pill renders when the detection disagrees with
   // the active tab AND the user hasn't dismissed the suggestion for this tab.
-  const detectedLocale = useMemo<Locale | null>(() => {
-    const { locale } = detectLocale(`${cur.title}\n${debouncedContent}`)
-    return locale && locale !== activeLocale ? locale : null
+  const detection = useMemo(() => {
+    const { locale, source } = detectLocale(`${cur.title}\n${debouncedContent}`)
+    return { locale: locale && locale !== activeLocale ? locale : null, source }
   }, [debouncedContent, cur.title, activeLocale])
+  const detectedLocale = detection.locale
 
   const detectionDismissed = dismissedFor === activeLocale
 
@@ -533,11 +537,70 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     setDismissedFor(null)
   }
 
-  // Detection is ADVISORY ONLY. It never silently moves content between locale
-  // tabs: franc-min confuses Catalan↔Spanish on short text, so an auto-switch
-  // would hijack the very tab you're typing in (the "doesn't know what language
-  // I'm editing" bug). The active language is whatever the user picked in the
-  // language bar; `detectedLocale` only feeds the dismissible suggestion pill.
+  // ── Real-time AUTO language detection (base document) ──────────────────────
+  // The base document's language label auto-corrects, silently. History note:
+  // a naive auto-switch was tried before and reverted — franc-min confuses
+  // ca↔es on short text and hijacked the tab being typed in. So AUTO only
+  // fires behind hard guards that close that exact hole:
+  //   · only relabels the DEFAULT tab (the base columns); translation tabs
+  //     keep the advisory pill — we never auto-move content across buckets
+  //   · needs ≥600 plain chars one-shot (import/load case), or ≥300 chars
+  //     detected as the SAME language on 2+ consecutive debounce ticks (typing)
+  //   · never fires if the detected locale's bucket already holds content
+  // Persistence is free: `default_locale` rides the autosave snapshot.
+  // Live caret mirror + one-shot restore slot for the relabel remount (see
+  // TipTapEditor's selectionRef/restoreCaretRef props).
+  const editorSelectionRef = useRef<{ from: number; to: number } | null>(null)
+  const restoreCaretRef = useRef<{ from: number; to: number } | null>(null)
+  const stableDetectRef = useRef<{ locale: Locale | null; runs: number; lastSample: string }>({ locale: null, runs: 0, lastSample: '' })
+  useEffect(() => {
+    if (!detectedLocale) {
+      stableDetectRef.current = { locale: null, runs: 0, lastSample: '' }
+      return
+    }
+    const prev = stableDetectRef.current
+    // Count one "run" per NEW debounce sample (not per render) so the
+    // stability guard really means consecutive detection ticks.
+    if (prev.lastSample !== debouncedContent || prev.locale !== detectedLocale) {
+      stableDetectRef.current = {
+        locale: detectedLocale,
+        runs: prev.locale === detectedLocale ? prev.runs + 1 : 1,
+        lastSample: debouncedContent,
+      }
+    }
+    if (activeLocale !== defaultLocale) return
+    const plainLen = htmlToPlain(`${cur.title}\n${debouncedContent}`).length
+    // The Catalan token rule ('tokens') is high-precision — it relabels
+    // immediately. Statistical detections keep the length/stability floors.
+    const confident =
+      detection.source === 'tokens' ||
+      plainLen >= 600 ||
+      (plainLen >= 300 && stableDetectRef.current.runs >= 2)
+    if (!confident) return
+    const target = detectedLocale
+    const bucket = localeData[target]
+    if (bucket.title.trim() || bucket.contentHtml.trim()) return
+    // Relabel: the base columns ARE this language. Move the state bucket, flip
+    // the label, follow with the active tab. Autosave persists it silently.
+    // setState-in-effect is deliberate here: this is an event-like transition
+    // driven by the debounced detection settling — it fires at most once per
+    // confident detection (hard guards above + ref reset below), the four
+    // updates batch into one commit, and the re-run path null-detects, so it
+    // cannot loop.
+    const from = defaultLocale
+    // Stash the live caret: the relabel changes the editor `key`, and the
+    // remounted (content-identical) instance restores it in onCreate — the
+    // switch is invisible to the writer.
+    restoreCaretRef.current = editorSelectionRef.current
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setLocaleData(prevData => ({ ...prevData, [target]: prevData[from], [from]: emptyFields() }))
+    setDefaultLocale(target)
+    setActiveLocale(target)
+    setShownLocales(prevShown => LOCALES.filter(l => l === target || (prevShown.includes(l) && l !== from)))
+    /* eslint-enable react-hooks/set-state-in-effect */
+    void addSiteLocale(siteId, target).catch(() => {})
+    stableDetectRef.current = { locale: null, runs: 0, lastSample: '' }
+  }, [detectedLocale, detection.source, activeLocale, defaultLocale, debouncedContent, cur.title, localeData, siteId])
 
   const checks = useMemo(
     () => runSeoChecks({ title: cur.title, seoTitle: cur.seoTitle, seoDescription: cur.seoDescription, slug: cur.slug, focusKeyword, contentHtml: debouncedContent, featuredImage }),
@@ -949,9 +1012,10 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
               </div>
             )}
 
-            {/* Language detection pill — suggests the locale the IA thinks the text
-                is in, when it differs from the one currently being edited. */}
-            {detectedLocale && !detectionDismissed && (
+            {/* Language detection pill — advisory, TRANSLATION tabs only. The
+                default tab self-corrects automatically (see the AUTO effect);
+                cross-tab moves stay a human decision. */}
+            {detectedLocale && !detectionDismissed && activeLocale !== defaultLocale && (
               <div className="mt-4 inline-flex items-center gap-2 pl-2.5 pr-1.5 py-1.5 rounded-full bg-info-soft border border-info/20 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
                 <Languages className="w-3.5 h-3.5 text-info shrink-0" />
                 <span className="text-text">
@@ -992,6 +1056,8 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                     onChange={handleContentChange}
                     placeholder="Comença a escriure, o prem '/' per inserir blocs…"
                     siteId={siteId}
+                    selectionRef={editorSelectionRef}
+                    restoreCaretRef={restoreCaretRef}
                   />
                 </Suspense>
               </ErrorBoundary>

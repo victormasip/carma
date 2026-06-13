@@ -25,6 +25,12 @@
 //   the pre-pivot `{ html, css, mode:'shadow' }` JSON (degraded to its raw .html).
 
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import { feedLayoutCss } from '@/lib/render/feedLayouts'
+import {
+  buildListingModuleParts, buildArticleModuleParts, modulesRuntimeScript,
+  type ModulePost, type ModuleHelpers, type ListingModuleParts, type ArticleModuleParts,
+} from '@/lib/render/modules'
+import type { SiteModules } from '@/lib/modules/registry'
 import type { BlogSignature, CardStyle } from '@/lib/scrape/blogDetect'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
 import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, type Locale } from '@/lib/i18n/config'
@@ -47,6 +53,7 @@ type Theme = {
   default_locale?: string | null // which locale the base chrome represents
   chrome_i18n?: Record<string, ChromeI18nEntry> | null // translated chrome per locale
   blog_signature?: BlogSignature | null // detected native article-card design to replicate
+  modules?: SiteModules | null // Smart Modules config (migration 024); absent ⇒ no modules
 } | null
 
 // A resolved chrome region. `raw` = inject `html` verbatim into the light DOM
@@ -336,6 +343,29 @@ function buildLayoutCss(t: DesignTokens): string {
 @media (min-width:1024px){.carma-grid{grid-template-columns:repeat(${cols},minmax(0,1fr))!important}}`.trim()
 }
 
+// ─── Readability guards ──────────────────────────────────────────────────────
+// Scraped typographic tokens flow straight into the generated CSS, so a site
+// that ships 13px body text or a 1.3 line-height would reproduce that cramped
+// reading experience on the blog. Brand IDENTITY tokens (colors, fonts, radii)
+// pass through untouched; READABILITY tokens get clamped to a humane range.
+
+/** Clamp the scraped base font size to 15–19px (accepts px/rem/em/%). */
+function clampBaseFontSize(raw: string): string {
+  const m = /^([\d.]+)(px|rem|em|%)$/.exec((raw ?? '').trim())
+  if (!m) return '16px'
+  const n = parseFloat(m[1])
+  if (!Number.isFinite(n) || n <= 0) return '16px'
+  const px = m[2] === 'px' ? n : m[2] === '%' ? (n / 100) * 16 : n * 16
+  return `${Math.min(19, Math.max(15, Math.round(px * 100) / 100))}px`
+}
+
+/** Clamp a unitless line-height token to [min,max]; non-numeric → fallback. */
+function clampLineHeight(raw: string | undefined, fallback: number, min: number, max: number): string {
+  const n = parseFloat(String(raw ?? ''))
+  if (!Number.isFinite(n)) return String(fallback)
+  return String(Math.min(max, Math.max(min, n)))
+}
+
 function buildTemplateCss(t: DesignTokens): string {
   return `
 :root{
@@ -348,7 +378,7 @@ function buildTemplateCss(t: DesignTokens): string {
   --ct-border:${t.colorBorder};
   --ct-font-heading:${t.fontHeading};
   --ct-font-body:${t.fontBody};
-  --ct-size:${t.baseFontSize};
+  --ct-size:${clampBaseFontSize(t.baseFontSize)};
   --ct-radius:${t.radius};
   --ct-radius-lg:${t.radiusLg};
   --ct-max:${t.maxWidth};
@@ -376,7 +406,12 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
   line-height:1.65!important;
   -webkit-font-smoothing:antialiased;
 }
-.carma-root h1,.carma-root h2,.carma-root h3,.carma-root h4,.carma-root h5,.carma-root h6{
+/* Heading reset via :where() — specificity (0,1,0) instead of (0,1,1). The
+   !important still shields against the host page, but OUR later class rules
+   (.carma-card-title, feed presets, Theme Studio + native-card overrides) can
+   now win as designed. Previously .carma-root h2 silently beat every
+   .carma-card-title customisation — line-height/color tweaks were dead code. */
+.carma-root :where(h1,h2,h3,h4,h5,h6){
   font-family:var(--ct-font-heading)!important;
   color:var(--ct-text)!important;
   font-style:normal!important;
@@ -386,9 +421,12 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
   margin:0!important;
 }
 .carma-root a{color:inherit!important;text-decoration:none!important;background:none!important}
+.carma-root a:focus-visible{outline:2px solid var(--ct-accent)!important;outline-offset:3px!important;border-radius:2px!important}
 .carma-root img{display:block!important;max-width:100%!important;border:none!important;outline:none!important}
 .carma-root p{margin:0!important}
 .carma-root ul,.carma-root ol{list-style:none!important;margin:0!important;padding:0!important}
+/* Brand-tinted text selection — the blog feels art-directed down to the drag. */
+.carma-root ::selection{background:color-mix(in srgb,var(--ct-accent) 24%,transparent)}
 
 /* ── Layout ──
    Full-width fluid blog area. We intentionally do NOT use the scraped --ct-max
@@ -413,16 +451,16 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 .carma-section-head.has-image .carma-breadcrumb a{color:#fff!important}
 .carma-root .carma-section-head .carma-section-title{font-family:var(--ct-font-heading)!important;font-size:${t.sectionTitleSize ?? '1.6rem'}!important;font-weight:${t.sectionTitleWeight ?? '800'}!important;color:${t.sectionTitleColor ?? 'var(--ct-text)'}!important;text-align:${t.sectionTitleAlign ?? 'left'}!important;max-width:${t.sectionTitleWidth ?? '100%'}!important;${t.sectionTitleAlign === 'center' ? 'margin-left:auto!important;margin-right:auto!important;' : ''}${t.sectionTitleHeight ? `min-height:${t.sectionTitleHeight}!important;display:flex!important;align-items:center!important;` : ''}margin-top:0!important;margin-bottom:0!important;line-height:1.2!important}
 
-.carma-card{background:var(--ct-surface)!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;box-shadow:0 4px 6px -1px rgba(0,0,0,.07),0 2px 4px -2px rgba(0,0,0,.05)!important;transition:transform .2s ease,box-shadow .2s ease}
-.carma-card:hover{transform:translateY(-4px)!important;box-shadow:0 18px 40px -18px rgba(0,0,0,.3)!important}
+.carma-card{background:var(--ct-surface)!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px -12px rgba(0,0,0,.12)!important;transition:transform .25s cubic-bezier(.2,.6,.3,1),box-shadow .25s cubic-bezier(.2,.6,.3,1)}
+.carma-card:hover{transform:translateY(-3px)!important;box-shadow:0 2px 4px rgba(0,0,0,.04),0 20px 44px -16px rgba(0,0,0,.18)!important}
 .carma-card-link{display:flex!important;flex-direction:column!important;flex:1!important;color:inherit!important;text-decoration:none!important}
 .carma-card-media{aspect-ratio:16/9!important;background:var(--ct-border)!important;overflow:hidden!important;flex-shrink:0!important}
-.carma-card-media img{width:100%!important;height:100%!important;object-fit:cover!important;transition:transform .35s ease}
-.carma-card:hover .carma-card-media img{transform:scale(1.05)!important}
+.carma-card-media img{width:100%!important;height:100%!important;object-fit:cover!important;transition:transform .45s cubic-bezier(.2,.6,.3,1)}
+.carma-card:hover .carma-card-media img{transform:scale(1.04)!important}
 .carma-card-body{padding:1.3rem 1.4rem 1.55rem!important;display:flex!important;flex-direction:column!important;gap:.65rem!important;flex:1!important}
-.carma-card-title{font-size:1.2rem!important;font-weight:700!important;color:var(--ct-text)!important;margin:0!important;line-height:1.3!important}
-.carma-card-excerpt{color:var(--ct-muted)!important;font-size:.93rem!important;margin:0!important;line-height:1.6!important;display:-webkit-box!important;-webkit-line-clamp:3;-webkit-box-orient:vertical!important;overflow:hidden!important;flex:1!important}
-.carma-meta{font-size:.76rem!important;color:var(--ct-muted)!important;font-weight:600!important;display:flex!important;gap:.5rem!important;align-items:center!important;flex-wrap:wrap!important;text-transform:uppercase!important;letter-spacing:.03em!important}
+.carma-card-title{font-family:var(--ct-font-heading)!important;font-size:1.25rem!important;font-weight:700!important;color:var(--ct-text)!important;margin:0!important;line-height:1.3!important;letter-spacing:-0.01em!important;text-wrap:balance}
+.carma-card-excerpt{color:var(--ct-muted)!important;font-size:.9375rem!important;margin:0!important;line-height:1.6!important;display:-webkit-box!important;-webkit-line-clamp:3;-webkit-box-orient:vertical!important;overflow:hidden!important;flex:1!important}
+.carma-meta{font-size:.8125rem!important;color:var(--ct-muted)!important;font-weight:600!important;display:flex!important;gap:.5rem!important;align-items:center!important;flex-wrap:wrap!important;text-transform:uppercase!important;letter-spacing:.04em!important}
 .carma-meta .carma-cat{color:var(--ct-accent)!important}
 .carma-card-link:hover .carma-card-title{color:var(--ct-accent)!important}
 
@@ -432,19 +470,26 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 .carma-article{max-width:880px!important;margin:0 auto!important;padding:.5rem clamp(1rem,3vw,1.5rem) 0!important}
 .carma-back{display:inline-flex!important;align-items:center!important;gap:.5rem!important;color:var(--ct-text)!important;font-weight:700!important;font-size:.95rem!important;margin-bottom:2.5rem!important;padding:.6rem 1.15rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;background:var(--ct-surface)!important;text-decoration:none!important;line-height:1!important;transition:color .15s ease,border-color .15s ease,background .15s ease!important}
 .carma-back:hover{color:var(--ct-accent)!important;border-color:var(--ct-accent)!important}
-.carma-article-header{margin:0 0 2.75rem!important;max-inline-size:70ch!important;margin-inline:auto!important}
-.carma-article-title{font-family:var(--ct-font-heading)!important;font-size:clamp(2rem,1.5rem + 2.2vw,3.25rem)!important;font-weight:800!important;margin:0 0 1rem!important;line-height:1.08!important;letter-spacing:-0.02em!important;color:var(--ct-text)!important}
-.carma-article-lede{font-size:clamp(1.05rem,1rem + 0.4vw,1.2rem)!important;line-height:1.55!important;color:var(--ct-muted)!important;margin:0 0 1.25rem!important;font-weight:400!important}
-.carma-article-meta{font-size:.85rem!important;color:var(--ct-muted)!important;margin:0!important;display:flex!important;gap:.6rem!important;flex-wrap:wrap!important;align-items:center!important}
+.carma-article-header{margin:0 0 3rem!important;max-inline-size:70ch!important;margin-inline:auto!important}
+/* Commanding hero title — fluid 2.25rem (phone) → 3.75rem (desktop), tight
+   leading and negative tracking so it reads as a masthead, not a big <p>. */
+.carma-article-title{font-family:var(--ct-font-heading)!important;font-size:clamp(2.25rem,1.5rem + 3.2vw,3.75rem)!important;font-weight:800!important;margin:0 0 1.15rem!important;line-height:1.04!important;letter-spacing:-0.025em!important;color:var(--ct-text)!important;text-wrap:balance}
+.carma-article-lede{font-size:clamp(1.2rem,1.08rem + 0.55vw,1.4rem)!important;line-height:1.55!important;color:var(--ct-muted)!important;margin:0 0 1.4rem!important;font-weight:400!important;text-wrap:pretty}
+.carma-article-meta{font-size:.8125rem!important;color:var(--ct-muted)!important;margin:0!important;display:flex!important;gap:.6rem!important;flex-wrap:wrap!important;align-items:center!important;text-transform:uppercase!important;letter-spacing:.05em!important;font-weight:600!important}
 .carma-article-image-wrap{margin:0 0 2.25rem!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;background:var(--ct-border)!important;aspect-ratio:16/9!important}
 .carma-article-image-wrap picture,.carma-article-image-wrap img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
 .carma-article-image{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;margin:0!important;border-radius:0!important}
-.carma-article-content{font-family:var(--ct-font-body)!important;font-size:clamp(1.0625rem,1.02rem + 0.18vw,1.18rem)!important;color:var(--ct-text)!important;line-height:${t.bodyLineHeight ?? '1.8'}!important;max-inline-size:70ch!important;margin-inline:auto!important}
+.carma-article-content{font-family:var(--ct-font-body)!important;font-size:clamp(1.0625rem,1.03rem + 0.25vw,1.125rem)!important;color:var(--ct-text)!important;line-height:${clampLineHeight(t.bodyLineHeight, 1.75, 1.6, 1.9)}!important;max-inline-size:70ch!important;margin-inline:auto!important}
 .carma-article-content > *{max-inline-size:70ch!important;margin-inline:auto!important}
-.carma-article-content p{margin:${t.paragraphSpacing ?? '1.45rem'} 0!important}
+.carma-article-content p{margin:${t.paragraphSpacing ?? '1.5rem'} 0!important;text-wrap:pretty;hyphens:auto;-webkit-hyphens:auto}
 .carma-article-content p:first-of-type{margin-top:0!important}
-.carma-article-content h2{font-family:var(--ct-font-heading)!important;font-size:clamp(1.45rem,1.25rem + 0.8vw,1.85rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2.25rem 0 .75rem!important;line-height:${t.headingLineHeight ?? '1.2'}!important;letter-spacing:-0.012em!important;color:var(--ct-text)!important}
-.carma-article-content h3{font-family:var(--ct-font-heading)!important;font-size:clamp(1.2rem,1.1rem + 0.4vw,1.45rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:1.75rem 0 .6rem!important;line-height:${t.headingLineHeight ?? '1.3'}!important;color:var(--ct-text)!important}
+/* Heading ladder — one modular scale (≈1.25 ratio against the 1.125rem body) so
+   hierarchy reads as a graded staircase, not isolated big strings. */
+.carma-article-content h2{font-family:var(--ct-font-heading)!important;font-size:clamp(1.6rem,1.4rem + 0.85vw,2rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2.5rem 0 .9rem!important;line-height:${clampLineHeight(t.headingLineHeight, 1.25, 1.1, 1.45)}!important;letter-spacing:-0.015em!important;color:var(--ct-text)!important;text-wrap:balance}
+.carma-article-content h3{font-family:var(--ct-font-heading)!important;font-size:clamp(1.3rem,1.2rem + 0.5vw,1.5rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2rem 0 .65rem!important;line-height:${clampLineHeight(t.headingLineHeight, 1.3, 1.15, 1.45)}!important;letter-spacing:-0.008em!important;color:var(--ct-text)!important;text-wrap:balance}
+.carma-article-content h4{font-family:var(--ct-font-heading)!important;font-size:1.17rem!important;font-weight:700!important;margin:1.75rem 0 .5rem!important;line-height:1.35!important;color:var(--ct-text)!important}
+.carma-article-content h5{font-family:var(--ct-font-heading)!important;font-size:1.05rem!important;font-weight:700!important;margin:1.5rem 0 .4rem!important;line-height:1.4!important;color:var(--ct-text)!important}
+.carma-article-content h6{font-family:var(--ct-font-heading)!important;font-size:.8125rem!important;font-weight:800!important;margin:1.5rem 0 .4rem!important;line-height:1.4!important;color:var(--ct-muted)!important;text-transform:uppercase!important;letter-spacing:.07em!important}
 .carma-article-content picture,.carma-article-content img{display:block;margin:1.5rem 0!important;border-radius:var(--ct-radius)!important;width:100%!important;height:auto!important}
 .carma-article-content figure picture,.carma-article-content figure img{margin:0!important}
 /* Media bleed: figures and galleries break out past the 70ch prose column up to
@@ -464,8 +509,25 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 }
 .carma-article-content a{color:${t.linkColor ?? 'var(--ct-accent)'}!important;text-decoration:${t.linkUnderline === 'none' ? 'none' : 'underline'}!important;text-decoration-thickness:1px!important;text-underline-offset:2px!important}
 ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!important}.carma-article-content a:hover{text-decoration:underline!important}' : ''}
-.carma-article-content blockquote{border-left:4px solid ${t.blockquoteBorderColor ?? 'var(--ct-accent)'}!important;margin:1.5rem 0!important;padding:.5rem 0 .5rem 1.25rem!important;color:var(--ct-muted)!important;font-style:${t.blockquoteStyle ?? 'italic'}!important}
-.carma-article-content ul,.carma-article-content ol{padding-left:1.4rem!important;margin:1.15rem 0!important;list-style:revert!important}
+.carma-article-content blockquote{border-left:3px solid ${t.blockquoteBorderColor ?? 'var(--ct-accent)'}!important;margin:2rem 0!important;padding:.25rem 0 .25rem 1.5rem!important;color:var(--ct-text)!important;font-style:${t.blockquoteStyle ?? 'italic'}!important;font-size:1.1em!important;line-height:1.6!important}
+.carma-article-content blockquote p{margin:.6em 0!important}
+.carma-article-content ul,.carma-article-content ol{padding-left:1.5rem!important;margin:1.25rem 0!important;list-style:revert!important}
+.carma-article-content li{margin:.4em 0!important}
+.carma-article-content li p{margin:0!important}
+.carma-article-content li::marker{color:var(--ct-accent)!important}
+/* ── Editor/render parity ──
+   Every block the editor (or a WordPress import) can produce must look
+   deliberate here. Before this, pre/code/hr/tables hit the isolation reset
+   unstyled and rendered visibly broken on the public page. */
+.carma-article-content strong{font-weight:700!important}
+.carma-article-content code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.875em!important;background:color-mix(in srgb,var(--ct-text) 7%,transparent)!important;border-radius:5px!important;padding:.15em .4em!important}
+.carma-article-content pre{background:var(--ct-text)!important;color:var(--ct-bg)!important;border-radius:var(--ct-radius-lg)!important;padding:1.1rem 1.3rem!important;margin:1.75rem 0!important;overflow-x:auto!important;font-size:.875rem!important;line-height:1.65!important}
+.carma-article-content pre code{background:none!important;padding:0!important;font-size:inherit!important;color:inherit!important}
+.carma-article-content hr{border:none!important;border-top:2px solid var(--ct-border)!important;width:88px!important;margin:2.75rem auto!important}
+.carma-article-content table{width:100%!important;max-width:100%!important;border-collapse:collapse!important;margin:1.75rem 0!important;font-size:.95em!important;line-height:1.5!important}
+.carma-article-content th{text-align:left!important;font-weight:700!important;font-size:.8125rem!important;text-transform:uppercase!important;letter-spacing:.05em!important;color:var(--ct-muted)!important;padding:.6rem .75rem!important;border-bottom:2px solid var(--ct-border)!important}
+.carma-article-content td{padding:.65rem .75rem!important;border-bottom:1px solid var(--ct-border)!important;vertical-align:top!important}
+.carma-article-content tr:last-child td{border-bottom:none!important}
 .carma-article-content .carma-callout{position:relative!important;margin:1.5rem 0!important;padding:1.1rem 1.25rem 1.1rem 3.1rem!important;border-radius:var(--ct-radius-lg)!important;border:1px solid!important;font-size:1rem!important;line-height:1.65!important}
 .carma-article-content .carma-callout>*:first-child{margin-top:0!important}
 .carma-article-content .carma-callout>*:last-child{margin-bottom:0!important}
@@ -499,7 +561,7 @@ ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!i
 .carma-article-content .carma-lightbox-close{top:16px!important;right:16px!important;width:40px!important;height:40px!important;font-size:24px!important}
 .carma-article-content figure.carma-figure{margin:1.75rem 0!important}
 .carma-article-content figure.carma-figure img{width:100%!important;border-radius:var(--ct-radius-lg)!important;margin:0 0 .5rem!important}
-.carma-article-content figure.carma-figure figcaption{text-align:center!important;font-size:.88rem!important;color:var(--ct-muted)!important;font-style:italic!important}
+.carma-article-content figure.carma-figure figcaption{text-align:center!important;font-size:.85rem!important;color:var(--ct-muted)!important;font-style:italic!important;margin-top:.65rem!important;line-height:1.5!important}
 .carma-article-content .carma-columns{display:grid!important;grid-template-columns:1fr 1fr!important;gap:1.5rem!important;margin:1.6rem 0!important}
 .carma-article-content .carma-column{min-width:0!important}
 .carma-article-content .carma-column>*:first-child{margin-top:0!important}
@@ -528,9 +590,8 @@ ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!i
 .carma-empty-title{font-size:1.3rem!important;font-weight:800!important;margin:0 0 .6rem!important;color:var(--ct-text)!important}
 .carma-empty-desc{color:var(--ct-muted)!important;margin:0!important;font-size:.95rem!important}
 
-@media (max-width:720px){
-  .carma-article-title{font-size:1.9rem!important}
-}
+/* (No mobile title override needed — the clamp() scale already lands at
+   2.1rem on a phone; the old 1.9rem media query just fought it.) */
 
 /* Feed layout (grid/list) — emitted LAST so it overrides the card defaults above. */
 ${buildLayoutCss(t)}
@@ -887,7 +948,11 @@ function buildCard(post: Post, siteId: string, locale: Locale): string {
     : ''
   const excerpt = loc.excerpt ? `<p class="carma-card-excerpt">${escapeHtml(loc.excerpt)}</p>` : ''
   const cat = loc.categories?.[0] ? `<span class="carma-cat">${escapeHtml(loc.categories[0])}</span><span>·</span>` : ''
-  return `<article class="carma-card"><a class="carma-card-link" href="${escapeAttr(href)}">
+  // Data hooks for the client-side Smart Modules (search + category filter). Inert
+  // when no module is enabled; never affect the default render's appearance.
+  const cats = (loc.categories ?? []).map(c => c.toLowerCase()).join(',')
+  const searchText = `${loc.title} ${loc.excerpt ?? ''}`.toLowerCase()
+  return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}"><a class="carma-card-link" href="${escapeAttr(href)}">
   ${media}
   <div class="carma-card-body">
     <div class="carma-meta">${cat}<time datetime="${escapeAttr(loc.created_at)}">${escapeHtml(formatDate(loc.created_at, locale))}</time></div>
@@ -903,6 +968,67 @@ function buildEmptyState(siteName: string, locale: Locale): string {
   <h2 class="carma-empty-title">${escapeHtml(s.emptyTitle)}</h2>
   <p class="carma-empty-desc">${s.emptyDesc(siteName)}</p>
 </div>`
+}
+
+// ─── Smart Modules bridge ─────────────────────────────────────────────────────
+//
+// Maps the renderer's localized posts + helpers into the module engine's neutral
+// data shape, then asks it for the HTML/CSS to weave in. Pure; returns empty
+// parts when no module is enabled (so the default render is byte-for-byte
+// unchanged).
+
+type ArticleExtra = { siblings?: Post[]; unlocked?: boolean }
+
+function moduleHelpers(locale: Locale): ModuleHelpers {
+  return {
+    esc: escapeHtml,
+    escAttr: escapeAttr,
+    img: (src, alt) => responsiveCardImage(src, alt),
+    fmtDate: (iso) => formatDate(iso, locale),
+  }
+}
+
+function toModulePost(post: Post, siteId: string, locale: Locale): ModulePost {
+  const loc = localizePost(post, locale)
+  return {
+    id: post.id,
+    title: loc.title,
+    excerpt: loc.excerpt,
+    image: loc.featured_image,
+    categories: loc.categories ?? [],
+    tags: loc.tags ?? [],
+    author: loc.author_name,
+    date: loc.created_at,
+    url: articleUrl(siteId, post, locale),
+  }
+}
+
+function listingModuleParts(theme: Theme, siteId: string, posts: Post[], locale: Locale): ListingModuleParts {
+  return buildListingModuleParts(
+    theme?.modules ?? null,
+    posts.map(p => toModulePost(p, siteId, locale)),
+    locale,
+    moduleHelpers(locale),
+  )
+}
+
+function articleModuleParts(
+  theme: Theme, siteId: string, post: Post, locale: Locale, contentHtml: string, extra?: ArticleExtra,
+): ArticleModuleParts {
+  const cur = toModulePost(post, siteId, locale)
+  const sibsRaw = (extra?.siblings ?? []).map(p => toModulePost(p, siteId, locale))
+  // Ensure the current post is present, then order newest→oldest so prev/next is
+  // correct regardless of how the route fetched the neighbours.
+  const merged = sibsRaw.some(s => s.id === cur.id) ? sibsRaw.slice() : [...sibsRaw, cur]
+  merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  return buildArticleModuleParts(theme?.modules ?? null, {
+    post: cur,
+    contentHtml,
+    siblings: merged,
+    unlocked: extra?.unlocked ?? true,
+    locale,
+    h: moduleHelpers(locale),
+  })
 }
 
 // ─── Body builders (shared by full-page render AND the embeddable fragment) ───
@@ -941,7 +1067,7 @@ ${safeInner}
 // OUR blog markup for the listing (the .carma-root <main>). Returned WITHOUT the
 // shadow host wrapper so it can be reused both inside renderBlogHost (full page)
 // and inside the embed loader's own shadow root (fragment).
-function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale): string {
+function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale, parts: ListingModuleParts): string {
   const tokens = tokensOf(theme)
   const available = LOCALES.filter(l => posts.some(p => postLocales(p).includes(l)))
   const urlForLocale = (l: Locale) => listingUrl(siteId, l)
@@ -961,27 +1087,35 @@ function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts:
   const headStyle = hasImage ? ` style="background-image:url('${escapeAttr(tokens.headingImage!)}')"` : ''
   const head = `<div class="carma-section-head${hasImage ? ' has-image' : ''}"${headStyle}>${crumb}<h1 class="carma-section-title">${escapeHtml(sectionTitle)}</h1></div>`
 
-  return `<main class="carma-root carma-main">
+  return `${parts.top}
+<main class="carma-root carma-main">
 ${bodySwitcher}
 ${head}
+${parts.beforeFeed}
 ${feed}
-</main>`
+${parts.afterFeed}
+</main>
+${parts.overlays}`
 }
 
 // Full render body: the client's shell (LIGHT DOM) STITCHED around the blog
 // (SHADOW DOM) into one well-formed document, server-side.
 function listingBodyHtml(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale): string {
   const tokens = tokensOf(theme)
+  const parts = listingModuleParts(theme, siteId, posts, locale)
   const blog = renderBlogHost(
-    listingBlogInner(theme, siteName, siteId, posts, locale),
+    listingBlogInner(theme, siteName, siteId, posts, locale, parts),
     tokens,
-    buildNativeCardCss(theme?.blog_signature?.card),
+    // Native-card replication first, then the user-chosen structural feed layout,
+    // then the enabled Smart Modules' CSS — all inherit the brand --ct-* tokens.
+    buildNativeCardCss(theme?.blog_signature?.card) + feedLayoutCss(tokens.feedLayout) + parts.css,
   )
   return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
 }
 
 // OUR blog markup for the article view (the .carma-root <main>), sans shadow host.
-function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Locale): string {
+// `parts` carries the Smart Modules HTML + the (possibly paywalled) content.
+function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const loc = localizePost(post, locale)
   const s = RENDER_STRINGS[locale]
   const available = postLocales(post)
@@ -991,11 +1125,6 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
   // ?lang= juggling, no 404s, no slug↔URL drift.
   const urlForLocale = (l: Locale) => articleUrl(siteId, post, l)
   const bodySwitcher = buildLangSwitcher(available, locale, urlForLocale)
-
-  // Pre-fill TOC, then rewrite every <img> to a responsive <picture> with
-  // WebP/AVIF + srcset (CLS-safe). This is what gives "magazine-grade" image
-  // quality without touching the upload pipeline.
-  const contentHtml = transformContentImages(fillTableOfContents(getContentHtml(loc)))
 
   const featured = loc.featured_image
     ? `<figure class="carma-article-image-wrap">${responsiveFeaturedImage(loc.featured_image, loc.title)}</figure>`
@@ -1008,7 +1137,8 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
 
   const lede = loc.excerpt ? `<p class="carma-article-lede">${escapeHtml(loc.excerpt)}</p>` : ''
 
-  return `<main class="carma-root carma-main">
+  return `${parts.top}
+<main class="carma-root carma-main">
   <article class="carma-article">
     <a href="${escapeAttr(listingUrl(siteId, locale))}" class="carma-back" rel="up">${escapeHtml(s.back)}</a>
     ${bodySwitcher}
@@ -1017,17 +1147,28 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
       ${lede}
       <div class="carma-article-meta">${metaParts.join('<span>·</span>')}</div>
     </header>
+    ${parts.beforeContent}
     ${featured}
     <div class="carma-article-content">
-      ${contentHtml}
+      ${parts.content}
     </div>
+    ${parts.afterContent}
   </article>
+  ${parts.overlays}
 </main>`
 }
 
-function articleBodyHtml(theme: Theme, siteId: string, post: Post, locale: Locale): string {
+// Build the base content (TOC fill + responsive images), then run the modules
+// (paywall transform, related, etc.) so we compute the content exactly once.
+function articleSetup(theme: Theme, siteId: string, post: Post, locale: Locale, extra?: ArticleExtra): ArticleModuleParts {
+  const loc = localizePost(post, locale)
+  const baseContent = transformContentImages(fillTableOfContents(getContentHtml(loc)))
+  return articleModuleParts(theme, siteId, post, locale, baseContent, extra)
+}
+
+function articleBodyHtml(theme: Theme, siteId: string, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const tokens = tokensOf(theme)
-  const blog = renderBlogHost(articleBlogInner(theme, siteId, post, locale), tokens)
+  const blog = renderBlogHost(articleBlogInner(theme, siteId, post, locale, parts), tokens, parts.css)
   return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
 }
 
@@ -1049,15 +1190,21 @@ ${jsonLd}
 ${bodyOpenTag(theme)}
 ${listingBodyHtml(theme, siteName, siteId, posts, locale)}
 ${runtimeScript()}
+${modulesRuntimeScript(theme?.modules ?? null, siteId)}
 ${contrastGuardScript()}
 ${trackingScript(siteId, null, 'listing')}
 </body>
 </html>`
 }
 
-export function buildArticlePage(theme: Theme, siteName: string, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE): string {
+export function buildArticlePage(theme: Theme, siteName: string, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra): string {
   const tokens = tokensOf(theme)
   const loc = localizePost(post, locale)
+  // Compute the module parts ONCE here so the structured data uses the VISIBLE
+  // (post-paywall) content — a locked article must never leak its hidden body via
+  // JSON-LD / FAQ schema. When unlocked, parts.content is the full article.
+  const parts = articleSetup(theme, siteId, post, locale, extra)
+  const visibleContent = parts.content
   const m = (post.meta ?? {}) as Record<string, unknown>
   const seoTitle = loc.seo_title?.trim() || loc.title
   const description = loc.seo_description?.trim() || loc.excerpt || null
@@ -1090,7 +1237,8 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
       section: loc.categories?.[0] ?? null,
       keywords: loc.tags ?? null,
       // The prose renders in a Shadow DOM — ship the body as crawlable JSON-LD.
-      articleBody: htmlToPlainText(getContentHtml(loc)),
+      // VISIBLE content only: a paywalled article exposes just the free preview.
+      articleBody: htmlToPlainText(visibleContent),
     }),
     buildBreadcrumbJsonLd({
       listingUrl: listingHref,
@@ -1098,7 +1246,7 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
       articleUrl: articleHref,
       articleName: loc.title,
     }),
-    maybeBuildFaqJsonLd(getContentHtml(loc)),
+    maybeBuildFaqJsonLd(visibleContent),
   ].filter(Boolean).join('\n')
 
   return `<!doctype html>
@@ -1108,8 +1256,9 @@ ${buildHead(theme, `${seoTitle} · ${siteName}`, tokens, seo)}
 ${jsonLd}
 </head>
 ${bodyOpenTag(theme)}
-${articleBodyHtml(theme, siteId, post, locale)}
+${articleBodyHtml(theme, siteId, post, locale, parts)}
 ${runtimeScript()}
+${modulesRuntimeScript(theme?.modules ?? null, siteId)}
 ${contrastGuardScript()}
 ${trackingScript(siteId, post.id, 'article')}
 </body>
@@ -1138,17 +1287,21 @@ function fragmentCss(t: DesignTokens, extraCss = ''): string {
 }
 
 export function buildListingFragment(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE): RenderFragment {
+  const tokens = tokensOf(theme)
+  const parts = listingModuleParts(theme, siteId, posts, locale)
   return {
-    css: fragmentCss(tokensOf(theme), buildNativeCardCss(theme?.blog_signature?.card)),
-    html: listingBlogInner(theme, siteName, siteId, posts, locale),
+    css: fragmentCss(tokens, buildNativeCardCss(theme?.blog_signature?.card) + feedLayoutCss(tokens.feedLayout) + parts.css),
+    html: listingBlogInner(theme, siteName, siteId, posts, locale, parts),
     fonts: collectFontHrefs(theme),
   }
 }
 
-export function buildArticleFragment(theme: Theme, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE): RenderFragment {
+export function buildArticleFragment(theme: Theme, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra): RenderFragment {
+  const tokens = tokensOf(theme)
+  const parts = articleSetup(theme, siteId, post, locale, extra)
   return {
-    css: fragmentCss(tokensOf(theme)),
-    html: articleBlogInner(theme, siteId, post, locale),
+    css: fragmentCss(tokens, parts.css),
+    html: articleBlogInner(theme, siteId, post, locale, parts),
     fonts: collectFontHrefs(theme),
   }
 }

@@ -182,7 +182,8 @@ function pickLocale(url: string, declared: string | null | undefined, title: str
   // 2) URL prefix / ?lang= (e.g. /es/…).
   const fromUrl = detectLangFromUrl(url)
   if (fromUrl && isLocale(fromUrl)) return fromUrl
-  // 3) franc over the actual text.
+  // 3) Detect from the text — Catalan-first token rule, then franc (shared
+  //    src/lib/i18n/detect.ts, so imports get the same ca-bias as the editor).
   const det = detectLocale(`${title}\n${htmlToPlain(contentHtml)}`)
   if (det.locale) return det.locale
   // 4) Site default.
@@ -205,10 +206,12 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
 
-  let body: { urls?: string[]; siteId?: string; overwrite?: boolean; wpApiBase?: string; selectors?: Record<string, string> }
+  let body: { urls?: string[]; siteId?: string; overwrite?: boolean; wpApiBase?: string; selectors?: Record<string, string>; publish?: boolean }
   try { body = await request.json() } catch { return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 }) }
 
-  const { urls = [], siteId, overwrite = false, wpApiBase, selectors } = body
+  // Imported articles are PUBLISHED by default (the import is meant to bring a
+  // live blog over), unless the caller explicitly opts into drafts.
+  const { urls = [], siteId, overwrite = false, wpApiBase, selectors, publish = true } = body
   if (!siteId) return NextResponse.json({ error: 'siteId és obligatori' }, { status: 400 })
 
   // This route WRITES posts into `siteId`, so the caller must be a superadmin OR a
@@ -476,7 +479,7 @@ export async function POST(request: NextRequest) {
       // lang_group + path_key let a sibling imported in a LATER request find + merge
       // into this post. Stored on every import (cheap; only multilingual ones match).
       meta: { source_url: primaryUrl, language: primaryLocale, path_key: pk, ...(isMultilingual ? { lang_group: langGroup } : {}) },
-      is_published: false,
+      is_published: publish,
       default_locale: primaryLocale,
       i18n,
     }

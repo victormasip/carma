@@ -11,6 +11,18 @@ import type { HTMLElement } from 'node-html-parser'
 
 export type BlogLayout = 'grid' | 'list'
 export type BlogColumns = '2' | '3' | '4'
+// Structural feed presets (Phase 3). These change ONLY the layout of the article
+// feed — grid template, spacing, card frame, image aspect ratio — and NEVER the
+// brand: colours + fonts always come from the cloned `--ct-*` tokens. 'standard'
+// is the built-in look (no override). See src/lib/render/feedLayouts.ts.
+export type FeedLayout =
+  | 'standard'
+  | 'editorial'
+  | 'magazine'
+  | 'minimal'
+  | 'gridxl'
+  | 'overlay'
+  | 'compact'
 
 export type DesignTokens = {
   colorPrimary: string
@@ -31,6 +43,9 @@ export type DesignTokens = {
   // source site (always seeded from the defaults below).
   layout: BlogLayout
   columns: BlogColumns
+  // Structural feed preset (Phase 3) — layout only, inherits the cloned brand.
+  // Optional; absent/'standard' = the built-in look.
+  feedLayout?: FeedLayout
   // Blog/news heading styling — all optional, edited from the Theme Studio.
   sectionTitleColor?: string
   sectionTitleSize?: string        // e.g. '1.75rem'
@@ -51,6 +66,9 @@ export type DesignTokens = {
   headingLineHeight?: string       // e.g. '1.2'
   blockquoteBorderColor?: string   // border-left color, defaults to accent
   blockquoteStyle?: 'italic' | 'normal'
+  // ── "Look & Feel" preset marker (dashboard picker, src/lib/render/stylePresets.ts).
+  // Purely informational for the UI; the render only reads the tokens above.
+  stylePreset?: string
 }
 
 export const DEFAULT_TOKENS: DesignTokens = {

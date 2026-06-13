@@ -211,17 +211,24 @@ function makeSuggestion(options: SlashCommandOptions): Omit<SuggestionOptions<Co
       let component: ReactRenderer<SlashListRef, ListProps> | null = null
       let el: HTMLElement | null = null
 
-      const reposition = (clientRect?: (() => DOMRect | null) | null) => {
+      const reposition = (clientRect?: (() => DOMRect | null) | null, attempt = 0) => {
         if (!el || !clientRect) return
         const rect = clientRect()
-        if (!rect) return
+        // On the very first keystroke of a fresh editor the caret rect can be
+        // null/zero for a frame — bailing out left the menu pinned (hidden) at
+        // the 0,0 corner, i.e. "the slash menu doesn't work on line 1". Retry
+        // on the next frames until the caret has painted (bounded).
+        if (!rect || (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0)) {
+          if (attempt < 10) requestAnimationFrame(() => reposition(clientRect, attempt + 1))
+          return
+        }
         const virtual = { getBoundingClientRect: () => rect }
         computePosition(virtual, el, {
           strategy: 'fixed',
           placement: 'bottom-start',
           middleware: [offset(8), flip({ padding: 8 }), shift({ padding: 8 })],
         }).then(({ x, y }) => {
-          if (el) Object.assign(el.style, { left: `${x}px`, top: `${y}px` })
+          if (el) Object.assign(el.style, { left: `${x}px`, top: `${y}px`, visibility: 'visible' })
         })
       }
 
@@ -236,6 +243,9 @@ function makeSuggestion(options: SlashCommandOptions): Omit<SuggestionOptions<Co
           el.style.top = '0'
           el.style.left = '0'
           el.style.zIndex = '60'
+          // Stay invisible until the first successful positioning — never flash
+          // at the viewport corner while the caret rect settles.
+          el.style.visibility = 'hidden'
           el.appendChild(component.element)
           document.body.appendChild(el)
           reposition(props.clientRect)
@@ -246,6 +256,11 @@ function makeSuggestion(options: SlashCommandOptions): Omit<SuggestionOptions<Co
         },
         onKeyDown: (props) => {
           if (props.event.key === 'Escape') {
+            // Tear down the React renderer too — the old handler only removed
+            // the DOM node, leaking the component and leaving a half-open
+            // session that swallowed the NEXT "/" on the same line.
+            component?.destroy()
+            component = null
             el?.remove()
             el = null
             return true

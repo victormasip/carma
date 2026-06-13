@@ -100,6 +100,13 @@
   --radius-2xl:  28px;
 }
 
+/* Motion — one signature easing for the whole app. Referenced everywhere as
+   var(--ease-emphasis, fallback); defining it here makes the token authoritative
+   instead of every call-site silently using its own fallback copy. */
+:root {
+  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Light theme — warm paper, gold accent, calm contrast */
 :root {
   --c-bg:             #F9F8F6;
@@ -246,49 +253,59 @@ a[role="button"]:active {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-/* ── TipTap / ProseMirror editor styles — premium, distraction-free surface ── */
+/* ── TipTap / ProseMirror editor styles — premium, distraction-free surface ──
+   Honest WYSIWYG: measure (70ch), line-height (1.75), paragraph rhythm and the
+   heading ladder all MATCH the public render's prose CSS (theme.ts), so what a
+   writer composes is what their readers get. All colours ride the design-system
+   vars, which also makes the dark theme largely automatic (see the pruned
+   override block below). */
 .carma-editor .ProseMirror {
   outline: none;
   min-height: 440px;
-  max-width: 46rem;
+  max-width: 70ch;
   font-size: 1.0625rem;
-  line-height: 1.8;
-  color: #1c1917;
+  line-height: 1.75;
+  color: var(--c-text);
   letter-spacing: -0.003em;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  caret-color: var(--c-accent);
 }
-.carma-editor .ProseMirror ::selection { background: rgba(245, 188, 0, 0.22); }
+.carma-editor .ProseMirror ::selection { background: var(--c-accent-soft); }
 /* Elegant empty-node placeholder (Placeholder extension) */
 .carma-editor .ProseMirror .is-empty::before {
   content: attr(data-placeholder);
-  color: #cfcbc4;
+  color: var(--c-text-subtle);
+  opacity: 0.7;
   float: left;
   height: 0;
   pointer-events: none;
 }
-.carma-editor .ProseMirror p { margin: 0.85em 0; }
+.carma-editor .ProseMirror p { margin: 1.35em 0; text-wrap: pretty; }
 .carma-editor .ProseMirror p:first-child { margin-top: 0; }
 .carma-editor .ProseMirror > *:first-child { margin-top: 0; }
-.carma-editor .ProseMirror h1 { font-size: 2rem; font-weight: 800; margin: 1.4em 0 0.5em; line-height: 1.18; letter-spacing: -0.02em; }
-.carma-editor .ProseMirror h2 { font-size: 1.5rem; font-weight: 750; margin: 1.3em 0 0.45em; line-height: 1.25; letter-spacing: -0.015em; }
-.carma-editor .ProseMirror h3 { font-size: 1.2rem; font-weight: 700; margin: 1.15em 0 0.35em; line-height: 1.35; }
+.carma-editor .ProseMirror h1 { font-size: 2.75rem; font-weight: 800; margin: 1.1em 0 0.4em; line-height: 1.06; letter-spacing: -0.025em; text-wrap: balance; }
+.carma-editor .ProseMirror h2 { font-size: 1.65rem; font-weight: 750; margin: 1.5em 0 0.5em; line-height: 1.25; letter-spacing: -0.015em; text-wrap: balance; }
+.carma-editor .ProseMirror h3 { font-size: 1.35rem; font-weight: 700; margin: 1.4em 0 0.45em; line-height: 1.3; }
 .carma-editor .ProseMirror strong { font-weight: 700; }
 .carma-editor .ProseMirror em { font-style: italic; }
 .carma-editor .ProseMirror u { text-decoration: underline; }
 .carma-editor .ProseMirror s { text-decoration: line-through; }
-.carma-editor .ProseMirror a { color: #d9a400; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
-.carma-editor .ProseMirror a:hover { color: #a87f00; }
-.carma-editor .ProseMirror code { background: #f5f5f4; border-radius: 4px; padding: 0.1em 0.35em; font-family: ui-monospace, monospace; font-size: 0.85em; }
-.carma-editor .ProseMirror pre { background: #1e1e1e; color: #d4d4d4; border-radius: 0.75rem; padding: 1rem 1.15rem; overflow-x: auto; margin: 1.4em 0; font-size: 0.9em; line-height: 1.6; }
+.carma-editor .ProseMirror a { color: var(--c-accent-hover); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.carma-editor .ProseMirror a:hover { color: var(--c-accent); }
+.carma-editor .ProseMirror code { background: var(--c-surface-hover); border-radius: 5px; padding: 0.15em 0.4em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.875em; }
+/* Inverted slab — mirrors the render's token-inverted pre (bg=text, text=bg). */
+.carma-editor .ProseMirror pre { background: var(--c-text); color: var(--c-bg); border-radius: var(--radius-lg); padding: 1.1rem 1.3rem; overflow-x: auto; margin: 1.65em 0; font-size: 0.875rem; line-height: 1.65; }
 .carma-editor .ProseMirror pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
-.carma-editor .ProseMirror blockquote { border-left: 3px solid #f5bc00; margin: 1.4em 0; padding: 0.15em 0 0.15em 1.25em; color: #57534e; font-style: italic; font-size: 1.15em; }
-.carma-editor .ProseMirror ul { list-style: disc; padding-left: 1.4em; margin: 0.85em 0; }
-.carma-editor .ProseMirror ol { list-style: decimal; padding-left: 1.4em; margin: 0.85em 0; }
-.carma-editor .ProseMirror li { margin: 0.35em 0; }
+.carma-editor .ProseMirror blockquote { border-left: 3px solid var(--c-accent); margin: 1.85em 0; padding: 0.25em 0 0.25em 1.5em; color: var(--c-text); font-style: italic; font-size: 1.1em; line-height: 1.6; }
+.carma-editor .ProseMirror ul { list-style: disc; padding-left: 1.5em; margin: 1.15em 0; }
+.carma-editor .ProseMirror ol { list-style: decimal; padding-left: 1.5em; margin: 1.15em 0; }
+.carma-editor .ProseMirror li { margin: 0.4em 0; }
 .carma-editor .ProseMirror li p { margin: 0; }
-.carma-editor .ProseMirror hr { border: none; border-top: 2px solid #ececec; margin: 2em 0; }
-.carma-editor .ProseMirror img { max-width: 100%; border-radius: 0.75rem; margin: 1.5em 0; display: block; box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18); }
-.carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #f5bc00; outline-offset: 2px; }
+.carma-editor .ProseMirror li::marker { color: var(--c-accent); }
+/* Short centered editorial divider — exactly what the render ships. */
+.carma-editor .ProseMirror hr { border: none; border-top: 2px solid var(--c-border-strong); width: 88px; margin: 2.6em auto; }
+.carma-editor .ProseMirror img { max-width: 100%; border-radius: var(--radius-md); margin: 1.5em 0; display: block; box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18); }
+.carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid var(--c-accent); outline-offset: 2px; }
 
 /* Callout / highlight card */
 .carma-callout {
@@ -329,19 +346,19 @@ a[role="button"]:active {
 .carma-carousel-slide {
   position: relative; flex: 0 0 86%; max-width: 100%; aspect-ratio: 16 / 9;
   scroll-snap-align: center; cursor: zoom-in; border-radius: 0.85rem;
-  overflow: hidden; background: #f5f5f4;
+  overflow: hidden; background: var(--c-surface-hover);
 }
 .carma-carousel-slide img { width: 100%; height: 100%; object-fit: cover; margin: 0; border-radius: 0; box-shadow: none; }
 .carma-carousel-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
   display: flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; border-radius: 9999px; cursor: pointer;
-  background: #fff; color: #1c1917; border: 1px solid #e7e5e4;
+  background: var(--c-bg-elevated); color: var(--c-text); border: 1px solid var(--c-border-strong);
   box-shadow: 0 6px 18px -6px rgba(0,0,0,0.35);
 }
 .carma-carousel-arrow.prev { left: 8px; }
 .carma-carousel-arrow.next { right: 8px; }
-.carma-carousel-arrow:hover { background: #1c1917; color: #fff; }
+.carma-carousel-arrow:hover { background: var(--c-text); color: var(--c-bg); }
 .carma-gallery-remove {
   position: absolute; top: 8px; right: 8px; z-index: 2;
   display: flex; align-items: center; justify-content: center;
@@ -358,17 +375,17 @@ a[role="button"]:active {
   opacity: 0; transition: opacity 0.15s;
 }
 .carma-carousel-slide:hover .carma-gallery-zoom { opacity: 1; }
-.carma-gallery-add .upload { background: #fafaf9 !important; border: 1px solid #e7e5e4; color: #57534e !important; }
+.carma-gallery-add .upload { background: var(--c-surface-subtle) !important; border: 1px solid var(--c-border-strong); color: var(--c-text-muted) !important; }
 
 /* Captioned image (figure) — editor node view */
 .carma-editor .ProseMirror figure.carma-figure { margin: 1.6em 0; }
-.carma-editor .ProseMirror figure.carma-figure.is-selected { outline: 2px solid #f5bc00; outline-offset: 4px; border-radius: 0.5rem; }
-.carma-editor .ProseMirror figure.carma-figure img { margin: 0 0 0.5em; width: 100%; border-radius: 0.75rem; display: block; }
+.carma-editor .ProseMirror figure.carma-figure.is-selected { outline: 2px solid var(--c-accent); outline-offset: 4px; border-radius: 0.5rem; }
+.carma-editor .ProseMirror figure.carma-figure img { margin: 0 0 0.5em; width: 100%; border-radius: var(--radius-md); display: block; }
 .carma-editor .ProseMirror figure.carma-figure figcaption {
-  text-align: center; font-size: 0.85em; color: #78716c; font-style: italic; outline: none; min-height: 1.4em;
+  text-align: center; font-size: 0.85em; color: var(--c-text-muted); font-style: italic; outline: none; min-height: 1.4em;
 }
 .carma-editor .ProseMirror figure.carma-figure figcaption:empty::before {
-  content: 'Afegeix un peu de foto…'; color: #cfcbc4; font-style: italic; pointer-events: none;
+  content: 'Afegeix un peu de foto…'; color: var(--c-text-subtle); opacity: 0.7; font-style: italic; pointer-events: none;
 }
 
 /* Two-column grid — editor */
@@ -376,82 +393,57 @@ a[role="button"]:active {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.4em 0;
 }
 .carma-editor .ProseMirror .carma-column {
-  border: 1px dashed #e7e5e4; border-radius: 0.75rem; padding: 0.75rem 1rem; min-width: 0;
+  border: 1px dashed var(--c-border-strong); border-radius: var(--radius-md); padding: 0.75rem 1rem; min-width: 0;
 }
 .carma-editor .ProseMirror .carma-column > *:first-child { margin-top: 0; }
 .carma-editor .ProseMirror .carma-column > *:last-child { margin-bottom: 0; }
 
 /* Toggle / accordion — editor (body always visible so it stays editable) */
-.carma-editor .ProseMirror details.carma-toggle { border: 1px solid #e7e5e4; border-radius: 0.75rem; padding: 0.5rem 1.1rem; margin: 1.4em 0; background: #fafaf9; }
+.carma-editor .ProseMirror details.carma-toggle { border: 1px solid var(--c-border-strong); border-radius: var(--radius-md); padding: 0.5rem 1.1rem; margin: 1.4em 0; background: var(--c-surface-subtle); }
 .carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary { cursor: text; font-weight: 700; list-style: none; padding: 0.3rem 0; outline: none; }
 .carma-editor .ProseMirror details.carma-toggle > summary::-webkit-details-marker { display: none; }
-.carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary::before { content: '▸'; display: inline-block; margin-right: 0.5rem; color: #a8a29e; }
+.carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary::before { content: '▸'; display: inline-block; margin-right: 0.5rem; color: var(--c-text-subtle); }
 .carma-editor .ProseMirror details.carma-toggle > :not(summary) { display: block !important; }
 
 /* Table of contents — editor */
-.carma-toc-editor { margin: 1.5em 0; border: 1px solid #e7e5e4; border-left: 3px solid #f5bc00; border-radius: 0.75rem; padding: 0.9rem 1.1rem; background: #fafaf9; }
-.carma-toc-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #a8a29e; margin-bottom: 0.5rem; }
+.carma-toc-editor { margin: 1.5em 0; border: 1px solid var(--c-border-strong); border-left: 3px solid var(--c-accent); border-radius: var(--radius-md); padding: 0.9rem 1.1rem; background: var(--c-surface-subtle); }
+.carma-toc-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--c-text-subtle); margin-bottom: 0.5rem; }
 .carma-toc-editor ul { list-style: none; margin: 0; padding: 0; }
 .carma-toc-editor li { margin: 0.1rem 0; }
-.carma-toc-editor li button { cursor: pointer; background: none; border: none; padding: 0.15rem 0; font-size: 0.92rem; color: #57534e; text-align: left; }
-.carma-toc-editor li button:hover { color: #d9a400; text-decoration: underline; }
-.carma-toc-empty { font-size: 0.85rem; color: #a8a29e; margin: 0; }
+.carma-toc-editor li button { cursor: pointer; background: none; border: none; padding: 0.15rem 0; font-size: 0.92rem; color: var(--c-text-muted); text-align: left; }
+.carma-toc-editor li button:hover { color: var(--c-accent-hover); text-decoration: underline; }
+.carma-toc-empty { font-size: 0.85rem; color: var(--c-text-subtle); margin: 0; }
 
 /* CTA button — editor */
 .carma-cta-block { margin: 1.4em 0; }
-.carma-cta-block .carma-button { display: inline-block; background: #f5bc00; color: #fff !important; font-weight: 700; padding: 0.6rem 1.3rem; border-radius: 0.6rem; text-decoration: none !important; cursor: text; outline: none; }
+.carma-cta-block .carma-button { display: inline-block; background: var(--c-accent); color: var(--c-on-accent) !important; font-weight: 700; padding: 0.6rem 1.3rem; border-radius: var(--radius); text-decoration: none !important; cursor: text; outline: none; }
 .carma-cta-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-.carma-cta-href { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 200px; border: 1px solid #e7e5e4; border-radius: 0.5rem; padding: 0.25rem 0.6rem; background: #fff; }
-.carma-cta-href input { flex: 1; border: none; outline: none; font-size: 0.8rem; background: transparent; }
+.carma-cta-href { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 200px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); padding: 0.25rem 0.6rem; background: var(--c-bg-elevated); }
+.carma-cta-href input { flex: 1; border: none; outline: none; font-size: 0.8rem; background: transparent; color: var(--c-text); }
 .carma-cta-align { display: flex; gap: 0.25rem; }
-.carma-cta-align button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #e7e5e4; border-radius: 0.5rem; background: #fff; cursor: pointer; color: #78716c; }
-.carma-cta-align button.is-active { background: #f5bc00; border-color: #f5bc00; color: #fff; }
+.carma-cta-align button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); background: var(--c-bg-elevated); cursor: pointer; color: var(--c-text-muted); }
+.carma-cta-align button.is-active { background: var(--c-accent); border-color: var(--c-accent); color: var(--c-on-accent); }
 .carma-gallery-empty {
   display: flex; align-items: center; gap: 0.5rem;
-  padding: 1.5rem; border: 1px dashed #d6d3d1; border-radius: 0.75rem;
-  color: #a8a29e; font-size: 0.9rem; font-weight: 600;
+  padding: 1.5rem; border: 1px dashed var(--c-border-strong); border-radius: var(--radius-md);
+  color: var(--c-text-subtle); font-size: 0.9rem; font-weight: 600;
 }
 .carma-gallery-add { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .carma-gallery-add input {
   flex: 1; padding: 0.5rem 0.75rem; font-size: 0.8rem;
-  border: 1px solid #e7e5e4; border-radius: 0.6rem; outline: none; background: #fafaf9;
+  border: 1px solid var(--c-border-strong); border-radius: var(--radius-sm); outline: none; background: var(--c-surface-subtle); color: var(--c-text);
 }
-.carma-gallery-add input:focus { border-color: #f5bc00; background: #fff; }
+.carma-gallery-add input:focus { border-color: var(--c-accent); background: var(--c-bg-elevated); }
 .carma-gallery-add button {
   display: flex; align-items: center; justify-content: center;
-  width: 36px; border-radius: 0.6rem; background: #f5bc00; color: #fff; cursor: pointer;
+  width: 36px; border-radius: var(--radius-sm); background: var(--c-accent); color: var(--c-on-accent); cursor: pointer;
 }
 
 /* ── Editor dark-mode overrides ─────────────────────────────────────────────
-   Only the chrome around the writing surface flips with the theme; the public
-   blog (.carma-root rendered on /render) stays driven by the customer's tokens
-   and is unaffected. */
-[data-theme="dark"] .carma-editor .ProseMirror { color: #f5f5f4; }
-[data-theme="dark"] .carma-editor .ProseMirror ::selection { background: rgba(255, 206, 46, 0.28); }
-[data-theme="dark"] .carma-editor .ProseMirror .is-empty::before { color: #4b4640; }
-[data-theme="dark"] .carma-editor .ProseMirror a { color: #ffce2e; }
-[data-theme="dark"] .carma-editor .ProseMirror a:hover { color: #ffdc66; }
-[data-theme="dark"] .carma-editor .ProseMirror code { background: rgba(255,255,255,0.08); color: #f5f5f4; }
-[data-theme="dark"] .carma-editor .ProseMirror blockquote { color: #a8a29e; border-color: #ffce2e; }
-[data-theme="dark"] .carma-editor .ProseMirror hr { border-color: rgba(255,255,255,0.08); }
-[data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption { color: #a8a29e; }
-[data-theme="dark"] .carma-editor .ProseMirror figure.carma-figure figcaption:empty::before { color: #4b4640; }
-[data-theme="dark"] .carma-editor .ProseMirror .carma-column { border-color: rgba(255,255,255,0.10); }
-[data-theme="dark"] .carma-editor .ProseMirror details.carma-toggle { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
-[data-theme="dark"] .carma-editor .ProseMirror details.carma-toggle > summary.carma-toggle-summary::before { color: #6b655d; }
-[data-theme="dark"] .carma-toc-editor { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
-[data-theme="dark"] .carma-toc-editor li button { color: #a8a29e; }
-[data-theme="dark"] .carma-toc-head { color: #6b655d; }
-[data-theme="dark"] .carma-toc-empty { color: #6b655d; }
-[data-theme="dark"] .carma-gallery-empty { color: #6b655d; border-color: rgba(255,255,255,0.14); }
-[data-theme="dark"] .carma-gallery-add input { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); color: #f5f5f4; }
-[data-theme="dark"] .carma-gallery-add input:focus { background: rgba(255,255,255,0.06); border-color: #ffce2e; }
-[data-theme="dark"] .carma-carousel-arrow { background: #25221f; color: #f5f5f4; border-color: rgba(255,255,255,0.14); }
-[data-theme="dark"] .carma-carousel-arrow:hover { background: #f5f5f4; color: #1c1917; }
-[data-theme="dark"] .carma-carousel-slide { background: rgba(255,255,255,0.05); }
-[data-theme="dark"] .carma-cta-href { background: #25221f; border-color: rgba(255,255,255,0.10); }
-[data-theme="dark"] .carma-cta-align button { background: #25221f; border-color: rgba(255,255,255,0.10); color: #a8a29e; }
-/* Callouts in dark mode: lower-saturation tinted surfaces with light text */
+   The editor surface now rides the design-system vars, so flipping the theme
+   re-skins it automatically — the old per-rule hex overrides are gone. Only the
+   callout variant tints remain: their light values are hard-coded pastels, so
+   dark needs explicit lower-saturation surfaces with light text. */
 [data-theme="dark"] .carma-callout[data-variant="info"]    { background: rgba(59,130,246,0.10);  border-color: rgba(59,130,246,0.30);  color: #cfe2ff; }
 [data-theme="dark"] .carma-callout[data-variant="success"] { background: rgba(16,185,129,0.10);  border-color: rgba(16,185,129,0.30);  color: #b6f0d8; }
 [data-theme="dark"] .carma-callout[data-variant="warning"] { background: rgba(245,158,11,0.10);  border-color: rgba(245,158,11,0.30);  color: #fde2a3; }
@@ -627,9 +619,12 @@ a[role="button"]:active {
 }
 @keyframes caret-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
 
-/* Card hover lift — bento + site cards. Lifts AND warms with a soft gold glow. */
+/* Card hover lift — bento + site cards. Lifts AND warms with a soft gold glow.
+   :focus-within gives keyboard users the same depth cue as mouse hover (cards
+   are link-stretched, so tabbing into one should feel identical). */
 .lift { transition: transform .35s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)), box-shadow .35s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)); }
-.lift:hover { transform: translateY(-5px); box-shadow: 0 22px 50px -24px rgba(28,25,23,0.30), 0 0 34px -12px rgba(245,188,0,0.40); }
+.lift:hover, .lift:focus-within { transform: translateY(-5px); box-shadow: 0 22px 50px -24px rgba(28,25,23,0.30), 0 0 34px -12px rgba(245,188,0,0.40); }
+[data-theme="dark"] .lift:hover, [data-theme="dark"] .lift:focus-within { box-shadow: 0 22px 50px -20px rgba(0,0,0,0.6), 0 0 34px -12px rgba(255,206,46,0.30); }
 
 /* Word-by-word hero headline stagger. */
 .hero-word { display: inline-block; opacity: 0; transform: translateY(28px); animation: hero-word-in 0.85s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)) forwards; }
@@ -641,8 +636,37 @@ section[id] { scroll-margin-top: 110px; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
+/* ════════════════════════════════════════════════════════════════════════════
+ * SKELETON SHIMMER — premium loading placeholder (no layout shift).
+ * A soft light band sweeps across a neutral surface. Pair `.skeleton` with a
+ * sized box + border-radius. Falls back to a calm static surface when motion
+ * is reduced.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.skeleton { position: relative; overflow: hidden; background: color-mix(in oklab, var(--color-muted) 16%, var(--color-bg)); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+[data-theme="dark"] .skeleton { background: color-mix(in oklab, var(--color-muted) 16%, var(--color-bg-elevated)); }
+[data-theme="dark"] .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent); }
+@keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * ZEN MOTION — the calm, breathing pacing of the client onboarding capture.
+ * One indicator, gentle transitions, nothing frantic. Used by ZenCaptureModal.
+ * ══════════════════════════════════════════════════════════════════════════ */
+@keyframes zen-breathe { 0%, 100% { transform: scale(1); opacity: .45; } 50% { transform: scale(1.09); opacity: .8; } }
+.zen-breathe { animation: zen-breathe 3.6s ease-in-out infinite; }
+@keyframes zen-fade-up { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+.zen-fade-up { animation: zen-fade-up .55s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)); }
+@keyframes zen-pop { 0% { transform: scale(0.55); opacity: 0; } 60% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+.zen-pop { animation: zen-pop .6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1; transform: none; transition: none; }
   .halo-drift-a, .halo-drift-b, .shimmer-gold, .hero-word, .btn-gold { animation: none !important; }
   .hero-word { opacity: 1; transform: none; }
+  .skeleton::after { display: none; }
+  .zen-breathe { animation: none; opacity: .6; }
 }

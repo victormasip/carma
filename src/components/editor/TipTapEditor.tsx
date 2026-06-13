@@ -62,14 +62,21 @@ function insertImageFiles(
   return true
 }
 
+type CaretPos = { from: number; to: number }
+
 type Props = {
   initialHtml?: string
   onChange: (html: string) => void
   placeholder?: string
   siteId: string
+  /** Continuously mirrors the live selection (parent-owned ref, no re-renders). */
+  selectionRef?: React.MutableRefObject<CaretPos | null>
+  /** One-shot caret restore on mount — set by the parent right before a
+      content-identical remount (the auto language relabel), consumed here. */
+  restoreCaretRef?: React.MutableRefObject<CaretPos | null>
 }
 
-export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId }: Props) {
+export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef }: Props) {
   const { toast } = useToast()
   const [linkUrl, setLinkUrl] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
@@ -129,11 +136,37 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML())
     },
+    onSelectionUpdate: ({ editor }) => {
+      if (selectionRef) {
+        selectionRef.current = { from: editor.state.selection.from, to: editor.state.selection.to }
+      }
+    },
+    onCreate: ({ editor }) => {
+      // Auto language relabel remounts this component with IDENTICAL content;
+      // restoring the stashed caret makes the switch invisible to the writer.
+      const caret = restoreCaretRef?.current
+      if (caret) {
+        restoreCaretRef.current = null
+        const max = editor.state.doc.content.size
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: Math.min(caret.from, max), to: Math.min(caret.to, max) })
+          .run()
+      }
+    },
   })
 
+  // Seed the initial document EXACTLY ONCE. The old guard (`editor.isEmpty`)
+  // re-ran setContent on every parent re-render while the doc was empty —
+  // autosave/status re-renders arrive within ~1s, and each setContent resets
+  // the selection and tears down any open suggestion session. That killed the
+  // "/" menu precisely on the first empty line.
+  const seededRef = useRef(false)
   useEffect(() => {
     editorRef.current = editor
-    if (editor && initialHtml && editor.isEmpty) {
+    if (editor && initialHtml && !seededRef.current && editor.isEmpty) {
+      seededRef.current = true
       editor.commands.setContent(initialHtml)
     }
   }, [editor, initialHtml])
