@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, FileText, Search, Upload, Send, X, EyeOff,
-  ChevronLeft, ChevronRight, Loader2, Sparkles, PenLine,
+  ChevronLeft, ChevronRight, Loader2, Sparkles, PenLine, Crown,
 } from 'lucide-react'
 import {
   deletePost, togglePublish, togglePublishBulk, deletePostsBulk, updatePostFields,
@@ -13,10 +13,11 @@ import {
 } from '@/lib/actions/posts'
 import { uploadImage } from '@/lib/upload'
 import { useToast } from '@/components/ui/Toast'
-import { useConfirm } from '@/components/ui/Modal'
+import { Modal, ModalClose, useConfirm } from '@/components/ui/Modal'
 import { useKeyedSaveState } from '@/components/ui/SaveStatus'
 import Button from '@/components/ui/Button'
 import { Input } from '@/components/ui/input'
+import { PremiumPanel } from './PremiumGate'
 import ArticleCard from './ArticleCard'
 
 type Filter = 'all' | 'published' | 'draft'
@@ -40,6 +41,7 @@ export default function PostsManager({
   siteName,
   initialPosts,
   initialMeta,
+  isSuperAdmin = false,
   onImport,
 }: {
   siteId: string
@@ -62,10 +64,14 @@ export default function PostsManager({
   // Per-card background-save indicator (saving → saved ✓ → idle, or error).
   const save = useKeyedSaveState()
   const [generating, setGenerating] = useState(false)
+  const [aiBlocked, setAiBlocked] = useState(false)
 
   // "Crea el primer article amb IA" — analyzes the site's niche and writes a draft,
-  // then drops the user into the editor to review and publish.
+  // then drops the user into the editor to review and publish. PREMIUM-gated: a
+  // free user gets the upgrade modal (the server action is the authoritative gate;
+  // this just avoids a wasted round-trip and surfaces the upsell).
   const handleGenerateAI = async () => {
+    if (!isSuperAdmin) { setAiBlocked(true); return }
     setGenerating(true)
     const res = await generateAndCreateArticle(siteId)
     setGenerating(false)
@@ -327,7 +333,7 @@ export default function PostsManager({
             title="Genera un article complet i optimitzat per SEO amb IA"
             className="cursor-pointer flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-on-accent bg-gradient-to-br from-accent to-accent-hover rounded-xl shadow-card hover:shadow-pop hover:opacity-95 transition-all disabled:opacity-60"
           >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSuperAdmin ? <Sparkles className="w-4 h-4" /> : <Crown className="w-4 h-4" />}
             {generating ? 'Generant…' : 'Genera amb IA'}
           </button>
           <Link
@@ -481,6 +487,26 @@ export default function PostsManager({
           onHide={() => handleBulkPublish(false)}
           onDelete={handleBulkDelete}
         />
+      )}
+
+      {/* Premium upsell — a free user clicking "Genera amb IA" lands here, so the
+          expensive Opus call stays behind the paywall (never burns API credits). */}
+      {aiBlocked && (
+        <Modal open onClose={() => setAiBlocked(false)} size="lg">
+          <div className="relative">
+            <div className="absolute top-3 right-3 z-20"><ModalClose onClose={() => setAiBlocked(false)} /></div>
+            <PremiumPanel
+              feature="Article SEO amb IA"
+              description="La IA analitza el teu web, dedueix el teu nínxol i la teva competència, i escriu un article complet i optimitzat per a SEO, llest per publicar."
+              perks={[
+                'Article complet de 700–1100 paraules optimitzat per SEO',
+                'Analitza el teu web i el teu sector automàticament',
+                'Títol, metadades, paraula clau, categories i etiquetes',
+                'Traducció a tots els idiomes amb IA',
+              ]}
+            />
+          </div>
+        </Modal>
       )}
     </div>
   )

@@ -128,7 +128,7 @@ function DeleteSiteModal({
         )}
         <div className="flex gap-2 justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel·lar</Button>
-          <Button variant="danger" onClick={handleDelete} loading={loading}>Sí, eliminar</Button>
+          <Button variant="danger" onClick={handleDelete} loading={loading}>{loading ? 'Eliminant…' : 'Sí, eliminar'}</Button>
         </div>
       </div>
     </Modal>

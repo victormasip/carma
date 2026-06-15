@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import ApiDocsCard from './ApiDocsCard'
+import WordPressConnectCard from './WordPressConnectCard'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
@@ -79,6 +80,11 @@ const SECTION_DEFS: SectionDef[] = [
   { key: 'usuaris',  label: 'Usuaris',  desc: 'Equip',         icon: Users, premium: true },
 ]
 
+// Smart Modules are a core MVP requirement — shown to ALL users (clients included).
+// (The hide-from-clients experiment was reverted per CEO decision; the flag stays
+// as a kill-switch but defaults ON.)
+const CLIENT_MODULES_ENABLED = true
+
 export default function SiteDetailClient({
   siteId, siteName, siteCreatedAt, apiKey, subdomain,
   isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
@@ -86,7 +92,10 @@ export default function SiteDetailClient({
   initialModules = null, previewPostSlug,
 }: Props) {
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab)
+  // Hide the Smart Modules tab from clients for the MVP (see CLIENT_MODULES_ENABLED).
+  const hideModules = !isSuperAdmin && !CLIENT_MODULES_ENABLED
+  const coerceTab = (t: TabKey): TabKey => (hideModules && t === 'moduls' ? 'articles' : t)
+  const [activeTab, setActiveTab] = useState<TabKey>(coerceTab(defaultTab))
   const [showImport, setShowImport] = useState(false)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
@@ -105,12 +114,13 @@ export default function SiteDetailClient({
   const [syncedDefault, setSyncedDefault] = useState(defaultTab)
   if (defaultTab !== syncedDefault) {
     setSyncedDefault(defaultTab)
-    setActiveTab(defaultTab)
+    setActiveTab(coerceTab(defaultTab))
   }
 
   const isLocked = (s: SectionDef) => !isSuperAdmin && !!s.premium
 
-  const switchTab = (tab: TabKey) => {
+  const switchTab = (rawTab: TabKey) => {
+    const tab = coerceTab(rawTab)
     setActiveTab(tab)
     // Articles is the default workspace, so it owns the clean URL; the rest carry ?tab=.
     const url = tab === 'articles'
@@ -267,7 +277,7 @@ export default function SiteDetailClient({
               </ErrorBoundary>
             )}
 
-            {activeTab === 'moduls' && (
+            {activeTab === 'moduls' && !hideModules && (
               <ErrorBoundary label="El panell de mòduls ha tingut un error">
                 <Suspense fallback={<SectionSkeleton />}>
                   <ModulesManager
@@ -282,7 +292,7 @@ export default function SiteDetailClient({
 
             {activeTab === 'connexio' && (
               isSuperAdmin
-                ? <ConnexioTab siteId={siteId} apiKey={apiKey} />
+                ? <ConnexioTab siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
                 : <PremiumPanel
                     feature="Connexió i API"
                     description="Connecta el teu blog al teu lloc web amb la nostra API i els embeds en directe. Disponible al pla Premium."
@@ -401,7 +411,8 @@ function SectionSkeleton() {
 // borders), with the Premium-only surfaces tucked into a quiet secondary row so
 // they stay reachable (each shows its upsell) without competing for attention.
 function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) => void }) {
-  const core = SECTION_DEFS.filter(s => !s.premium)
+  // Smart Modules is hidden from clients for the MVP (CLIENT_MODULES_ENABLED).
+  const core = SECTION_DEFS.filter(s => !s.premium && (CLIENT_MODULES_ENABLED || s.key !== 'moduls'))
   const premium = SECTION_DEFS.filter(s => s.premium)
   return (
     <div className="space-y-3">
@@ -464,10 +475,11 @@ function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: 
   )
 }
 
-function ConnexioTab({ siteId, apiKey }: { siteId: string; apiKey: string }) {
+function ConnexioTab({ siteId, apiKey, subdomain }: { siteId: string; apiKey: string; subdomain?: string }) {
   const { hasTheme, detectedFramework, detectedHosting } = useThemeStudio()
   return (
     <div className="space-y-4">
+      <WordPressConnectCard siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
       <LiveEmbedCard />
       <ApiDocsCard
         apiKey={apiKey}

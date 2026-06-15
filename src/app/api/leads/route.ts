@@ -16,6 +16,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuid } from '@/lib/analytics/track'
+import { rateLimit, clientIp } from '@/lib/ratelimit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,14 @@ export function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
+  // Public, unauthenticated write surface → per-IP rate limit to curb spam/abuse.
+  const rl = rateLimit(`leads:${clientIp(request)}`, 20, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: 'Massa peticions. Espera un moment i torna-ho a provar.' },
+      { status: 429, headers: { ...CORS, 'Retry-After': String(rl.retryAfter) } },
+    )
+  }
   try {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
     if (!body) return NextResponse.json({ ok: false, error: 'Bad request' }, { status: 400, headers: CORS })

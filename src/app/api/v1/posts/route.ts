@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { rateLimit, clientIp } from '@/lib/ratelimit'
 
 // Public headless API — consumed cross-origin from client websites (browser
 // fetch + server-side). Auth is per-request via the x-api-key header (no
@@ -14,6 +15,16 @@ const CORS_HEADERS = {
 function json(data: unknown, init?: { status?: number }) {
   return NextResponse.json(data, { status: init?.status ?? 200, headers: CORS_HEADERS })
 }
+
+function tooMany(retryAfter: number) {
+  return NextResponse.json(
+    { error: 'Massa peticions. Espera un moment.' },
+    { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': String(retryAfter) } },
+  )
+}
+
+// Max posts accepted in a single bulk POST — bounds payload size + DB work.
+const MAX_BULK_POSTS = 100
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
@@ -46,6 +57,8 @@ async function authenticate(request: NextRequest): Promise<AuthOk | AuthErr> {
 }
 
 export async function GET(request: NextRequest) {
+  const rl = rateLimit(`v1:${clientIp(request)}`, 60, 60_000)
+  if (!rl.ok) return tooMany(rl.retryAfter)
   const auth = await authenticate(request)
   if ('error' in auth) return auth.error
   const { site, supabase } = auth
@@ -90,6 +103,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = rateLimit(`v1:${clientIp(request)}`, 60, 60_000)
+  if (!rl.ok) return tooMany(rl.retryAfter)
   const auth = await authenticate(request)
   if ('error' in auth) return auth.error
   const { site, supabase } = auth
@@ -105,6 +120,13 @@ export async function POST(request: NextRequest) {
 
   if (legacyPosts.length === 0) {
     return json({ error: "No s'han enviat dades per importar" }, { status: 400 })
+  }
+
+  if (legacyPosts.length > MAX_BULK_POSTS) {
+    return json(
+      { error: `Massa articles en una sola petició (màxim ${MAX_BULK_POSTS}). Divideix-ho en lots.` },
+      { status: 400 },
+    )
   }
 
   const postsToInsert = legacyPosts.map((post: Record<string, unknown>) => ({

@@ -53,8 +53,8 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
       return
     }
 
-    handleClose()
-    setLoading(false)
+    // Keep the button in its loading state through the navigation so the modal
+    // never looks "done but nothing happened" while the new site page loads.
     router.push(`/dashboard/sites/${result.id}`)
   }
 
@@ -166,7 +166,7 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
                 Cancel·lar
               </Button>
               <Button type="submit" loading={loading}>
-                Crear Lloc
+                {loading ? 'Creant el lloc…' : 'Crear Lloc'}
               </Button>
             </div>
           </form>

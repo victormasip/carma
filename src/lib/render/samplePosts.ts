@@ -52,5 +52,85 @@ export function buildSamplePosts(locale: Locale, authorName = 'Carma') {
     author_name: authorName,
     created_at: new Date(Date.now() - i * 3 * 86_400_000).toISOString(),
     is_published: true,
+    demo: true,
   }))
 }
+
+// ── Sample ARTICLE (rich body) ────────────────────────────────────────────────
+// Used by the article render in preview mode (`?preview`) when a site has no
+// published post yet, so the dashboard's Smart-Modules ARTICLE preview (table of
+// contents, reading progress, paywall, related, author card, share…) always has a
+// real article to render against. Headings give the TOC something to index; the
+// several paragraphs give reading-time + paywall preview blocks real content.
+
+type ArticleSample = { title: string; excerpt: string; cat: string; tags: string[]; html: string }
+
+const ARTICLE_SAMPLES: Record<Locale, ArticleSample> = {
+  ca: {
+    title: 'Com construir una marca editorial que perduri',
+    excerpt: 'Identitat, veu i constància: la guia pràctica per fer que cada article reforci la teva marca.',
+    cat: 'Estratègia',
+    tags: ['marca', 'contingut', 'seo'],
+    html: `<p>Una marca editorial sòlida no es construeix amb un article, sinó amb la suma de molts. Aquesta és una mostra de com es veurà el teu contingut amb els mòduls actius.</p>
+<h2>La veu de la teva marca</h2>
+<p>El to de veu és el fil invisible que connecta tots els teus articles. Ha de ser reconeixible al primer paràgraf i coherent fins a l'últim.</p>
+<p>Defineix tres adjectius que descriguin com vols sonar i revisa cada text contra ells abans de publicar.</p>
+<h3>Constància per sobre d'intensitat</h3>
+<p>Publicar amb regularitat val més que publicar molt de cop. El teu públic aprèn a esperar-te, i els cercadors premien la freqüència sostinguda.</p>
+<h2>Mesura el que funciona</h2>
+<p>No tot el contingut rendeix igual. Mira quins temes generen més lectura i dobla l'aposta pel que funciona.</p>
+<p>Una bona estratègia editorial és, sobretot, un bon sistema d'aprenentatge continu.</p>`,
+  },
+  es: {
+    title: 'Cómo construir una marca editorial que perdure',
+    excerpt: 'Identidad, voz y constancia: la guía práctica para que cada artículo refuerce tu marca.',
+    cat: 'Estrategia',
+    tags: ['marca', 'contenido', 'seo'],
+    html: `<p>Una marca editorial sólida no se construye con un artículo, sino con la suma de muchos. Esta es una muestra de cómo se verá tu contenido con los módulos activos.</p>
+<h2>La voz de tu marca</h2>
+<p>El tono de voz es el hilo invisible que conecta todos tus artículos. Debe ser reconocible en el primer párrafo y coherente hasta el último.</p>
+<p>Define tres adjetivos que describan cómo quieres sonar y revisa cada texto contra ellos antes de publicar.</p>
+<h3>Constancia por encima de intensidad</h3>
+<p>Publicar con regularidad vale más que publicar mucho de golpe. Tu público aprende a esperarte y los buscadores premian la frecuencia sostenida.</p>
+<h2>Mide lo que funciona</h2>
+<p>No todo el contenido rinde igual. Observa qué temas generan más lectura y redobla la apuesta por lo que funciona.</p>
+<p>Una buena estrategia editorial es, sobre todo, un buen sistema de aprendizaje continuo.</p>`,
+  },
+  en: {
+    title: 'How to build an editorial brand that lasts',
+    excerpt: 'Identity, voice and consistency: the practical guide to make every article strengthen your brand.',
+    cat: 'Strategy',
+    tags: ['brand', 'content', 'seo'],
+    html: `<p>A strong editorial brand isn't built with one article, but with the sum of many. This is a sample of how your content will look with the modules turned on.</p>
+<h2>Your brand voice</h2>
+<p>Tone of voice is the invisible thread connecting all your articles. It should be recognizable by the first paragraph and consistent to the last.</p>
+<p>Pick three adjectives that describe how you want to sound, and check every piece against them before publishing.</p>
+<h3>Consistency over intensity</h3>
+<p>Publishing regularly beats publishing a lot at once. Your audience learns to expect you, and search engines reward sustained frequency.</p>
+<h2>Measure what works</h2>
+<p>Not all content performs the same. Watch which topics drive the most reading and double down on what works.</p>
+<p>A good editorial strategy is, above all, a good system for continuous learning.</p>`,
+  },
+}
+
+export function buildSampleArticle(locale: Locale, authorName = 'Carma') {
+  const a = ARTICLE_SAMPLES[locale] ?? ARTICLE_SAMPLES.ca
+  return {
+    id: 'sample-article',
+    title: a.title,
+    slug: SAMPLE_ARTICLE_SLUG,
+    content: { html: a.html },
+    excerpt: a.excerpt,
+    featured_image: 'https://picsum.photos/seed/carma-article/1200/675',
+    categories: [a.cat],
+    tags: a.tags,
+    author_name: authorName,
+    created_at: new Date().toISOString(),
+    is_published: true,
+    demo: true,
+  }
+}
+
+/** Sentinel slug the dashboard uses to request the article preview when the site
+ *  has no published post yet. The article render serves the sample for it. */
+export const SAMPLE_ARTICLE_SLUG = '__carma_demo__'

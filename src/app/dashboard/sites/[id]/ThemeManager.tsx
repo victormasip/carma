@@ -10,7 +10,7 @@ import {
 import { useRef, useEffect, useState, type ReactNode, type CSSProperties } from 'react'
 import { type DesignTokens, type BlogColumns } from '@/lib/scrape/tokens'
 import { FEED_LAYOUTS } from '@/lib/render/feedLayouts'
-import { STYLE_PRESETS, type StylePreset } from '@/lib/render/stylePresets'
+import { LOOK_PRESETS, type LookPreset, type GlyphKind } from '@/lib/render/lookPresets'
 import { LOCALE_META, type Locale } from '@/lib/i18n/config'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm, Modal, ModalClose } from '@/components/ui/Modal'
@@ -243,10 +243,11 @@ export default function ThemeManager({ isSuperAdmin }: { isSuperAdmin: boolean }
           </div>
         )}
 
-      {/* Look & Feel presets — the one-click "design tool" path. Changes the
-          blog's whole personality without ever touching the captured brand
-          (colors/fonts stay from the clone). */}
-      <StylePresetsPanel tokens={tokens} setToken={setToken} />
+      {/* Look & Feel — ONE unified, highly-visual picker that sets layout + style
+          together (replaces the old separate "Estil del blog" + "Estil del feed"
+          controls). Never touches the captured brand: colors/fonts stay from the
+          clone. */}
+      <LookFeelPanel tokens={tokens} setToken={setToken} />
 
       {/* The detailed accordion is the pro path: superadmins see it directly;
           clients get it tucked behind "Ajustos avançats" so the default view
@@ -907,21 +908,11 @@ function LayoutPanel({
   const feed = tokens.feedLayout ?? 'standard'
   return (
     <div className="space-y-5">
-      {/* Structural feed presets — change only the layout, never the brand. */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Estil del feed</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <FeedOption label="Estàndard" active={feed === 'standard'} onClick={() => setToken('feedLayout', 'standard')} />
-          {FEED_LAYOUTS.map(l => (
-            <FeedOption key={l.id} label={l.name} active={feed === l.id} onClick={() => setToken('feedLayout', l.id)} />
-          ))}
-        </div>
-        <p className="text-xs text-subtle mt-2 leading-relaxed">
-          Només canvia la disposició dels articles. Manté els colors i les tipografies de la teva marca.
-        </p>
-      </div>
+      <p className="text-xs text-subtle leading-relaxed">
+        L&apos;aspecte general (disposició + estil) es tria a «Aspecte i estil», a dalt. Aquí pots afinar la graella quan fas servir l&apos;aspecte Predeterminat.
+      </p>
 
-      {/* Grid/list + columns apply to the Estàndard layout (the presets define
+      {/* Grid/list + columns apply to the Estàndard look (the other looks define
           their own structure). */}
       {feed === 'standard' && (
         <>
@@ -961,23 +952,6 @@ function LayoutPanel({
         </>
       )}
     </div>
-  )
-}
-
-function FeedOption({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'cursor-pointer h-10 rounded-lg text-sm font-semibold border transition-colors px-2',
-        active
-          ? 'bg-accent border-accent text-on-accent'
-          : 'bg-surface-subtle border-border text-muted hover:bg-surface-hover hover:text-text',
-      )}
-    >
-      {label}
-    </button>
   )
 }
 
@@ -1233,73 +1207,144 @@ function MaybeAdvanced({ advanced, children }: { advanced: boolean; children: Re
   )
 }
 
-/** Tiny abstract preview: a title bar + two text bars whose weight/radius hint
-    at the preset's personality. Pure CSS, no images. */
-function PresetGlyph({ preset }: { preset: StylePreset }) {
-  const r = preset.patch.radius ?? '10px'
-  const w = preset.patch.headingWeight ?? '700'
-  const heavy = Number(w) >= 750
+/** Layout-accurate abstract mockup for a Look card — instant visual feedback of
+    what the feed becomes. Pure CSS, no images. */
+function LookGlyph({ kind }: { kind: GlyphKind }) {
+  const box = 'rounded-[3px] bg-text/15'
+  const line = 'rounded-full bg-text/25'
+  if (kind === 'gridxl') {
+    return (
+      <div className="flex gap-2">
+        {[0, 1].map(i => (
+          <div key={i} className="flex-1 min-w-0 space-y-1">
+            <div className={cn(box, 'w-full h-7')} />
+            <div className={cn(line, 'w-3/4 h-1.5')} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (kind === 'compact') {
+    return (
+      <div className="flex gap-1">
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className="flex-1 min-w-0 space-y-0.5">
+            <div className={cn(box, 'w-full h-4')} />
+            <div className={cn(line, 'w-full h-1')} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (kind === 'editorial') {
+    return (
+      <div className="space-y-2">
+        {[0, 1].map(i => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className={cn(line, 'w-5/6 h-1.5')} />
+              <div className={cn(line, 'w-2/3 h-1')} />
+            </div>
+            <div className={cn(box, 'w-10 h-7 shrink-0')} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (kind === 'minimal') {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="flex items-center gap-2">
+            <div className={cn(box, 'w-4 h-4 shrink-0')} />
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className={cn(line, 'w-4/5 h-1')} />
+              <div className={cn(line, 'w-2/5 h-1')} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (kind === 'overlay') {
+    return (
+      <div className="flex gap-1.5">
+        {[0, 1].map(i => (
+          <div key={i} className="relative flex-1 min-w-0 h-12 rounded-[4px] bg-text/15 overflow-hidden">
+            <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-text/60 to-transparent" />
+            <div className="absolute inset-x-1.5 bottom-1.5 space-y-1">
+              <div className="w-3/4 h-1 rounded-full bg-white/80" />
+              <div className="w-1/2 h-1 rounded-full bg-white/50" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  // standard + magazine — a 3-up grid
   return (
-    <div className="w-full rounded-lg bg-surface-subtle border border-border p-2.5 space-y-1.5" aria-hidden>
-      <div
-        className={cn('h-2.5 bg-text', heavy ? 'w-4/5 opacity-90' : 'w-3/5 opacity-70')}
-        style={{ borderRadius: r }}
-      />
-      <div className="h-1.5 w-full bg-text opacity-25" style={{ borderRadius: r }} />
-      <div className="h-1.5 w-2/3 bg-text opacity-25" style={{ borderRadius: r }} />
+    <div className="flex gap-1.5">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="flex-1 min-w-0 space-y-1">
+          <div className={cn(box, 'w-full h-5')} />
+          <div className={cn(line, 'w-4/5 h-1')} />
+          <div className={cn(line, 'w-3/5 h-1')} />
+        </div>
+      ))}
     </div>
   )
 }
 
-function StylePresetsPanel({
+function LookFeelPanel({
   tokens,
   setToken,
 }: {
   tokens: DesignTokens
   setToken: (k: keyof DesignTokens, v: DesignTokens[keyof DesignTokens]) => void
 }) {
-  const active = tokens.stylePreset ?? 'original'
+  const active = (tokens.feedLayout ?? 'standard') as string
 
-  const apply = (preset: StylePreset) => {
-    // One batched commit: every patch entry + the marker ride the same render,
-    // and the studio's existing debounced save persists them as one change.
-    for (const [k, v] of Object.entries(preset.patch)) {
+  const apply = (look: LookPreset) => {
+    // One batched commit (the studio's debounced save persists it as one change).
+    for (const [k, v] of Object.entries(look.patch)) {
       setToken(k as keyof DesignTokens, v as DesignTokens[keyof DesignTokens])
     }
-    setToken('stylePreset', preset.id)
   }
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-1">
         <Wand2 className="w-4 h-4 text-accent" />
-        <h3 className="text-sm font-bold text-text">Estil del blog</h3>
+        <h3 className="text-sm font-bold text-text">Aspecte i estil</h3>
       </div>
       <p className="text-xs text-muted mb-4">
-        Tria una personalitat amb un clic. Els teus colors i tipografies capturats es conserven sempre.
+        Tria un aspecte complet amb un sol clic — disposició i estil alhora. Els teus colors i tipografies capturats es conserven sempre.
       </p>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {STYLE_PRESETS.map(preset => {
-          const isActive = active === preset.id
+        {LOOK_PRESETS.map(look => {
+          const isActive = active === look.id
           return (
             <button
-              key={preset.id}
+              key={look.id}
               type="button"
-              onClick={() => apply(preset)}
+              onClick={() => apply(look)}
               aria-pressed={isActive}
+              title={look.tagline}
               className={cn(
-                'cursor-pointer text-left rounded-xl border p-3 transition-all',
+                'group cursor-pointer text-left rounded-xl border p-3 transition-all',
                 isActive
                   ? 'border-accent ring-2 ring-accent/25 bg-accent-soft/40'
                   : 'border-border bg-bg-elevated hover:border-border-strong hover:-translate-y-0.5',
               )}
             >
-              <PresetGlyph preset={preset} />
-              <div className="mt-2.5 flex items-center gap-1.5">
-                <span className="text-[13px] font-bold text-text">{preset.name}</span>
+              <div className="rounded-lg bg-surface-subtle border border-border p-2.5 mb-2.5">
+                <LookGlyph kind={look.glyph} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[13px] font-bold text-text">{look.name}</span>
                 {isActive && <Check className="w-3.5 h-3.5 text-accent" />}
               </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-subtle">{preset.tagline}</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-subtle line-clamp-2">{look.tagline}</p>
             </button>
           )
         })}

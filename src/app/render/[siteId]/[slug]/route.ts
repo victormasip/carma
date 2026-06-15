@@ -8,6 +8,7 @@ import { LOCALES, normalizeLocale, isLocale, type Locale } from '@/lib/i18n/conf
 import { tr } from '@/lib/i18n/messages'
 import { isUuid } from '@/lib/sites/domain'
 import { isModuleOn, type SiteModules } from '@/lib/modules/registry'
+import { buildSampleArticle, buildSamplePosts } from '@/lib/render/samplePosts'
 
 // Reading the query string opts this handler out of static prerender — embeds
 // carry token/locale overrides per request.
@@ -92,6 +93,7 @@ async function resolveBySlug(
 export async function GET(request: NextRequest, { params }: { params: Promise<{ siteId: string; slug: string }> }) {
   const { siteId: param, slug } = await params
   const isFragment = request.nextUrl.searchParams.get('format') === 'fragment'
+  const isPreview = request.nextUrl.searchParams.has('preview')
   const rawLang = request.nextUrl.searchParams.get('lang')
   // UI-chrome locale for the not-found strings (see the listing route): ?ui wins
   // (host language, e.g. WP get_locale()), then ?lang, else Catalan.
@@ -116,6 +118,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   ])
 
   if (!resolution) {
+    // Dashboard preview with no published post yet: render a SAMPLE article so the
+    // Smart-Modules ARTICLE preview (TOC, reading progress, paywall, related,
+    // author, share…) always has real content to render against. Never happens on
+    // the public render (no ?preview flag) — visitors get the real 404.
+    if (isPreview && !isFragment) {
+      const siteDefault = (theme as { default_locale?: string } | null)?.default_locale
+      const previewLocale = normalizeLocale(rawLang ?? siteDefault)
+      const base: DesignTokens = { ...DEFAULT_TOKENS, ...((theme?.design_tokens as Partial<DesignTokens>) ?? {}) }
+      const themeForPreview = { ...(theme ?? {}), design_tokens: applyParamsToTokens(base, request.nextUrl.searchParams) }
+      const sample = buildSampleArticle(previewLocale, site.name) as unknown as ResolvedPost
+      const siblings = buildSamplePosts(previewLocale, site.name) as unknown as NonNullable<Parameters<typeof buildArticlePage>[5]>['siblings']
+      // unlocked:false so the paywall module (if on) shows its wall in the preview.
+      const html = buildArticlePage(themeForPreview, site.name, siteId, sample, previewLocale, { siblings, unlocked: false })
+      return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' } })
+    }
     if (isFragment) return NextResponse.json({ error: tr(uiLocale, 'render.articleNotFound') }, { status: 404, headers: FRAGMENT_CORS })
     const err = buildErrorPage(tr(uiLocale, 'render.articleNotFound'), 404, uiLocale)
     return new Response(err.html, { status: err.status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })

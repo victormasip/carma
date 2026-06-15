@@ -150,6 +150,26 @@ async function assertSiteAccess(siteId: string) {
   return admin
 }
 
+// Same access check as assertSiteAccess, but ALSO reports the caller's premium
+// tier (today: premium === superadmin) — for the cost-heavy AI features that must
+// stay behind the paywall. Returns the admin client + isPremium in one pass.
+async function assertPremiumAccess(siteId: string): Promise<{ admin: ReturnType<typeof createAdminClient>; isPremium: boolean }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autenticat')
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const admin = createAdminClient()
+  const isPremium = profile?.role === 'superadmin'
+  if (!isPremium) {
+    const { data: membership } = await admin
+      .from('site_users').select('user_id')
+      .eq('site_id', siteId).eq('user_id', user.id).single()
+    if (!membership) throw new Error('Accés denegat a aquest site')
+  }
+  return { admin, isPremium }
+}
+
 const POSTS_PAGE_SIZE = 12
 
 export type PostListItem = { id: string; title: string; slug: string; is_published: boolean; created_at: string; featured_image: string | null }
@@ -549,7 +569,13 @@ export async function generateSeoArticle(
   opts: { url?: string; locale?: string } = {},
 ): Promise<ActionResult & { result?: GeneratedArticle }> {
   try {
-    const admin = await assertSiteAccess(siteId)
+    // PREMIUM GATE (authoritative backstop; the UI also gates): the "Magic SEO
+    // Article" runs an expensive Opus call, so a free member must never be able
+    // to trigger it and burn Anthropic credits. We bail BEFORE any LLM work.
+    const { admin, isPremium } = await assertPremiumAccess(siteId)
+    if (!isPremium) {
+      return { error: 'L’article SEO amb IA és una funció Premium. Passa a Premium per generar articles automàticament.' }
+    }
 
     const { data: site } = await admin.from('sites').select('id, name').eq('id', siteId).single()
     if (!site) return { error: 'Site no trobat' }

@@ -1,30 +1,34 @@
 'use client'
 
-// Smart Modules control panel — the "Mòduls" tab (V2).
+// Smart Modules control panel — the "Mòduls" tab (V3, premium redesign).
 //
-// A premium bento-grid of module cards (gold design system): each card has an
-// icon tile, title, description, an on/off switch and, when active, a deep
-// sub-panel (layout selector + rich typed controls) that expands with a smooth,
-// physics-based height animation (framer-motion). Edits are optimistic and
-// autosave (debounced) via saveSiteModules; on failure they revert with a toast.
+// LAYOUT
+//   · Left: a calm BENTO grid of compact module cards — icon, name, a SCOPE chip
+//     (Feed / Article / Tot el blog), premium + AI badges, a one-line pitch and an
+//     on/off switch. No inline forms, so the grid stays scannable however many
+//     modules are on.
+//   · Configuration opens in a focused SLIDE-OVER (framer-motion) — one module at
+//     a time: a visual variant picker + the typed option fields. Zero clutter.
+//   · Right: a sticky live MOBILE preview of the real /render. The Feed/Article
+//     toggle is ALWAYS available (the article preview falls back to a sample when
+//     the site has no published post yet), and the preview AUTO-SWITCHES to a
+//     module's scope when you enable or configure it — so you always see the effect.
 //
-// Preview paradigm: the embedded preview is an honest MOBILE device frame (the
-// real /render, narrow). A prominent "Vista d'escriptori" button opens the full
-// live desktop render in a new tab.
-//
-// Premium modules are gated for free clients (crown + upsell modal); the server
-// action is the authoritative gate.
+// Edits are optimistic + debounced autosave (saveSiteModules); failures revert with
+// a toast. Premium modules are gated for free clients (crown + upsell modal); the
+// server action is the authoritative gate.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Filter, Star, Sparkles, ArrowLeftRight, Mail, UserCircle, BookOpen,
   Lock, Megaphone, ListTree, Share2, ArrowUp, MoonStar, Puzzle, Crown,
-  Monitor, FileText, LayoutList, RotateCw,
+  Monitor, FileText, LayoutList, RotateCw, SlidersHorizontal, X, Check,
 } from 'lucide-react'
 import {
   MODULES, CATEGORY_META, resolveModule,
-  type ModuleDef, type ModuleConfig, type SiteModules, type ModuleOption, type ModuleCategory,
+  type ModuleDef, type ModuleConfig, type SiteModules, type ModuleOption,
+  type ModuleCategory, type ModuleScope,
 } from '@/lib/modules/registry'
 import { saveSiteModules } from '@/lib/actions/modules'
 import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
@@ -35,12 +39,23 @@ import { cn } from '@/lib/cn'
 
 type OptValue = string | number | boolean | string[]
 
+// Must match SAMPLE_ARTICLE_SLUG in src/lib/render/samplePosts.ts — the article
+// render serves a sample article for this slug in preview mode, so the article
+// preview works even before the site has a published post.
+const SAMPLE_ARTICLE_SLUG = '__carma_demo__'
+
 const ICONS: Record<string, typeof Puzzle> = {
   Search, Filter, Star, Sparkles, ArrowLeftRight, Mail, UserCircle, BookOpen,
   Lock, Megaphone, ListTree, Share2, ArrowUp, MoonStar,
 }
 
 const CATEGORY_ORDER: ModuleCategory[] = ['discovery', 'engagement', 'reading', 'growth']
+
+const SCOPE_META: Record<ModuleScope, string> = {
+  listing: 'Feed',
+  article: 'Article',
+  both: 'Tot el blog',
+}
 
 export default function ModulesManager({
   siteId, isPremium, initialModules, previewPostSlug,
@@ -57,10 +72,12 @@ export default function ModulesManager({
   const [blocked, setBlocked] = useState(false)
   const [previewMode, setPreviewMode] = useState<'feed' | 'article'>('feed')
   const [iframeLoading, setIframeLoading] = useState(false)
+  // The module whose configuration slide-over is open (null = closed).
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // ── Debounced optimistic autosave (with graceful revert) ──
-  // lastGood holds the config that is known persisted; on a failed save we roll
-  // back to it and surface a toast, so the UI never lies about what's live.
+  // lastGood holds the config known to be persisted; on a failed save we roll back
+  // to it and surface a toast, so the UI never lies about what's live.
   const serialized = JSON.stringify(config)
   const lastGoodSerialized = useRef(serialized)
   const lastGoodConfig = useRef<SiteModules>(config)
@@ -74,7 +91,6 @@ export default function ModulesManager({
       const res = await saveSiteModules(siteId, JSON.parse(snapshot) as SiteModules)
       if (id !== reqId.current) return // a newer edit supersedes this save
       if (res.error) {
-        // Revert to the last persisted config and tell the user.
         setConfig(lastGoodConfig.current)
         setSaveState('error')
         toast('No s’ha pogut desar el canvi. S’ha restaurat l’estat anterior.', 'error')
@@ -103,10 +119,25 @@ export default function ModulesManager({
     })
   }
 
+  // Point the live preview at the surface where a module actually renders, so the
+  // effect is visible the moment it's enabled/configured. 'both' leaves it as is.
+  const syncPreview = (scope: ModuleScope) => {
+    if (scope === 'article') setPreviewMode('article')
+    else if (scope === 'listing') setPreviewMode('feed')
+  }
+
   const toggle = (def: ModuleDef) => {
     const cur = resolveModule(config, def.id)!
     if (!cur.enabled && def.premium && !isPremium) { setBlocked(true); return }
-    mutate(def.id, { enabled: !cur.enabled })
+    const turningOn = !cur.enabled
+    mutate(def.id, { enabled: turningOn })
+    if (turningOn) syncPreview(def.scope)
+  }
+
+  const openConfig = (def: ModuleDef) => {
+    if (def.premium && !isPremium) { setBlocked(true); return }
+    setSelectedId(def.id)
+    syncPreview(def.scope)
   }
 
   const activeCount = useMemo(
@@ -114,21 +145,26 @@ export default function ModulesManager({
     [config],
   )
 
-  const previewSrc = (previewMode === 'article' && previewPostSlug)
-    ? `/render/${siteId}/${encodeURIComponent(previewPostSlug)}?preview=1&v=${savedAt}`
+  const articleSlug = previewPostSlug ?? SAMPLE_ARTICLE_SLUG
+  const previewSrc = previewMode === 'article'
+    ? `/render/${siteId}/${encodeURIComponent(articleSlug)}?preview=1&v=${savedAt}`
     : `/render/${siteId}?preview=1&v=${savedAt}`
 
   const openDesktop = () => window.open(`/render/${siteId}?v=${Date.now()}`, '_blank', 'noopener,noreferrer')
 
+  const selectedDef = selectedId ? MODULES.find(m => m.id === selectedId) ?? null : null
+
   return (
     <div className="space-y-5">
       {/* Toolbar / header */}
-      <div className="bg-surface border border-border rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+      <div className="bg-surface border border-border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-text">
-          <Puzzle className="w-4 h-4 text-accent" />
+          <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent-soft text-accent">
+            <Puzzle className="w-4 h-4" />
+          </span>
           Mòduls intel·ligents
         </span>
-        <span className="text-xs font-semibold text-muted bg-surface-subtle border border-border rounded-full px-2.5 py-0.5">
+        <span className="text-xs font-bold text-accent bg-accent-soft border border-accent/20 rounded-full px-2.5 py-0.5 tabular-nums">
           {activeCount} {activeCount === 1 ? 'actiu' : 'actius'}
         </span>
         <div className="flex-1" />
@@ -142,7 +178,7 @@ export default function ModulesManager({
           title="Obrir el render real d'escriptori en una pestanya nova"
         >
           <Monitor className="w-4 h-4" />
-          Vista d’escriptori
+          <span className="hidden sm:inline">Vista d’escriptori</span>
         </button>
       </div>
 
@@ -167,8 +203,7 @@ export default function ModulesManager({
                       resolved={resolveModule(config, def.id)!}
                       isPremium={isPremium}
                       onToggle={() => toggle(def)}
-                      onVariant={v => mutate(def.id, { variant: v })}
-                      onOption={(k, val) => mutate(def.id, { options: { [k]: val } })}
+                      onConfigure={() => openConfig(def)}
                     />
                   ))}
                 </div>
@@ -182,21 +217,18 @@ export default function ModulesManager({
           <div className="flex items-center justify-between gap-2 mb-3 xl:w-[360px] mx-auto">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-text">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              Previsualització en directe
+              En directe
             </span>
-            {previewPostSlug && (
-              <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-lg p-0.5">
-                <PreviewTab active={previewMode === 'feed'} onClick={() => setPreviewMode('feed')} icon={<LayoutList className="w-3.5 h-3.5" />} label="Feed" />
-                <PreviewTab active={previewMode === 'article'} onClick={() => setPreviewMode('article')} icon={<FileText className="w-3.5 h-3.5" />} label="Article" />
-              </div>
-            )}
+            <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-lg p-0.5">
+              <PreviewTab active={previewMode === 'feed'} onClick={() => setPreviewMode('feed')} icon={<LayoutList className="w-3.5 h-3.5" />} label="Feed" />
+              <PreviewTab active={previewMode === 'article'} onClick={() => setPreviewMode('article')} icon={<FileText className="w-3.5 h-3.5" />} label="Article" />
+            </div>
           </div>
 
           {/* Phone device frame */}
           <div className="mx-auto w-full max-w-[360px]">
             <div className="relative rounded-[2.5rem] bg-neutral-900 p-2.5 border border-neutral-800 shadow-[0_36px_70px_-30px_rgba(0,0,0,0.55)]">
               <div className="relative overflow-hidden rounded-[2rem] bg-white">
-                {/* notch */}
                 <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-5 w-32 -translate-x-1/2 rounded-b-2xl bg-neutral-900" />
                 <iframe
                   key={previewSrc}
@@ -206,7 +238,6 @@ export default function ModulesManager({
                   loading="lazy"
                   onLoad={() => setIframeLoading(false)}
                 />
-                {/* Smooth reload overlay (no white flash on save) */}
                 <div
                   className={cn(
                     'absolute inset-0 flex items-center justify-center bg-bg/60 backdrop-blur-[1px] transition-opacity duration-300',
@@ -220,11 +251,27 @@ export default function ModulesManager({
           </div>
 
           <p className="text-xs text-subtle mt-3 leading-relaxed text-center max-w-[360px] mx-auto">
-            Vista mòbil del teu blog real. Els mòduls hereten els colors i tipografies de la teva marca.
-            Per a la vista completa, obre la <button type="button" onClick={openDesktop} className="cursor-pointer font-semibold text-accent hover:underline">vista d’escriptori</button>.
+            {previewMode === 'article' && !previewPostSlug
+              ? 'Article de mostra. Quan publiquis un article real, la vista el farà servir.'
+              : 'Vista mòbil del teu blog real. Els mòduls hereten els colors i tipografies de la teva marca.'}
           </p>
         </div>
       </div>
+
+      {/* Configuration slide-over */}
+      <AnimatePresence>
+        {selectedDef && (
+          <ConfigSlideOver
+            key={selectedDef.id}
+            def={selectedDef}
+            resolved={resolveModule(config, selectedDef.id)!}
+            onClose={() => setSelectedId(null)}
+            onToggle={() => toggle(selectedDef)}
+            onVariant={v => mutate(selectedDef.id, { variant: v })}
+            onOption={(k, val) => mutate(selectedDef.id, { options: { [k]: val } })}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Premium upsell */}
       {blocked && (
@@ -254,7 +301,7 @@ function PreviewTab({ active, onClick, icon, label }: { active: boolean; onClick
       type="button"
       onClick={onClick}
       className={cn(
-        'cursor-pointer flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors',
+        'cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors',
         active ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
       )}
     >
@@ -263,35 +310,35 @@ function PreviewTab({ active, onClick, icon, label }: { active: boolean; onClick
   )
 }
 
-// ── Module card ───────────────────────────────────────────────────────────────
+// ── Module card (compact — configuration lives in the slide-over) ──────────────
 
 function ModuleCard({
-  def, resolved, isPremium, onToggle, onVariant, onOption,
+  def, resolved, isPremium, onToggle, onConfigure,
 }: {
   def: ModuleDef
   resolved: { enabled: boolean; variant: string; options: Record<string, unknown> }
   isPremium: boolean
   onToggle: () => void
-  onVariant: (v: string) => void
-  onOption: (key: string, value: OptValue) => void
+  onConfigure: () => void
 }) {
   const Icon = ICONS[def.icon] ?? Puzzle
   const locked = def.premium && !isPremium
   const on = resolved.enabled
+  const hasConfig = def.variants.length > 1 || !!def.options?.length
 
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-2xl border p-4 transition-colors duration-200',
+        'group relative flex flex-col rounded-2xl border p-4 transition-all duration-200',
         on
-          ? 'border-accent/60 bg-accent-soft/40 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.3)]'
+          ? 'border-accent/60 bg-accent-soft/40 shadow-[0_12px_32px_-22px_rgba(0,0,0,0.35)]'
           : 'border-border bg-surface hover:border-accent/40 hover:shadow-[0_12px_28px_-18px_rgba(0,0,0,0.25)]',
       )}
     >
       <div className="flex items-start gap-3">
         <span className={cn(
           'flex items-center justify-center w-10 h-10 rounded-xl shrink-0 transition-colors',
-          on ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
+          on ? 'bg-gradient-to-br from-accent to-accent-hover text-on-accent shadow-sm' : 'bg-surface-subtle text-muted group-hover:text-text',
         )}>
           <Icon className="w-5 h-5" />
         </span>
@@ -305,60 +352,35 @@ function ModuleCard({
               </span>
             )}
           </div>
-          <p className="text-xs text-muted mt-0.5 leading-relaxed">{def.description}</p>
+          <div className="mt-1">
+            <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-subtle bg-surface-subtle border border-border rounded px-1.5 py-0.5">
+              {SCOPE_META[def.scope]}
+            </span>
+          </div>
+          <p className="text-xs text-muted mt-1.5 leading-relaxed">{def.description}</p>
         </div>
         <ModuleSwitch checked={on} locked={locked} onClick={onToggle} />
       </div>
 
-      {/* Deep sub-panel — physics-based height animation on expand/collapse */}
+      {/* "Configurar" affordance — only when on AND the module has settings. */}
       <AnimatePresence initial={false}>
-        {on && (
+        {on && hasConfig && (
           <motion.div
-            key="panel"
+            key="cfg"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.8, opacity: { duration: 0.18 } }}
+            transition={{ type: 'spring', stiffness: 420, damping: 36, mass: 0.7, opacity: { duration: 0.15 } }}
             style={{ overflow: 'hidden' }}
           >
-            <div className="mt-4 pt-4 border-t border-border/70 space-y-4">
-              {def.variants.length > 1 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-subtle mb-1.5">Disposició</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {def.variants.map(v => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => onVariant(v.id)}
-                        title={v.description}
-                        className={cn(
-                          'cursor-pointer text-left px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
-                          resolved.variant === v.id
-                            ? 'border-accent bg-accent text-on-accent'
-                            : 'border-border bg-surface text-muted hover:text-text hover:border-border-strong',
-                        )}
-                      >
-                        {v.name}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-subtle mt-1.5 leading-snug">
-                    {def.variants.find(v => v.id === resolved.variant)?.description}
-                  </p>
-                </div>
-              )}
-
-              {def.options?.map(opt => (
-                <OptionField
-                  key={opt.key}
-                  opt={opt}
-                  value={resolved.options[opt.key]}
-                  options={resolved.options}
-                  onChange={val => onOption(opt.key, val)}
-                />
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={onConfigure}
+              className="cursor-pointer mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 rounded-lg border border-accent/30 bg-surface/70 text-xs font-bold text-accent hover:bg-accent-soft transition-colors"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Configurar
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -387,6 +409,139 @@ function ModuleSwitch({ checked, locked, onClick }: { checked: boolean; locked: 
         {locked && <Crown className="w-2.5 h-2.5 text-accent" strokeWidth={2.5} />}
       </span>
     </button>
+  )
+}
+
+// ── Configuration slide-over ──────────────────────────────────────────────────
+
+function ConfigSlideOver({
+  def, resolved, onClose, onToggle, onVariant, onOption,
+}: {
+  def: ModuleDef
+  resolved: { enabled: boolean; variant: string; options: Record<string, unknown> }
+  onClose: () => void
+  onToggle: () => void
+  onVariant: (v: string) => void
+  onOption: (key: string, value: OptValue) => void
+}) {
+  const Icon = ICONS[def.icon] ?? Puzzle
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+        aria-hidden
+      />
+      <motion.aside
+        role="dialog"
+        aria-label={`Configurar ${def.name}`}
+        className="fixed right-0 top-0 z-[61] h-full w-full max-w-md bg-bg-elevated border-l border-border shadow-premium flex flex-col"
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 38, mass: 0.9 }}
+      >
+        {/* Header */}
+        <div className="shrink-0 flex items-start gap-3 p-5 border-b border-border">
+          <span className="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-gradient-to-br from-accent to-accent-hover text-on-accent shadow-sm">
+            <Icon className="w-5 h-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="text-base font-bold text-text leading-tight">{def.name}</h3>
+              {def.premium && <LockBadge />}
+            </div>
+            <p className="text-xs text-muted mt-0.5 leading-relaxed">{def.description}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tancar"
+            className="cursor-pointer flex items-center justify-center w-8 h-8 rounded-lg text-subtle hover:text-text hover:bg-surface-hover transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {!resolved.enabled && (
+            <button
+              type="button"
+              onClick={onToggle}
+              className="cursor-pointer w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-accent text-on-accent text-sm font-bold hover:bg-accent-hover transition-colors"
+            >
+              <Check className="w-4 h-4" /> Activar aquest mòdul
+            </button>
+          )}
+
+          {def.variants.length > 1 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-subtle mb-2">Disposició</p>
+              <div className="grid gap-2">
+                {def.variants.map(v => {
+                  const active = resolved.variant === v.id
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => onVariant(v.id)}
+                      className={cn(
+                        'cursor-pointer text-left rounded-xl border px-3.5 py-2.5 transition-colors flex items-start gap-2.5',
+                        active ? 'border-accent bg-accent-soft' : 'border-border bg-surface hover:border-border-strong',
+                      )}
+                    >
+                      <span className={cn(
+                        'mt-0.5 flex items-center justify-center w-4 h-4 rounded-full border shrink-0 transition-colors',
+                        active ? 'border-accent bg-accent text-on-accent' : 'border-border-strong text-transparent',
+                      )}>
+                        <Check className="w-3 h-3" strokeWidth={3} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className={cn('block text-sm font-semibold', active ? 'text-accent' : 'text-text')}>{v.name}</span>
+                        <span className="block text-xs text-subtle leading-snug mt-0.5">{v.description}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {!!def.options?.length && (
+            <div className="space-y-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-subtle">Opcions</p>
+              {def.options.map(opt => (
+                <OptionField
+                  key={opt.key}
+                  opt={opt}
+                  value={resolved.options[opt.key]}
+                  options={resolved.options}
+                  onChange={val => onOption(opt.key, val)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 border-t border-border p-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer w-full h-10 rounded-xl bg-surface-subtle border border-border text-sm font-semibold text-text hover:bg-surface-hover transition-colors"
+          >
+            Fet
+          </button>
+        </div>
+      </motion.aside>
+    </>
   )
 }
 

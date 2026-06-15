@@ -12,6 +12,7 @@ import {
   sseFrame, stepFloor, stepWeight,
   type CaptureEvent, type CaptureStepId, type AnalyzeResult,
 } from '@/lib/render/captureProgress'
+import { rateLimit } from '@/lib/ratelimit'
 
 // node-html-parser requires the Node.js runtime.
 export const runtime = 'nodejs'
@@ -361,6 +362,16 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
+
+  // Cost-heavy (full-page fetch + parallel CSS scan). Cap per user to bound
+  // runaway cost/abuse before any work begins.
+  const rl = rateLimit(`analyze:${user.id}`, 10, 60_000)
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Has fet massa captures seguides. Espera un moment i torna-ho a provar.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    )
+  }
 
   // Analyze is a pure "scrape this public URL → stream theme tokens" endpoint: it
   // binds to no site and writes nothing (the member-gated saveTheme persists the

@@ -88,6 +88,9 @@ type Post = {
   meta?: Record<string, unknown> | null
   i18n?: Record<string, LocalizedVariant> | null
   default_locale?: string | null
+  /** Preview-only flag: render a clear "sample/demo" badge on the card so
+   *  placeholder posts are never mistaken for real content. */
+  demo?: boolean
 }
 
 type HeadSeo = {
@@ -463,6 +466,8 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 .carma-meta{font-size:.8125rem!important;color:var(--ct-muted)!important;font-weight:600!important;display:flex!important;gap:.5rem!important;align-items:center!important;flex-wrap:wrap!important;text-transform:uppercase!important;letter-spacing:.04em!important}
 .carma-meta .carma-cat{color:var(--ct-accent)!important}
 .carma-card-link:hover .carma-card-title{color:var(--ct-accent)!important}
+.carma-card{position:relative!important}
+.carma-card-demo{position:absolute!important;top:.7rem!important;left:.7rem!important;z-index:3!important;display:inline-flex!important;align-items:center!important;background:rgba(17,24,39,.9)!important;color:#fff!important;font-size:.62rem!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important;padding:.3rem .6rem!important;border-radius:999px!important;box-shadow:0 2px 10px rgba(0,0,0,.28)!important;pointer-events:none!important}
 
 /* Article — magazine-grade typography with a centered prose column and
    media that "bleeds" out for breathing room. Fluid type via clamp() scales
@@ -937,6 +942,13 @@ function bodyOpenTag(theme: Theme): string {
   return attrs ? `<body ${attrs}>` : '<body>'
 }
 
+// Localized label for demo/sample cards (preview-only). See Post.demo + buildCard.
+const DEMO_BADGE: Record<Locale, string> = {
+  ca: 'Article de mostra',
+  es: 'Artículo de muestra',
+  en: 'Sample article',
+}
+
 function buildCard(post: Post, siteId: string, locale: Locale): string {
   const loc = localizePost(post, locale)
   // Each card links to THIS post's slug in the listing's current language. The
@@ -952,7 +964,12 @@ function buildCard(post: Post, siteId: string, locale: Locale): string {
   // when no module is enabled; never affect the default render's appearance.
   const cats = (loc.categories ?? []).map(c => c.toLowerCase()).join(',')
   const searchText = `${loc.title} ${loc.excerpt ?? ''}`.toLowerCase()
-  return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}"><a class="carma-card-link" href="${escapeAttr(href)}">
+  // Preview-only demo posts get an unmistakable badge so they're never confused
+  // with real content (onboarding / theme-selection grids).
+  const demoBadge = post.demo
+    ? `<span class="carma-card-demo">${escapeHtml(DEMO_BADGE[locale] ?? DEMO_BADGE.ca)}</span>`
+    : ''
+  return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}">${demoBadge}<a class="carma-card-link" href="${escapeAttr(href)}">
   ${media}
   <div class="carma-card-body">
     <div class="carma-meta">${cat}<time datetime="${escapeAttr(loc.created_at)}">${escapeHtml(formatDate(loc.created_at, locale))}</time></div>
