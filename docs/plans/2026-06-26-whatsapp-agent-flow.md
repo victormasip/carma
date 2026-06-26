@@ -465,12 +465,30 @@ Did the paid pilots log the clarification-round-trip and edit-distance numbers? 
 
 ---
 
+## Updates (post-approval)
+
+**2026-06-26 — LLM provider shift (founder directive).** The agent loop AND the
+generation worker (T4) run on **OpenAI** (`WA_AGENT_MODEL`, default `gpt-4o`, a
+`gpt-5` placeholder when available), **not Anthropic**. The Eng-phase prose above
+says "Anthropic SDK tool-use" — that is now superseded for the WhatsApp worker.
+Open fork for T4: the shipped `src/lib/writing/generate.ts` (`generateArticle`,
+Anthropic Opus 4.8) still powers the dashboard's Magic SEO Article. T4 either adds
+a parallel OpenAI generation path or ports `generateArticle` behind `WA_AGENT_MODEL`;
+keep the dashboard path on Anthropic unless a separate decision moves it. The
+`openai` SDK is a new dependency added at T4. The webhook (T2) is provider-agnostic.
+
+**2026-06-26 — Turn Budget = 1 (founder directive).** Drop a voice note → get a
+review link. The agent drafts immediately on any usable topic and asks AT MOST one
+clarification per thread, only when the note is empty or incomprehensible. No chatty
+bot. Encoded in `WA_TURN_BUDGET`. This hardens the Design-phase "draft-first" rec
+into a strict rule.
+
 ## Implementation Tasks (build order)
 
-- [ ] **T1 — migration 027** (`supabase/migrations/027_*.sql`): the 5 tables above + outcome fields. Additive, RLS-safe. *(Eng data model)*
-- [ ] **T2 — `POST /api/whatsapp/webhook`**: raw-body signature verify (Twilio/Meta) + Meta challenge echo, `UNIQUE(wa_message_id)` dedupe, identity-gate (unbound → bind-link, zero LLM), enqueue `generation_jobs`, 200 fast. *(E2,E3,E4)*
+- [x] **T1 — migration 027** (`supabase/migrations/027_whatsapp_agent.sql`): 7 tables (added `wa_identity_sites` for G2 scoping + `wa_article_outcomes` for G3) + RLS + triggers. Run manually in Supabase 2026-06-26. Foundation: `src/lib/whatsapp/{types,config,tokens}.ts`. *(Eng data model)*
+- [x] **T2 — `POST /api/whatsapp/webhook`** (`src/app/api/whatsapp/webhook/route.ts`): Twilio raw-body HMAC-SHA1 verify, `UNIQUE(wa_message_id)` dedupe (+ partial-failure job recovery), identity-gate (unbound → ack, zero LLM) + candidate-site mapping, enqueue `generation_jobs`, fast TwiML 200. Meta GET-challenge stays with the deferred full build. *(E2,E3,E4)*
 - [ ] **T3 — `safeFetchBinary` in `src/lib/scrape/http.ts`** + transcription provider (Whisper/Gemini), host allowlist. *(E6)*
-- [ ] **T4 — `netlify/functions/agent-worker-background.ts`** + 1-min Scheduled re-driver: lease-claim, cost-gate, transcribe, Anthropic tool-use loop, **site resolver (1 auto / >1 ask)**, `generateArticle` → draft insert (admin client), mint `review_tokens`, outbound send. *(E1,E7,E10,G2)*
+- [ ] **T4 — `netlify/functions/agent-worker-background.ts`** + 1-min Scheduled re-driver: lease-claim, cost-gate, transcribe, **OpenAI tool-use loop (`WA_AGENT_MODEL`)**, **site resolver (1 auto / >1 ask)**, OpenAI generation → draft insert (admin client), mint `review_tokens`, outbound send (Twilio REST). *(E1,E7,E10,G2 · OpenAI per Updates)*
 - [ ] **T5 — `src/app/review/[token]/page.tsx`** (B/D login-gated): read-first `/render` preview + `strategy` + transcript + **destination blog**, sticky Aprovar/Demanar canvis/Editar, approve → `is_published`+`revalidateRender`, un-publish, expired/used/already-published states. *(E5, Design, DX4, G5)*
 - [ ] **T6 — Localization**: route all agent + `/review` copy through `tr(locale,key)`; detect inbound language; review reads site `default_locale`. *(Design localization CRITICAL)*
 - [ ] **T7 — Onboarding**: dashboard "El teu agent de WhatsApp" card (number + `wa.me` + how-to) + bind/verify flow + **first-note replay**. *(DX1,DX2)*

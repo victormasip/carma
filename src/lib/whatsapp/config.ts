@@ -40,3 +40,11 @@ export const WA_WINDOW_HOURS = intEnv('WA_WINDOW_HOURS', 24)
 // re-driver may reclaim it. Must exceed the worst-case generate (≤160s) plus
 // transcription, well under the 15-min Background Function budget.
 export const WA_JOB_LEASE_MIN = intEnv('WA_JOB_LEASE_MIN', 5)
+
+// LLM for the agent loop + article generation in the worker (T4). Founder
+// directive 2026-06-26: the WhatsApp agent and its generation worker run on
+// OpenAI, NOT Anthropic. (The shipped src/lib/writing/generate.ts stays on Opus
+// 4.8 for the dashboard's Magic SEO Article; T4 either calls a new OpenAI
+// generation path or ports generateArticle behind this model.) Placeholder
+// default; set WA_AGENT_MODEL to a gpt-5 id when available.
+export const WA_AGENT_MODEL = process.env.WA_AGENT_MODEL || 'gpt-4o'
