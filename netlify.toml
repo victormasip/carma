@@ -26,9 +26,14 @@
 #   WA_WORKER_SECRET             (bearer the cron uses to call /api/whatsapp/worker)
 #   WA_WORKER_INTERNAL_URL       (optional — overrides Netlify's $URL for the cron)
 #   WA_REVIEW_BASE_URL           (optional, defaults to https://carma.cat — review-link origin)
+#   CRON_SECRET                  (pre-shared key for the portable GET /api/whatsapp/cron driver)
 #
-# A Netlify Scheduled Function (netlify/functions/agent-worker-cron.mts) runs every
-# minute and POSTs the worker route; its schedule is auto-detected from the file.
+# Job driver — pick ONE (both funnel into the lease-based worker, safe but don't double-pay):
+#   A) Netlify Scheduled Function netlify/functions/agent-worker-cron.mts — runs every
+#      minute and POSTs /api/whatsapp/worker (WA_WORKER_SECRET); schedule auto-detected.
+#   B) Portable GET /api/whatsapp/cron secured by CRON_SECRET — for Vercel Cron or any
+#      external pinger (cron-job.org / UptimeRobot / GitHub Action). Trigger once a minute:
+#        Authorization: Bearer $CRON_SECRET   (Vercel Cron),  or  ?key=$CRON_SECRET
 
 [build]
   command = "next build"
