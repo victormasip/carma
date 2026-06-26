@@ -1,50 +1,99 @@
-// WhatsApp Agent — voice-note transcription (T3, server-only).
+// WhatsApp Agent — voice-note download + transcription (T3, server-only).
 //
-// Two steps the worker (T4) calls when an inbound message is audio:
-//   1. downloadTwilioMedia — pull the voice note off Twilio's media URL with Basic
-//      auth, through safeFetchBinary (SSRF-guarded, byte-capped, redirect-safe).
-//   2. transcribeAudio — OpenAI Whisper (whisper-1) → plain text.
+// Provider pivot (founder directive 2026-06-26): Twilio → Kapso. Two steps the
+// worker (T4) calls when an inbound message is audio:
+//   1. downloadKapsoMedia — pull the voice-note bytes off Kapso. Kapso mirrors
+//      inbound media to a Kapso-hosted URL (message.kapso.media_url, passed through
+//      the job); if that isn't present we resolve it from the Meta media id via
+//      Kapso's media endpoint. Either way the bytes are fetched through our hardened
+//      safeFetchBinary (SSRF-guarded, byte-capped, redirect-safe — no Twilio Basic-
+//      auth / S3 redirect dance anymore).
+//   2. transcribeAudio — OpenAI Whisper (whisper-1) → plain text (unchanged).
 //
-// Provider: OpenAI for the WhatsApp agent ecosystem (founder directive). The
-// dashboard's article generation stays on Anthropic Opus 4.8.
+// Provider: OpenAI for transcription (founder directive). The dashboard's article
+// generation stays on Anthropic Opus 4.8.
 
 import OpenAI, { toFile } from 'openai'
 import { safeFetchBinary } from '@/lib/scrape/http'
+import { KAPSO_API_BASE, KAPSO_GRAPH_VERSION } from './config'
 
 // whisper-1 is the directed model; overridable per the project's env convention.
 const TRANSCRIBE_MODEL = process.env.WA_TRANSCRIBE_MODEL || 'whisper-1'
 
-// Hosts Twilio serves media from. safeFetchBinary checks this on the FIRST hop;
-// Twilio commonly 307s to a pre-signed CDN/S3 URL, which the SSRF guard re-checks
-// on each hop (no allowlist on the redirect target, which Twilio chooses).
-const TWILIO_MEDIA_HOSTS = ['api.twilio.com', 'twiliocdn.com', 'media.twiliocdn.com']
-
 // OpenAI Whisper's hard upload limit is 25 MB; cap the download at the same bound.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-function twilioAuthHeader(): string | null {
-  const sid = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token) return null
-  return 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64')
+function kapsoApiKey(): string | null {
+  return process.env.KAPSO_API_KEY || null
+}
+
+// The X-API-Key header authenticates Kapso-hosted media. safeFetchBinary sends it on
+// the FIRST hop only and DROPS it across redirects, so the key never leaks to a CDN /
+// signed-storage URL Kapso may redirect to. (Harmless if a non-Kapso CDN ignores it.)
+function kapsoMediaHeaders(): Record<string, string> | undefined {
+  const key = kapsoApiKey()
+  return key ? { 'X-API-Key': key } : undefined
 }
 
 export type DownloadedMedia = { body: Uint8Array; contentType: string }
 
-/** Download a Twilio media URL (Basic auth) safely. Returns null on any failure. */
-export async function downloadTwilioMedia(mediaUrl: string): Promise<DownloadedMedia | null> {
-  const auth = twilioAuthHeader()
-  const res = await safeFetchBinary(mediaUrl, {
-    headers: auth ? { Authorization: auth } : undefined,
+type KapsoMediaRef = {
+  /** Meta media id (message.<type>.id) — used to resolve a fresh URL if needed. */
+  mediaId: string | null
+  /** The phone number id the message arrived on (Kapso proxy routing). */
+  phoneNumberId: string | null
+  /** Kapso-mirrored media URL from the webhook (message.kapso.media_url), if present. */
+  mediaUrl: string | null
+}
+
+// Ask Kapso's Meta-compatible media endpoint to resolve a media id → a download URL.
+// Returns null on any failure (the worker treats a null download as transient → retry).
+async function resolveMediaUrl(mediaId: string, phoneNumberId: string | null): Promise<string | null> {
+  const key = kapsoApiKey()
+  if (!key) return null
+  const qs = phoneNumberId ? `?phone_number_id=${encodeURIComponent(phoneNumberId)}` : ''
+  const url = `${KAPSO_API_BASE}/${KAPSO_GRAPH_VERSION}/${encodeURIComponent(mediaId)}${qs}`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15_000)
+  try {
+    const res = await fetch(url, { headers: { 'X-API-Key': key }, signal: ctrl.signal })
+    if (!res.ok) {
+      console.error('[wa/kapso] media resolve failed', res.status)
+      return null
+    }
+    const json = (await res.json()) as { url?: unknown }
+    return typeof json.url === 'string' ? json.url : null
+  } catch (e) {
+    console.error('[wa/kapso] media resolve error', e instanceof Error ? e.message : e)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Download an inbound WhatsApp voice note via Kapso. Prefers the mirrored URL from
+ * the webhook; falls back to resolving the media id. Returns null on any failure
+ * (blocked host, oversize, network) — the worker turns a null into a retryable error.
+ */
+export async function downloadKapsoMedia(ref: KapsoMediaRef): Promise<DownloadedMedia | null> {
+  // The URLs Kapso hands us come from a signature-verified webhook / authenticated
+  // API, not user input; safeFetchBinary still applies the SSRF guard + 25 MB cap on
+  // every hop. No host allowlist here (Kapso may redirect to its own storage/CDN host).
+  let url = ref.mediaUrl
+  if (!url && ref.mediaId) url = await resolveMediaUrl(ref.mediaId, ref.phoneNumberId)
+  if (!url) return null
+
+  const res = await safeFetchBinary(url, {
+    headers: kapsoMediaHeaders(),
     maxBytes: MAX_AUDIO_BYTES,
-    allowHosts: TWILIO_MEDIA_HOSTS,
     timeout: 20_000,
   })
   return res ? { body: res.body, contentType: res.contentType } : null
 }
 
 // Whisper needs a filename with a known audio extension. WhatsApp voice notes
-// arrive as audio/ogg (opus); map the rest of the common Twilio types too.
+// arrive as audio/ogg (opus); map the rest of the common types too.
 const EXT_BY_TYPE: Record<string, string> = {
   'audio/ogg': 'ogg',
   'audio/opus': 'ogg',
@@ -66,7 +115,7 @@ function extForType(contentType: string): string {
 
 /**
  * Transcribe an audio buffer with OpenAI Whisper. Throws on missing key or a
- * provider error (the worker catches it → localized "no t'he entès" retry, E10).
+ * provider error (the worker catches it → localized casual retry, E10).
  * `language` is an optional ISO-639-1 hint; Whisper auto-detects when omitted.
  */
 export async function transcribeAudio(

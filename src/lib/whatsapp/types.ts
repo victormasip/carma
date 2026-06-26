@@ -52,6 +52,9 @@ export interface WaAgentState {
   brief_summary?: string
   // The detected language of the inbound note (drives reply + draft locale).
   detected_locale?: string
+  // Held while we ask "which client?" (>1 candidate site), so we can draft from
+  // the original brief once the owner picks a site.
+  pending_brief?: string
 }
 
 // ─── Row types ────────────────────────────────────────────────────────────────

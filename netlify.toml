@@ -10,8 +10,25 @@
 #   NEXT_PUBLIC_SUPABASE_URL
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY
 #   SUPABASE_SERVICE_ROLE_KEY
-#   ANTHROPIC_API_KEY            (Theme Studio / Magic Wand)
+#   ANTHROPIC_API_KEY            (Theme Studio / Magic Wand / dashboard article gen)
 #   THEME_LLM_MODEL              (optional, defaults to claude-opus-4-7)
+#
+# WhatsApp Agent (T2-T4) — server-only:
+#   OPENAI_API_KEY               (Whisper transcription + the agent loop)
+#   WA_AGENT_MODEL               (optional, defaults to gpt-4o)
+#   WA_TRANSCRIBE_MODEL          (optional, defaults to whisper-1)
+#   Provider = Kapso (kapso.ai), the Meta WhatsApp proxy for the prepaid-SIM number:
+#   KAPSO_API_KEY                (X-API-Key — outbound send + inbound media download)
+#   KAPSO_WEBHOOK_SECRET         (HMAC-SHA256 secret for the X-Webhook-Signature header)
+#   KAPSO_PHONE_NUMBER_ID        (the WhatsApp number id; default sender when a job has none)
+#   KAPSO_API_BASE               (optional, defaults to https://api.kapso.ai/meta/whatsapp)
+#   KAPSO_GRAPH_VERSION          (optional, defaults to v24.0)
+#   WA_WORKER_SECRET             (bearer the cron uses to call /api/whatsapp/worker)
+#   WA_WORKER_INTERNAL_URL       (optional — overrides Netlify's $URL for the cron)
+#   WA_REVIEW_BASE_URL           (optional, defaults to https://carma.cat — review-link origin)
+#
+# A Netlify Scheduled Function (netlify/functions/agent-worker-cron.mts) runs every
+# minute and POSTs the worker route; its schedule is auto-detected from the file.
 
 [build]
   command = "next build"

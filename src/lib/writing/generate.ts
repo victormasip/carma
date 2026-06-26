@@ -184,7 +184,7 @@ const strArr = (v: unknown): string[] =>
 // already constrain the model to a safe tag set, but we never inject unvalidated
 // markup: strip <script>/<style>/<iframe>, inline event handlers and javascript:
 // URLs, regardless of what the model returned.
-function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string): string {
   return html
     .replace(/<\/?(?:script|style|iframe|object|embed|form|input|link|meta)\b[^>]*>/gi, '')
     .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
@@ -195,7 +195,7 @@ function sanitizeHtml(html: string): string {
     .trim()
 }
 
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')

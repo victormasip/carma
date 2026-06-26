@@ -483,18 +483,52 @@ clarification per thread, only when the note is empty or incomprehensible. No ch
 bot. Encoded in `WA_TURN_BUDGET`. This hardens the Design-phase "draft-first" rec
 into a strict rule.
 
+**2026-06-26 — WhatsApp provider: Twilio → Kapso (founder directive).** The CEO
+discarded Twilio and bought a prepaid SIM. Provider candidates were **Bird** (ex-
+MessageBird) and **Kapso** (kapso.ai). **Decision: Kapso.**
+
+*Rationale (lead-eng eval against our stack: Next.js serverless, fast webhook,
+secure media download, single-number AI agent):*
+- **Purpose-built for WhatsApp AI agents + bring-your-own-number.** Kapso provisions/
+  connects a number (the prepaid SIM) over the official Meta Cloud API — the exact
+  zero-tax, low-friction channel G1 wants. Bird is an enterprise omnichannel CPaaS
+  oriented to marketing campaigns; heavier BSP/WABA onboarding, higher cost, overkill
+  for one number.
+- **Clean serverless webhook.** Kapso's Platform webhook is plain JSON `{ event, data }`
+  signed with **HMAC-SHA256** in `X-Webhook-Signature` (verified over the RAW body) +
+  a per-endpoint `KAPSO_WEBHOOK_SECRET`. Inbound message schema is flat:
+  `data.message.{id,from,type,text.body,audio.id,kapso.media_url}`, `data.phone_number_id`.
+  Faster to parse and verify than Twilio's URL+sorted-params HMAC-SHA1 over form-encoding.
+- **Secure media download.** Kapso mirrors inbound media to a Kapso-hosted URL
+  (`message.kapso.media_url`) and exposes a Meta-compatible media endpoint
+  (`GET {base}/{graph}/{media_id}`, `X-API-Key`) — fetched through our existing
+  hardened `safeFetchBinary` (SSRF guard + 25 MB cap + auth-dropped redirects). No
+  Twilio Basic-auth → S3 redirect dance.
+- **Outbound** is a single REST call: `POST {base}/{graph}/{phone_number_id}/messages`
+  (`X-API-Key`, Meta text body).
+- **Integration choice:** direct REST + `fetch` (not the `@kapso/whatsapp-cloud-api`
+  SDK, which is only **v0.2.2**) — keeps an immature dep off the hot path, reuses our
+  audited fetch primitive, and the endpoints are stable Meta-compatible REST. No new
+  npm dep needed (`openai` already added at T3).
+
+Env: **add** `KAPSO_API_KEY`, `KAPSO_WEBHOOK_SECRET`, `KAPSO_PHONE_NUMBER_ID`
+(optional `KAPSO_API_BASE`, `KAPSO_GRAPH_VERSION`); **remove** all `TWILIO_*`.
+Webhook now returns `200 {"success":true}` JSON (no TwiML). DB idempotency (23505)
+and job queueing are unchanged. Agent fallback/clarification voice is now direct,
+casual and practical in Catalan (light emoji), incl. an LLM-free empty-audio re-ask.
+
 ## Implementation Tasks (build order)
 
 - [x] **T1 — migration 027** (`supabase/migrations/027_whatsapp_agent.sql`): 7 tables (added `wa_identity_sites` for G2 scoping + `wa_article_outcomes` for G3) + RLS + triggers. Run manually in Supabase 2026-06-26. Foundation: `src/lib/whatsapp/{types,config,tokens}.ts`. *(Eng data model)*
-- [x] **T2 — `POST /api/whatsapp/webhook`** (`src/app/api/whatsapp/webhook/route.ts`): Twilio raw-body HMAC-SHA1 verify, `UNIQUE(wa_message_id)` dedupe (+ partial-failure job recovery), identity-gate (unbound → ack, zero LLM) + candidate-site mapping, enqueue `generation_jobs`, fast TwiML 200. Meta GET-challenge stays with the deferred full build. *(E2,E3,E4)*
-- [x] **T3 — `safeFetchBinary` in `src/lib/scrape/http.ts`** (SSRF-guarded every hop, byte-capped, manual-redirect, drops auth across redirects) + **`src/lib/whatsapp/transcribe.ts`**: `downloadTwilioMedia` (Basic auth + Twilio host allowlist) + `transcribeAudio` (OpenAI Whisper `whisper-1`). `openai` SDK v6 added. tsc + eslint clean. *(E6)*
-- [ ] **T4 — `netlify/functions/agent-worker-background.ts`** + 1-min Scheduled re-driver: lease-claim, cost-gate, transcribe, **OpenAI tool-use loop (`WA_AGENT_MODEL`)**, **site resolver (1 auto / >1 ask)**, OpenAI generation → draft insert (admin client), mint `review_tokens`, outbound send (Twilio REST). *(E1,E7,E10,G2 · OpenAI per Updates)*
+- [x] **T2 — `POST /api/whatsapp/webhook`** (`src/app/api/whatsapp/webhook/route.ts`): **Kapso** raw-body HMAC-SHA256 verify (`X-Webhook-Signature` + `KAPSO_WEBHOOK_SECRET`), event-gate (only `whatsapp.message.received`; ack the rest), extract `message.{id,from,type,…}` + `phone_number_id`, `UNIQUE(wa_message_id)` dedupe (+ partial-failure job recovery), identity-gate (unbound → ack, zero LLM) + candidate-site mapping, enqueue `generation_jobs`, fast `200 {"success":true}` JSON. *(E2,E3,E4)* — **refactored Twilio→Kapso 2026-06-26.**
+- [x] **T3 — `safeFetchBinary` in `src/lib/scrape/http.ts`** (SSRF-guarded every hop, byte-capped, manual-redirect, drops auth across redirects) + **`src/lib/whatsapp/transcribe.ts`**: `downloadKapsoMedia` (prefers `message.kapso.media_url`, else resolves the Meta media id via Kapso's `X-API-Key` media endpoint; fetched through `safeFetchBinary`, 25 MB cap) + `transcribeAudio` (OpenAI Whisper `whisper-1`, unchanged). `openai` SDK v6 (no Kapso SDK — direct REST). tsc + eslint clean. *(E6)* — **refactored Twilio→Kapso 2026-06-26.**
+- [x] **T4 — worker** (`src/lib/whatsapp/worker.ts` + `agent.ts` + **`kapso.ts`**; route `src/app/api/whatsapp/worker/route.ts` secured by `WA_WORKER_SECRET`; Netlify Scheduled Function `netlify/functions/agent-worker-cron.mts`, `* * * * *`): lease-claim, cost+turn ceilings before LLM, audio→`downloadKapsoMedia`+Whisper, **LLM-free empty-audio casual re-ask (req 4)**, **site resolver (1 auto / >1 ask "per a quin client?")**, **OpenAI agent `WA_AGENT_MODEL` with strict Turn-Budget-1** (draft on any topic; clarify only on empty/gibberish; forced-draft after one clarification), admin `saveDraft` → `posts.content={html}`, mint `review_tokens`, capture `wa_article_outcomes` (G3), **Kapso reply** (`sendWhatsApp` w/ per-message `phone_number_id`, default `KAPSO_PHONE_NUMBER_ID`). Fail-safe: transient retries ≤`WA_JOB_MAX_ATTEMPTS` then `error`+apology. Persona Catalan, **direct/casual/practical**. Reuses `sanitizeHtml`/`slugify` from generate.ts. tsc+eslint clean. *(E1,E7,E10,G2 · OpenAI · Kapso)*
 - [ ] **T5 — `src/app/review/[token]/page.tsx`** (B/D login-gated): read-first `/render` preview + `strategy` + transcript + **destination blog**, sticky Aprovar/Demanar canvis/Editar, approve → `is_published`+`revalidateRender`, un-publish, expired/used/already-published states. *(E5, Design, DX4, G5)*
 - [ ] **T6 — Localization**: route all agent + `/review` copy through `tr(locale,key)`; detect inbound language; review reads site `default_locale`. *(Design localization CRITICAL)*
 - [ ] **T7 — Onboarding**: dashboard "El teu agent de WhatsApp" card (number + `wa.me` + how-to) + bind/verify flow + **first-note replay**. *(DX1,DX2)*
 - [ ] **T8 — `/admin/agent` observability** (superadmin, grabber-lab pattern): jobs board (status/attempts/lease/error), per-thread timeline + transcript, cost meter (Opus + transcription + WA). *(DX5,DX9)*
 - [ ] **T9 — Outcome-loop capture**: `transcript→draft→approved→published→OUTCOME` records + 60-day rank/traffic check field. *(G3 moat-as-data)*
-- [ ] **T10 — Operator DX**: WA/transcription vars in `.env.example` + `netlify.toml`, Twilio-sandbox runbook, `scripts/wa-replay.mjs` signed replay harness, `netlify dev` note. *(DX6,DX7,DX8)*
+- [ ] **T10 — Operator DX**: WA/transcription/Kapso vars in `.env.example` + `netlify.toml`, Kapso number-provisioning + webhook-secret runbook, `scripts/wa-replay.mjs` signed replay harness (Kapso `X-Webhook-Signature`), `netlify dev` note. *(DX6,DX7,DX8)*
 - [ ] **T11 — Tests**: the 12 Eng codepaths (webhook verify, job lifecycle+re-driver, idempotency, loop re-entry, token mint/consume/expire/replay/revoke, identity binding, transcription fail, gen timeout, publish/un-publish, SSRF rejection, cost rate-limit). Keep `npm run test:render` green.
 
 **Build order:** T1 → T2 → T3 → T4 → T5 → (T6, T7, T8, T9 parallel) → T10, T11 alongside.

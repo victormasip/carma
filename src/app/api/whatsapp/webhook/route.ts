@@ -1,17 +1,21 @@
-// WhatsApp inbound webhook (T2) — Twilio WhatsApp, cycle-one B/D.
+// WhatsApp inbound webhook (T2) — Kapso provider, cycle-one B/D.
 //
-// Twilio posts inbound WhatsApp messages as application/x-www-form-urlencoded.
-// This route does the cheap, LLM-free front door and nothing else:
-//   1. Verify the Twilio signature over the raw body (reject forgeries).
-//   2. Dedupe on MessageSid (WhatsApp delivers at-least-once → never double-spend).
-//   3. Identity-gate: map the sender's phone → an ACTIVE wa_identities owner + their
+// Provider pivot (founder directive 2026-06-26): Twilio → Kapso. Kapso's Platform
+// webhook delivers inbound WhatsApp messages as JSON ({ event, data }) and signs the
+// body with HMAC-SHA256. This route is the cheap, LLM-free front door and nothing else:
+//   1. Verify the Kapso signature over the RAW body (reject forgeries).
+//   2. Process only `whatsapp.message.received`; ack every other event (sent/
+//      delivered/read/failed/conversation.*) with a fast 200 so Kapso won't retry.
+//   3. Dedupe on the WhatsApp message id (message.id, a wamid) — WhatsApp delivers
+//      at-least-once → never double-spend.
+//   4. Identity-gate: map the sender's phone → an ACTIVE wa_identities owner + their
 //      candidate sites. Unbound/blocked numbers reach NO LLM (cost guard, E4).
-//   4. Enqueue one generation_jobs row and return 200 fast (well under Netlify's
+//   5. Enqueue one generation_jobs row and return 200 fast (well under Netlify's
 //      ~10s synchronous function cap). The Background Function worker (T4) does the
-//      160s generation; the 1-min Scheduled re-driver (T4) guarantees at-least-once.
+//      generation; the 1-min Scheduled re-driver (T4) guarantees at-least-once.
 //
 // Provider note: the agent/generation worker (T4) runs on OpenAI (WA_AGENT_MODEL),
-// not Anthropic. This route is provider-agnostic — it touches no model.
+// not Anthropic. This route is LLM-agnostic — it touches no model.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createHmac, timingSafeEqual } from 'node:crypto'
@@ -23,49 +27,30 @@ import type { WaMsgType } from '@/lib/whatsapp/types'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Twilio accepts an empty TwiML 200 as "handled, send no reply." Outbound replies
-// (acks, drafts, clarifications) are sent by the worker via the Twilio REST API.
-const TWIML_OK = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
-function ack() {
-  return new NextResponse(TWIML_OK, { status: 200, headers: { 'Content-Type': 'text/xml' } })
+// Kapso expects a 200 within 10s. Outbound replies (drafts, clarifications) are sent
+// later by the worker via the Kapso REST API — never synchronously here.
+function ok() {
+  return NextResponse.json({ success: true })
 }
 
-// ─── Twilio signature (HMAC-SHA1 over the request URL + sorted POST params) ────
-function twilioBaseString(url: string, params: URLSearchParams): string {
-  // Sort by key, then append key+value for each entry, exactly like twilio-node's
-  // validateRequest. Values are the decoded form values URLSearchParams gives us.
-  const entries = [...params.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-  let data = url
-  for (const [k, v] of entries) data += k + v
-  return data
-}
-
-// The signature is computed over the URL Twilio actually called. Behind Netlify's
-// proxy that is the forwarded host; allow an explicit override for reliability.
-function publicWebhookUrl(req: NextRequest): string {
-  const override = process.env.TWILIO_WEBHOOK_URL
-  if (override) return override
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
-  return `${proto}://${host}${req.nextUrl.pathname}${req.nextUrl.search}`
-}
-
-function verifyTwilio(req: NextRequest, params: URLSearchParams): boolean {
-  const sig = req.headers.get('x-twilio-signature')
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sig || !token) return false
-  const expected = createHmac('sha1', token)
-    .update(Buffer.from(twilioBaseString(publicWebhookUrl(req), params), 'utf-8'))
-    .digest('base64')
-  const a = Buffer.from(sig)
+// ─── Kapso signature (HMAC-SHA256 hex over the raw body, `X-Webhook-Signature`) ──
+// We sign the RAW request body string exactly as received: that string IS the JSON
+// Kapso stringified and signed, so re-parsing/re-stringifying (which could reorder
+// keys or change spacing) would be wrong. Fail closed.
+function verifyKapso(rawBody: string, signatureHeader: string | null): boolean {
+  const secret = process.env.KAPSO_WEBHOOK_SECRET
+  if (!signatureHeader || !secret) return false
+  const signature = signatureHeader.replace(/^sha256=/i, '').trim()
+  const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
+  const a = Buffer.from(signature)
   const b = Buffer.from(expected)
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function mediaType(contentType: string): WaMsgType {
-  if (contentType.startsWith('audio/')) return 'audio'
-  if (contentType.startsWith('image/')) return 'image'
+function toMsgType(kapsoType: string): WaMsgType {
+  if (kapsoType === 'audio' || kapsoType === 'voice') return 'audio'
+  if (kapsoType === 'image') return 'image'
   return 'text'
 }
 
@@ -87,43 +72,60 @@ async function enqueueAgentTurn(
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Read the RAW body ONCE and parse it ourselves (signature must see the exact
-  //    params; consuming formData() first would make the raw form unavailable).
+  // 1. Read the RAW body ONCE (the signature is computed over these exact bytes;
+  //    consuming json() first would make the raw form unavailable).
   let rawBody: string
   try {
     rawBody = await request.text()
   } catch {
     return new NextResponse('bad request', { status: 400 })
   }
-  const params = new URLSearchParams(rawBody)
 
-  // 2. Verify the signature. Fail closed (no retry storm on a missing token).
-  if (!verifyTwilio(request, params)) {
+  // 2. Verify the signature. Fail closed (no retry storm on a missing secret).
+  if (!verifyKapso(rawBody, request.headers.get('x-webhook-signature'))) {
     return new NextResponse('forbidden', { status: 403 })
   }
 
-  const sid = params.get('MessageSid')?.trim()
-  const fromRaw = params.get('From')?.trim() ?? ''
-  const phone = fromRaw.replace(/^whatsapp:/, '').trim()
-  if (!sid || !phone.startsWith('+')) {
-    // Signed but malformed — ack so Twilio does not retry a payload we can't use.
-    return ack()
+  // 3. Parse + event-gate. Only inbound messages enqueue work; ack everything else.
+  let body: Record<string, unknown>
+  try {
+    body = JSON.parse(rawBody) as Record<string, unknown>
+  } catch {
+    return ok()
   }
+  const event = request.headers.get('x-webhook-event') || String(body.event ?? '')
+  if (event !== 'whatsapp.message.received') return ok()
+
+  const data = ((body.data as Record<string, unknown>) ?? body) ?? {}
+  const message = data.message as Record<string, unknown> | undefined
+  if (!message || typeof message !== 'object') return ok()
+
+  const sid = String(message.id ?? '').trim()
+  const fromRaw = String(message.from ?? '').trim()
+  const phone = fromRaw ? (fromRaw.startsWith('+') ? fromRaw : '+' + fromRaw.replace(/[^\d]/g, '')) : ''
+  if (!sid || !phone.startsWith('+') || phone.length < 8) {
+    // Signed but unusable — ack so Kapso does not retry a payload we can't act on.
+    return ok()
+  }
+
+  const kapsoType = String(message.type ?? 'text')
+  const msgType = toMsgType(kapsoType)
+  const phoneNumberId = String(data.phone_number_id ?? '') || null
 
   const admin = createAdminClient()
 
-  // 3. Identity gate — map phone → ACTIVE owner. No active binding ⇒ zero LLM work
+  // 4. Identity gate — map phone → ACTIVE owner. No active binding ⇒ zero LLM work
   //    (the bind-link onboarding reply is T7; the outbound send is wired in T4).
   const { data: identity } = await admin
     .from('wa_identities')
     .select('id, user_id, status')
     .eq('phone_e164', phone)
     .maybeSingle()
-  if (!identity || identity.status !== 'active') return ack()
+  if (!identity || identity.status !== 'active') return ok()
 
   // Cheap per-phone ceiling on enqueues (defense; the DB cost-gate in the worker is
   // the real spend guard). Over the limit ⇒ ack and drop, never 429 (no retries).
-  if (!rateLimit(`wa:${phone}`, 30, 60_000).ok) return ack()
+  if (!rateLimit(`wa:${phone}`, 30, 60_000).ok) return ok()
 
   // Candidate sites for the worker's G2 resolver: the per-phone allow-list if set,
   // else every site the owner is a member of. 1 ⇒ auto-route; >1 ⇒ agent asks.
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
     candidateSiteIds = (memberships ?? []).map((r) => r.site_id as string)
   }
 
-  // 4. Resolve the active thread (cycle one: one active thread per identity) and
+  // 5. Resolve the active thread (cycle one: one active thread per identity) and
   //    refresh the 24h window.
   const nowIso = new Date().toISOString()
   const windowExpIso = new Date(Date.now() + WA_WINDOW_HOURS * 3600_000).toISOString()
@@ -171,22 +173,33 @@ export async function POST(request: NextRequest) {
       .single()
     if (tErr || !created) {
       console.error('[wa/webhook] thread create failed:', tErr?.message)
-      return new NextResponse('error', { status: 500 }) // let Twilio retry; dedupe protects us
+      return new NextResponse('error', { status: 500 }) // let Kapso retry; dedupe protects us
     }
     threadId = created.id as string
   }
 
-  // Message payload. Media (audio/image) is referenced now; the worker downloads it
-  // to the private bucket via safeFetchBinary (T3). Store the full Twilio payload
+  // Message payload. Media (audio/image) is referenced now by its Meta media id; the
+  // worker downloads it via Kapso (safeFetchBinary, T3). Store the full Kapso payload
   // in `raw` for debugging/observability.
-  const numMedia = Number.parseInt(params.get('NumMedia') ?? '0', 10) || 0
-  const mediaUrl = numMedia > 0 ? params.get('MediaUrl0') : null
-  const msgType: WaMsgType = numMedia > 0 ? mediaType(params.get('MediaContentType0') ?? '') : 'text'
-  const text = params.get('Body') ?? null
-  const rawObj = Object.fromEntries(params.entries())
-  const jobPayload = { candidate_site_ids: candidateSiteIds, msg_type: msgType, media_url: mediaUrl }
+  const mediaNode = (message[kapsoType] as Record<string, unknown> | undefined) ?? undefined
+  const mediaId = mediaNode && typeof mediaNode.id === 'string' ? (mediaNode.id as string) : null
+  const kapso = message.kapso as Record<string, unknown> | undefined
+  const mediaData = kapso?.media_data as Record<string, unknown> | undefined
+  const mediaUrl =
+    (typeof kapso?.media_url === 'string' ? (kapso.media_url as string) : null) ??
+    (typeof mediaData?.url === 'string' ? (mediaData.url as string) : null)
+  const text = typeof (message.text as Record<string, unknown> | undefined)?.body === 'string'
+    ? ((message.text as Record<string, unknown>).body as string)
+    : null
+  const jobPayload = {
+    candidate_site_ids: candidateSiteIds,
+    msg_type: msgType,
+    media_id: mediaId,
+    media_url: mediaUrl,
+    phone_number_id: phoneNumberId,
+  }
 
-  // 2 (cont.) Idempotent insert: UNIQUE(wa_message_id) is the dedupe guard.
+  // 3 (cont.) Idempotent insert: UNIQUE(wa_message_id) is the dedupe guard.
   const { data: msgRow, error: mErr } = await admin
     .from('wa_messages')
     .insert({
@@ -195,7 +208,7 @@ export async function POST(request: NextRequest) {
       wa_message_id: sid,
       msg_type: msgType,
       text,
-      raw: rawObj,
+      raw: body,
     })
     .select('id')
     .single()
@@ -217,13 +230,13 @@ export async function POST(request: NextRequest) {
           .maybeSingle()
         if (!job) await enqueueAgentTurn(admin, threadId, existing.id as string, jobPayload)
       }
-      return ack()
+      return ok()
     }
     console.error('[wa/webhook] message insert failed:', mErr.message)
     return new NextResponse('error', { status: 500 })
   }
 
-  // Enqueue the agent turn. On failure return 500 so Twilio retries; the retry hits
+  // Enqueue the agent turn. On failure return 500 so Kapso retries; the retry hits
   // the 23505 path above, which enqueues the (still missing) job.
   const { error: jErr } = await enqueueAgentTurn(admin, threadId, msgRow.id as string, jobPayload)
   if (jErr) {
@@ -233,5 +246,5 @@ export async function POST(request: NextRequest) {
 
   // The worker is kicked by the 1-min Scheduled re-driver (T4); no synchronous
   // trigger here keeps the webhook fast and within the function timeout.
-  return ack()
+  return ok()
 }
