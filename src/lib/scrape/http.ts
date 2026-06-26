@@ -270,6 +270,132 @@ export async function safeFetchJson(url: string, opts: { timeout?: number } = {}
   }
 }
 
+// ─── Binary fetch (media download, SSRF-guarded, byte-capped) ─────────────────
+// safeFetch decodes to text, follows redirects automatically, and reads the whole
+// body with no size cap — none of which is safe for downloading media from a third
+// party. safeFetchBinary streams with a hard byte cap and resolves redirects
+// MANUALLY so the SSRF guard runs on every hop (auto-followed redirects would skip
+// it), and it never forwards auth headers across a redirect (so a provider's
+// credentials, e.g. Twilio Basic auth, never leak to the CDN/S3 it redirects to).
+
+export type BinaryFetchOpts = {
+  /** Sent only on the FIRST request; dropped on every redirect. */
+  headers?: Record<string, string>
+  /** Hard ceiling; the stream is aborted the instant it is exceeded. */
+  maxBytes?: number
+  timeout?: number
+  /** Optional exact/suffix host allowlist, checked on the INITIAL url only. */
+  allowHosts?: string[]
+  maxRedirects?: number
+}
+
+export type BinaryFetchResult = { body: Uint8Array; contentType: string; finalUrl: string }
+
+const DEFAULT_MAX_BINARY_BYTES = 25 * 1024 * 1024 // 25 MB
+
+function hostAllowed(host: string, allow: string[]): boolean {
+  const h = host.toLowerCase()
+  return allow.some((a) => {
+    const d = a.toLowerCase()
+    return h === d || h.endsWith('.' + d)
+  })
+}
+
+/**
+ * Download a binary resource with an SSRF guard on every hop, a byte cap, and a
+ * timeout. Returns null on any failure (blocked host, oversize, non-2xx, network).
+ */
+export async function safeFetchBinary(
+  url: string,
+  opts: BinaryFetchOpts = {},
+): Promise<BinaryFetchResult | null> {
+  const {
+    headers,
+    maxBytes = DEFAULT_MAX_BINARY_BYTES,
+    timeout = DEFAULT_TIMEOUT,
+    allowHosts,
+    maxRedirects = 4,
+  } = opts
+
+  if (!isValidHttpUrl(url) || !isSafeUrl(url)) return null
+  if (allowHosts?.length) {
+    try {
+      if (!hostAllowed(new URL(url).hostname, allowHosts)) return null
+    } catch {
+      return null
+    }
+  }
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeout)
+  try {
+    let current = url
+    let sendHeaders: Record<string, string> | undefined = headers
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+      const res = await fetch(current, {
+        signal: ctrl.signal,
+        redirect: 'manual',
+        headers: { 'User-Agent': SCRAPER_UA, ...(sendHeaders ?? {}) },
+      })
+
+      // Manual redirect: re-validate the next URL, then drop auth before following.
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location')
+        if (!loc) return null
+        let next: string
+        try {
+          next = new URL(loc, current).toString()
+        } catch {
+          return null
+        }
+        if (!isValidHttpUrl(next) || !isSafeUrl(next)) return null
+        current = next
+        sendHeaders = undefined
+        continue
+      }
+
+      if (!res.ok || !res.body) return null
+
+      // Cheap early reject when the server declares an oversize Content-Length.
+      const declared = Number(res.headers.get('content-length'))
+      if (Number.isFinite(declared) && declared > maxBytes) return null
+
+      // Stream with a hard cap so an oversize/chunked payload can't blow memory.
+      const reader = res.body.getReader()
+      const chunks: Uint8Array[] = []
+      let total = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!value) continue
+        total += value.byteLength
+        if (total > maxBytes) {
+          await reader.cancel()
+          return null
+        }
+        chunks.push(value)
+      }
+
+      const body = new Uint8Array(total)
+      let off = 0
+      for (const c of chunks) {
+        body.set(c, off)
+        off += c.byteLength
+      }
+      return {
+        body,
+        contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+        finalUrl: current,
+      }
+    }
+    return null // too many redirects
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ─── HTML entity decoding ─────────────────────────────────────────────────────
 // Plain-text fields pulled from sources (WordPress REST `title.rendered` /
 // `excerpt.rendered`, RSS titles, etc.) arrive HTML-entity-encoded ("Comuni&#243;",
