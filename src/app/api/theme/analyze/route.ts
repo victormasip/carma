@@ -12,7 +12,6 @@ import {
   sseFrame, stepFloor, stepWeight,
   type CaptureEvent, type CaptureStepId, type AnalyzeResult,
 } from '@/lib/render/captureProgress'
-import { rateLimit } from '@/lib/ratelimit'
 
 // node-html-parser requires the Node.js runtime.
 export const runtime = 'nodejs'
@@ -363,15 +362,11 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autenticat' }, { status: 401 })
 
-  // Cost-heavy (full-page fetch + parallel CSS scan). Cap per user to bound
-  // runaway cost/abuse before any work begins.
-  const rl = rateLimit(`analyze:${user.id}`, 10, 60_000)
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: 'Has fet massa captures seguides. Espera un moment i torna-ho a provar.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
-    )
-  }
+  // NOTE: no per-minute rate limit here on purpose. A capture takes 30–90s and
+  // runs one-at-a-time from a modal, so it is self-limiting — a cap only ever bit
+  // a user who was RETRYING a failing capture, locking them out ("Has fet massa
+  // captures"). Cost is bounded by the (optional) browser-render provider's own
+  // limits + the SSRF guard below. leads / v1 (genuinely spammable) keep theirs.
 
   // Analyze is a pure "scrape this public URL → stream theme tokens" endpoint: it
   // binds to no site and writes nothing (the member-gated saveTheme persists the
@@ -417,7 +412,7 @@ export async function POST(request: NextRequest) {
         // the overwhelming majority of sites server-render their header/footer.)
         running('fetch')
         const fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
-        if (!fetched) { fail('fetch', "No s'ha pogut accedir a la pàgina. Comprova la URL."); return }
+        if (!fetched) { fail('fetch', 'No hem pogut llegir aquest lloc. Pot estar bloquejant l’accés automàtic (p. ex. Cloudflare) o carregar-se només amb JavaScript. Prova una altra pàgina del lloc, o un altre lloc.'); return }
         let baseUrl = new URL(referenceUrl)
         let root: HTMLElement
         try { root = parse(fetched.body) as HTMLElement } catch {

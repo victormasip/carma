@@ -5,7 +5,12 @@
 // different timeouts and naming. Centralised here so behaviour is consistent
 // and the SSRF guard lives in one place.
 
-export const SCRAPER_UA = 'Carma-CMS-Bot/1.0 (content & theme importer)'
+// Use a real browser User-Agent. A self-identifying "...Bot..." UA gets blocked
+// outright by a large class of sites (WordPress security plugins, naive WAF rules,
+// CDN bot filters), which made legitimate "clone my own site" captures fail with a
+// 403. A browser UA maximizes capture success. (It does NOT defeat a Cloudflare /
+// JS-challenge — those need the headless-browser provider, BROWSER_RENDER_URL.)
+export const SCRAPER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 export const DEFAULT_TIMEOUT = 12_000
 
 /** Supported language codes detected from URLs (path segment or ?lang=). */

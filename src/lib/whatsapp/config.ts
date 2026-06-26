@@ -1,0 +1,42 @@
+// WhatsApp Agent — tunable ceilings and lifetimes (server-only).
+//
+// All env-overridable, following the project convention (cf. WRITING_GEN_MODEL).
+// These are read by the webhook (T2), the worker (T4) and the /review page (T5).
+
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
+// Turn-Budget-1 (founder directive, 2026-06-26): drop a voice note → get a review
+// link. The agent drafts immediately on any usable topic and asks AT MOST this many
+// clarifications per thread — only when the note is empty or incomprehensible.
+// We do NOT want a chatty bot.
+export const WA_TURN_BUDGET = intEnv('WA_TURN_BUDGET', 1)
+
+// Hard anti-loop cap on total agent turns in one thread (separate from the
+// clarification budget above): a runaway tool-loop halts here.
+export const WA_THREAD_MAX_TURNS = intEnv('WA_THREAD_MAX_TURNS', 40)
+
+// Cost guardrails, checked in the DB BEFORE any Anthropic/transcription call so a
+// stranger (or a loop) can never burn the budget. cost_cents accumulates Opus +
+// transcription + WhatsApp per-conversation.
+export const WA_THREAD_COST_CENTS_CEILING = intEnv('WA_THREAD_COST_CENTS_CEILING', 100)
+export const WA_DAILY_GEN_CAP = intEnv('WA_DAILY_GEN_CAP', 20) // generations / identity / day
+
+// Review link lifetime. Long enough that a busy owner can approve later, short
+// enough that a leaked link expires. Default 7 days.
+export const WA_REVIEW_TOKEN_TTL_HOURS = intEnv('WA_REVIEW_TOKEN_TTL_HOURS', 168)
+
+// Phone-binding OTP lifetime.
+export const WA_VERIFY_CODE_TTL_MIN = intEnv('WA_VERIFY_CODE_TTL_MIN', 15)
+
+// WhatsApp's customer-service window. Outside it, only template messages send.
+export const WA_WINDOW_HOURS = intEnv('WA_WINDOW_HOURS', 24)
+
+// How long a worker holds a generation_jobs row before the 1-min Scheduled
+// re-driver may reclaim it. Must exceed the worst-case generate (≤160s) plus
+// transcription, well under the 15-min Background Function budget.
+export const WA_JOB_LEASE_MIN = intEnv('WA_JOB_LEASE_MIN', 5)
