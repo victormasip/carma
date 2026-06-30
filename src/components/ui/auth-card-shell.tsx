@@ -16,6 +16,10 @@ export function AuthInput({ className, type, ...props }: React.ComponentProps<'i
   return (
     <input
       type={type}
+      // Accessible name: fall back to the placeholder when the caller gives no
+      // explicit aria-label (placeholder alone is not a reliable label). A
+      // caller-provided aria-label in `props` still wins (spread is last).
+      aria-label={props['aria-label'] ?? (typeof props.placeholder === 'string' ? props.placeholder : undefined)}
       className={cn(
         'w-full h-10 rounded-lg bg-white/5 border border-transparent text-white placeholder:text-white/30',
         'px-3 transition-colors duration-200 outline-none focus:bg-white/10 focus:border-carma-400/40',
@@ -55,7 +59,7 @@ export function AuthCardShell({
               className="mx-auto w-12 h-12 rounded-full border border-carma-400/30 flex items-center justify-center"
               style={{ background: 'linear-gradient(135deg, rgba(245,188,0,0.25), transparent)' }}
             >
-              <EndlessKnot size={26} glow title="Carma" />
+              <EndlessKnot size={26} glow spin title="Carma" />
             </div>
             <h1 className="text-xl font-bold text-white">{title}</h1>
             <p className="text-white/60 text-xs">{subtitle}</p>

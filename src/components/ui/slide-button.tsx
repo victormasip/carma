@@ -16,7 +16,8 @@ import {
   useTransform,
   type PanInfo,
 } from "framer-motion"
-import { Check, Loader2, SendHorizontal, X } from "lucide-react"
+import { Check, SendHorizontal, X } from "lucide-react"
+import KnotSpinner from "@/components/ui/KnotSpinner"
 
 import { cn } from "@/lib/utils"
 import { Button, ButtonProps } from "@/components/ui/shadcn/button"
@@ -45,7 +46,7 @@ type StatusIconProps = {
 const StatusIcon: React.FC<StatusIconProps> = ({ status }) => {
   const iconMap: Record<StatusIconProps["status"], JSX.Element> = useMemo(
     () => ({
-      loading: <Loader2 className="animate-spin" size={20} />,
+      loading: <KnotSpinner className="w-5 h-5" />,
       success: <Check size={20} />,
       error: <X size={20} />,
     }),

@@ -2,7 +2,8 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import type { DOMOutputSpec } from '@tiptap/pm/model'
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { useRef, useState } from 'react'
-import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2, Loader2 } from 'lucide-react'
+import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { uploadImages } from '@/lib/upload'
 
 declare module '@tiptap/core' {
@@ -204,7 +205,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
             <Plus className="w-4 h-4" />
           </button>
           <button type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload" disabled={uploading}>
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {uploading ? <KnotSpinner className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
           </button>
           <input
             ref={fileRef}

@@ -13,8 +13,10 @@ export default function Wordmark({
   as: Tag = 'span',
   /** Show the "Carma." text alongside the mark. Set false for an icon-only lockup. */
   showText = true,
-  /** Give the mark the serene "endless" rotation (header / nav lockups). */
-  spin = false,
+  /** Give the mark the serene "endless" rotation. Defaults ON — the founder loves
+   *  the spinning mark, so every wordmark lockup (nav, auth, onboarding, preview)
+   *  rotates by default. Pass `spin={false}` for the rare static lockup. */
+  spin = true,
 }: {
   className?: string
   /** Tailwind text-size class controlling the wordmark scale. */

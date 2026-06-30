@@ -11,7 +11,7 @@
 // zero behavioural divergence — only the presentation is softened.
 
 import { useMemo } from 'react'
-import { Wand2, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react'
+import { Wand2, Check, AlertCircle, ArrowRight, RefreshCw, Download } from 'lucide-react'
 import type { CaptureStepId } from '@/lib/render/captureProgress'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -29,8 +29,13 @@ const RUNNING_COPY: Record<CaptureStepId, string> = {
 }
 
 export default function ZenCaptureModal() {
-  const { capture, url, grab, closeCapture, cancelCapture } = useThemeStudio()
+  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework } = useThemeStudio()
   const { open, phase, pct, activeStep } = capture
+
+  // When the captured site is WordPress, its articles can be imported next — so
+  // the success state ADAPTS to what we actually found instead of always showing
+  // the same generic "Comencem".
+  const isWordPress = (detectedFramework ?? '').toLowerCase() === 'wordpress'
 
   const host = useMemo(() => {
     try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
@@ -44,7 +49,10 @@ export default function ZenCaptureModal() {
     : RUNNING_COPY[activeStep ?? 'fetch']
 
   const subline =
-    phase === 'success' ? 'El teu blog ja llueix com el teu lloc.'
+    phase === 'success'
+      ? (isWordPress
+          ? 'El teu blog ja llueix com el teu lloc. Hem detectat WordPress: pots importar els teus articles ara.'
+          : 'El teu blog ja llueix com el teu lloc.')
     : phase === 'error' ? (capture.error ?? 'Torna-ho a provar d’aquí a un moment.')
     : host ? `des de ${host}` : 'Hi treballem ara mateix…'
 
@@ -77,9 +85,15 @@ export default function ZenCaptureModal() {
             </button>
           )}
           {phase === 'success' && (
-            <Button glow fullWidth onClick={closeCapture} iconRight={<ArrowRight className="h-4 w-4" />}>
-              Comencem
-            </Button>
+            isWordPress ? (
+              <Button glow fullWidth onClick={proceedFromCapture} iconLeft={<Download className="h-4 w-4" />}>
+                Importa els teus articles
+              </Button>
+            ) : (
+              <Button glow fullWidth onClick={proceedFromCapture} iconRight={<ArrowRight className="h-4 w-4" />}>
+                Comencem
+              </Button>
+            )
           )}
           {phase === 'error' && (
             <div className="flex flex-col gap-2">

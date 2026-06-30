@@ -8,7 +8,8 @@
 // stalls (the backend heartbeats during the long LLM step), plus graceful
 // success / error / cancel states.
 
-import { Wand2, Loader2, Check, Minus, AlertCircle, X, RefreshCw, Info } from 'lucide-react'
+import { Wand2, Check, Minus, AlertCircle, X, RefreshCw, Info, Download } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { CAPTURE_STEPS, type CaptureStepStatus } from '@/lib/render/captureProgress'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -22,10 +23,12 @@ import { useThemeStudio, type CaptureNotice } from './ThemeStudioContext'
  * state, no overwhelm.
  */
 export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: boolean }) {
-  const { capture, url, grab, closeCapture, cancelCapture } = useThemeStudio()
+  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework } = useThemeStudio()
   const { open, phase, pct, steps, stepDetail, notices } = capture
 
   if (!isSuperAdmin) return <ZenCaptureModal />
+
+  const isWordPress = (detectedFramework ?? '').toLowerCase() === 'wordpress'
 
   const handleClose = () => {
     if (phase === 'running') cancelCapture()
@@ -129,9 +132,15 @@ export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: bool
             </div>
           )}
           {phase === 'success' && (
-            <Button glow fullWidth onClick={closeCapture} iconLeft={<Check className="w-4 h-4" />}>
-              Editar el tema
-            </Button>
+            isWordPress ? (
+              <Button glow fullWidth onClick={proceedFromCapture} iconLeft={<Download className="w-4 h-4" />}>
+                Importar els articles
+              </Button>
+            ) : (
+              <Button glow fullWidth onClick={proceedFromCapture} iconLeft={<Check className="w-4 h-4" />}>
+                Editar el tema
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -180,7 +189,7 @@ function StatusIcon({ status }: { status: CaptureStepStatus }) {
   const base = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors'
   switch (status) {
     case 'running':
-      return <span className={`${base} bg-accent text-on-accent`}><Loader2 className="w-3.5 h-3.5 animate-spin" /></span>
+      return <span className={`${base} bg-accent text-on-accent`}><KnotSpinner className="w-3.5 h-3.5" /></span>
     case 'done':
       return <span className={`${base} bg-success text-white`}><Check className="w-3.5 h-3.5" /></span>
     case 'skipped':

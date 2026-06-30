@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Ubuntu } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/Modal";
 import { ThemeProvider, themeInitScript } from "@/lib/theme/ThemeProvider";
 
-const jakarta = Plus_Jakarta_Sans({
+// Global brand typeface — Ubuntu (founder directive). Humanist, friendly, highly
+// legible at UI sizes. We load the four weights the app actually uses (light →
+// bold) and expose it as both the default body font and the `--font-ubuntu` var
+// for the few components that reference the family directly.
+const ubuntu = Ubuntu({
   subsets: ["latin"],
-  variable: '--font-jakarta',
+  weight: ["300", "400", "500", "700"],
+  variable: "--font-ubuntu",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +31,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className={`${jakarta.className} bg-bg text-text antialiased`}>
+      <body className={`${ubuntu.className} ${ubuntu.variable} bg-bg text-text antialiased`}>
         <ThemeProvider>
           <ToastProvider>
             <ConfirmProvider>

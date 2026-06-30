@@ -87,30 +87,39 @@ function LayoutCard({
       type="button"
       onClick={onPick}
       aria-pressed={active}
-      className={`group text-left bg-surface border rounded-2xl overflow-hidden shadow-card transition-all flex flex-col cursor-pointer ${
-        active ? 'border-accent ring-2 ring-accent/25 shadow-pop' : 'border-border hover:border-border-strong hover:shadow-pop'
+      className={`group relative text-left bg-surface border rounded-2xl overflow-hidden transition-all flex flex-col cursor-pointer ${
+        active
+          ? 'border-accent ring-2 ring-accent/30 shadow-pop -translate-y-0.5'
+          : 'border-border shadow-card hover:border-border-strong hover:shadow-pop hover:-translate-y-0.5'
       }`}
     >
-      <LayoutPreview siteId={siteId} feed={id} savedAt={savedAt} />
-      <div className="p-4 flex items-start gap-3">
-        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-          active ? 'border-accent bg-accent text-on-accent' : 'border-border-strong text-transparent group-hover:border-accent'
-        }`}>
-          <Check className="h-3 w-3" strokeWidth={3} />
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-text">{name}</h3>
-          <p className="text-xs text-muted mt-1 leading-relaxed">{tagline}</p>
-        </div>
+      <LayoutPreview siteId={siteId} feed={id} savedAt={savedAt} active={active} />
+
+      {/* Selected badge — a clear gold check on the preview corner, far more
+          legible than a small inline radio. */}
+      <span
+        className={`absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full shadow-md transition-all ${
+          active ? 'bg-accent text-on-accent scale-100 opacity-100' : 'bg-bg-elevated/90 text-subtle scale-90 opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <Check className="h-4 w-4" strokeWidth={3} />
+      </span>
+
+      <div className="p-4">
+        <h3 className={`text-sm font-bold ${active ? 'text-accent' : 'text-text'}`}>{name}</h3>
+        <p className="text-xs text-muted mt-1 leading-relaxed">{tagline}</p>
       </div>
     </button>
   )
 }
 
 // A scaled live iframe of the real render with the candidate layout override.
-function LayoutPreview({ siteId, feed, savedAt }: { siteId: string; feed: string; savedAt: number }) {
+// Loads behind a shimmer skeleton and fades in once ready, so a slow/empty
+// first render (6 frames mount at once on a fresh clone) never reads as broken.
+function LayoutPreview({ siteId, feed, savedAt, active }: { siteId: string; feed: string; savedAt: number; active: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0.34)
+  const [loaded, setLoaded] = useState(false)
   const DESIGN_W = 1280
   const DESIGN_H = 720
 
@@ -130,9 +139,12 @@ function LayoutPreview({ siteId, feed, savedAt }: { siteId: string; feed: string
   return (
     <div
       ref={wrapRef}
-      className="relative w-full overflow-hidden border-b border-border bg-surface-subtle"
+      className={`relative w-full overflow-hidden border-b bg-surface-subtle transition-colors ${active ? 'border-accent/40' : 'border-border'}`}
       style={{ height: Math.round(DESIGN_H * scale) }}
     >
+      {/* Shimmer skeleton until the frame paints. */}
+      <div className={`skeleton absolute inset-0 transition-opacity duration-500 ${loaded ? 'opacity-0' : 'opacity-100'}`} aria-hidden />
+
       <iframe
         key={src}
         src={src}
@@ -141,6 +153,8 @@ function LayoutPreview({ siteId, feed, savedAt }: { siteId: string; feed: string
         scrolling="no"
         tabIndex={-1}
         aria-hidden
+        onLoad={() => setLoaded(true)}
+        className={`transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
         style={{
           width: DESIGN_W,
           height: DESIGN_H,

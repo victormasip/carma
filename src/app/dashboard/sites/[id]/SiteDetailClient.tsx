@@ -12,6 +12,7 @@ import ThemeCaptureModal from './ThemeCaptureModal'
 import SiteOnboarding from './SiteOnboarding'
 import { LockBadge, PremiumPanel } from './PremiumGate'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
@@ -26,7 +27,7 @@ import { formatDate } from '@/lib/format'
 // visually/behaviourally beyond a brief load the first time it's opened.
 // (SiteOnboarding stays a static import: it's the critical first-run funnel and
 // must mount + auto-fire the clone with zero extra latency.)
-const ThemeManager = lazy(() => import('./ThemeManager'))
+const CarmaStudio = lazy(() => import('./studio/CarmaStudio'))
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
 const FeedLayoutPicker = lazy(() => import('./FeedLayoutPicker'))
@@ -108,6 +109,9 @@ export default function SiteDetailClient({
   // WP import → layout picker), so the picker only appears during onboarding and
   // not after a later manual re-capture.
   const onboardingFlow = useRef(false)
+  // The just-captured site's url + framework, stashed on success so the user's
+  // later "proceed" click (NOT a timer) can open the right next step.
+  const captureInfo = useRef<{ url: string; framework: string | null }>({ url: '', framework: null })
 
   // Resync the active tab when the server-provided defaultTab changes (e.g.
   // navigating via a <Link> to ?tab=connexio). Render-time state sync.
@@ -156,16 +160,25 @@ export default function SiteDetailClient({
     // overwritten by the captured site's <title>/og:site_name/domain.
     // The logo, however, we DO adopt — it shows on the dashboard card.
     if (logoUrl) void updateSiteLogo(siteId, logoUrl)
+    // Stash what we found; the user advances when THEY click the success CTA.
+    // No timer here any more — the onboarding never skips ahead on its own.
+    captureInfo.current = { url, framework }
+  }
+
+  // Fired when the user clicks the capture success CTA ("Importa els articles" /
+  // "Comencem" / "Editar el tema"). THIS is the moment we advance the onboarding.
+  const handleCaptureProceed = ({ framework }: { framework: string | null }) => {
+    const url = captureInfo.current.url
     if (wpImportIntent.current && framework === 'wordpress') {
-      // WordPress: offer the article import next; the layout picker follows once
-      // the import modal closes (see ImportModal onClose below).
-      setTimeout(() => { setImportUrl(url); setShowImport(true) }, 1400)
+      // WordPress: open the article import; the layout picker follows once the
+      // import modal closes (see ImportModal onClose below).
+      wpImportIntent.current = false
+      setImportUrl(url)
+      setShowImport(true)
     } else if (onboardingFlow.current) {
-      // Non-WordPress onboarding capture → straight to the layout picker once the
-      // capture modal has dismissed itself.
-      setTimeout(() => setShowLayoutPicker(true), 1500)
+      // Non-WordPress onboarding capture → the layout picker.
+      setShowLayoutPicker(true)
     }
-    wpImportIntent.current = false
   }
 
   return (
@@ -193,9 +206,10 @@ export default function SiteDetailClient({
           </div>
         </div>
 
-        {/* Prominent "Veure lloc". Opens the site's own subdomain when available
-            (falls back to /render/<id>), with a fresh ?v= cache-buster at click time. */}
-        <a
+        {/* Prominent "Veure lloc" — the premium gold CTA. Opens the site's own
+            subdomain when available (falls back to /render/<id>), with a fresh
+            ?v= cache-buster at click time; the href keeps middle-click working. */}
+        <Button
           href={`/render/${siteId}`}
           onClick={(e) => {
             e.preventDefault()
@@ -207,11 +221,12 @@ export default function SiteDetailClient({
           }}
           target="_blank"
           rel="noopener noreferrer"
-          className="cursor-pointer shrink-0 inline-flex h-10 items-center justify-center gap-2 px-4 rounded-xl bg-text text-bg-elevated text-sm font-semibold transition-opacity hover:opacity-90"
+          glow
+          iconLeft={<ExternalLink className="w-4 h-4" />}
+          className="shrink-0"
         >
-          <ExternalLink className="w-4 h-4" />
           Veure lloc
-        </a>
+        </Button>
       </div>
 
       {/* Section workspace: a left nav rail + the active section's content. */}
@@ -223,6 +238,7 @@ export default function SiteDetailClient({
         isPremium={isSuperAdmin}
         initialRegenCount={regenCount}
         onCaptureSuccess={handleCaptureSuccess}
+        onCaptureProceed={handleCaptureProceed}
       >
         <ThemeCaptureModal isSuperAdmin={isSuperAdmin} />
 
@@ -272,7 +288,7 @@ export default function SiteDetailClient({
             {activeTab === 'tema' && (
               <ErrorBoundary label="El Theme Studio ha tingut un error">
                 <Suspense fallback={<SectionSkeleton />}>
-                  <ThemeManager isSuperAdmin={isSuperAdmin} />
+                  <CarmaStudio isSuperAdmin={isSuperAdmin} />
                 </Suspense>
               </ErrorBoundary>
             )}

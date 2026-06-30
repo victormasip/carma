@@ -13,7 +13,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Save, Eye, EyeOff, Loader2, Tag, X, ImageIcon,
+  ArrowLeft, Save, Eye, EyeOff, Tag, X, ImageIcon,
   User, FileText, Globe, CalendarDays, Settings2, Search, Target,
   CheckCircle2, AlertCircle, ExternalLink, Sparkles, Plus, Crown,
   RefreshCw, PanelRight, Bot, Languages, Upload,
@@ -26,10 +26,10 @@ import { LOCALES, DEFAULT_LOCALE, LOCALE_META, normalizeLocale, type Locale } fr
 import { detectLocale, htmlToPlain } from '@/lib/i18n/detect'
 import { useToast } from '@/components/ui/Toast'
 import KnotLoader from '@/components/ui/KnotLoader'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Modal, useConfirm } from '@/components/ui/Modal'
 import { PremiumPanel } from '@/app/dashboard/sites/[id]/PremiumGate'
-import SegmentedTabs from '@/components/ui/SegmentedTabs'
 import { cn } from '@/lib/cn'
 import Link from 'next/link'
 
@@ -299,7 +299,9 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   })
 
   const [addLangOpen, setAddLangOpen] = useState(false)
+  const [addLangQuery, setAddLangQuery] = useState('')
   const addLangRef = useRef<HTMLDivElement>(null)
+  const addLangInputRef = useRef<HTMLInputElement>(null)
   const [premiumOpen, setPremiumOpen] = useState(false)
   const [editorNonce, setEditorNonce] = useState(0)
   const [translating, setTranslating] = useState(false)
@@ -315,7 +317,9 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   }, [])
 
   useEffect(() => {
-    if (!addLangOpen) return
+    if (!addLangOpen) { setAddLangQuery(''); return }
+    // Focus the searcher the moment the menu opens so the user can type straight away.
+    addLangInputRef.current?.focus()
     const onClick = (e: MouseEvent) => {
       if (addLangRef.current && !addLangRef.current.contains(e.target as Node)) setAddLangOpen(false)
     }
@@ -329,6 +333,17 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   }, [addLangOpen])
 
   const availableToAdd = LOCALES.filter(l => !shownLocales.includes(l))
+  // Filter the add-language list by a free-text query (native name, English label or
+  // code) — with 10 content locales a flat list was "too many options". Defaults to
+  // the full list; the site's own languages already sit in the tab row above.
+  const filteredToAdd = (() => {
+    const q = addLangQuery.trim().toLowerCase()
+    if (!q) return availableToAdd
+    return availableToAdd.filter(l => {
+      const m = LOCALE_META[l]
+      return m.native.toLowerCase().includes(q) || m.label.toLowerCase().includes(q) || m.code.toLowerCase().includes(q) || l.includes(q)
+    })
+  })()
 
   const addLanguage = (loc: Locale) => {
     setShownLocales(prev => LOCALES.filter(l => prev.includes(l) || l === loc))
@@ -870,8 +885,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                         isActive ? 'bg-surface text-text shadow-card ring-1 ring-accent/40' : 'text-muted hover:text-text',
                       )}
                     >
-                      <span className="text-sm leading-none">{LOCALE_META[loc].flag}</span>
-                      <span className="uppercase tracking-wider">{loc}</span>
+                      <span className="uppercase tracking-wider">{LOCALE_META[loc].code}</span>
                       <span className={cn('w-1.5 h-1.5 rounded-full', dotColor)} aria-hidden />
                       {loc === defaultLocale && (
                         <span className={cn('text-[9px] font-bold', isActive ? 'text-accent' : 'text-subtle')}>·def</span>
@@ -904,20 +918,37 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                   {addLangOpen && (
-                    <div role="menu" className="absolute top-full right-0 mt-1.5 z-40 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden w-44">
-                      <p className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-subtle">Afegir idioma</p>
-                      {availableToAdd.map(loc => (
-                        <button
-                          key={loc}
-                          type="button"
-                          onClick={() => addLanguage(loc)}
-                          className="cursor-pointer w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-surface-hover transition-colors text-left"
-                        >
-                          <span className="text-base leading-none">{LOCALE_META[loc].flag}</span>
-                          <span className="flex-1 font-medium text-text">{LOCALE_META[loc].native}</span>
-                          <Plus className="w-3 h-3 text-subtle" />
-                        </button>
-                      ))}
+                    <div role="menu" className="absolute top-full right-0 mt-1.5 z-40 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden w-52">
+                      <div className="border-b border-border p-1.5">
+                        <input
+                          ref={addLangInputRef}
+                          type="text"
+                          value={addLangQuery}
+                          onChange={(e) => setAddLangQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && filteredToAdd.length > 0) { e.preventDefault(); addLanguage(filteredToAdd[0]) }
+                          }}
+                          placeholder="Cerca un idioma…"
+                          aria-label="Cerca un idioma"
+                          className="h-8 w-full rounded-lg border border-border bg-surface-subtle px-2.5 text-sm text-text outline-none transition-colors focus:border-accent placeholder:text-subtle"
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-y-auto py-1">
+                        {filteredToAdd.length === 0 ? (
+                          <p className="px-3 py-2 text-xs text-subtle">Cap idioma coincideix.</p>
+                        ) : filteredToAdd.map(loc => (
+                          <button
+                            key={loc}
+                            type="button"
+                            onClick={() => addLanguage(loc)}
+                            className="cursor-pointer w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-surface-hover transition-colors text-left"
+                          >
+                            <span className="grid h-5 w-7 shrink-0 place-items-center rounded bg-surface-subtle text-[10px] font-bold tracking-wide text-subtle">{LOCALE_META[loc].code}</span>
+                            <span className="flex-1 font-medium text-text">{LOCALE_META[loc].native}</span>
+                            <Plus className="w-3 h-3 text-subtle" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -939,7 +970,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                 )}
               >
                 {translating
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ? <KnotSpinner className="w-3.5 h-3.5" />
                   : canTranslate ? <Sparkles className="w-3.5 h-3.5" /> : <Crown className="w-3.5 h-3.5" />}
                 {translating ? 'Traduint…' : 'Traduir'}
               </button>
@@ -1058,7 +1089,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                   onClick={acceptDetection}
                   className="cursor-pointer ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-info text-white text-xs font-semibold hover:opacity-90 transition-opacity"
                 >
-                  Canviar a {LOCALE_META[detectedLocale].flag} {detectedLocale.toUpperCase()}
+                  Canviar a {LOCALE_META[detectedLocale].native}
                 </button>
                 <button
                   type="button"
@@ -1098,21 +1129,42 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
 
         {/* ── DRAWER ────────────────────────────────────────────────────── */}
         {drawerOpen && (
-          <aside className="hidden lg:flex w-[360px] shrink-0 border-l border-border bg-bg-elevated flex-col overflow-hidden animate-in slide-in-from-right duration-200">
-            {/* Drawer tabs — animated segmented control */}
-            <div className="shrink-0 border-b border-border px-3 py-2">
-              <SegmentedTabs
-                aria-label="Panells de l'editor"
-                size="sm"
-                fluid
-                value={drawerTab}
-                onChange={setDrawerTab}
-                segments={[
-                  { key: 'settings', label: 'Ajustos', icon: <Settings2 className="w-3.5 h-3.5" /> },
-                  { key: 'seo', label: 'SEO', icon: <Search className="w-3.5 h-3.5" /> },
-                  { key: 'ai', label: 'IA', icon: <Bot className="w-3.5 h-3.5" /> },
-                ]}
-              />
+          <aside className="hidden lg:flex w-[380px] shrink-0 border-l border-border bg-bg-elevated flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+            {/* Drawer tabs — prominent card-style switcher (not a faint pill row), so
+                Ajustos / SEO / IA read as real sections, not afterthoughts. */}
+            <div className="shrink-0 border-b border-border p-3">
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: 'settings', label: 'Ajustos', desc: 'Contingut', icon: <Settings2 className="h-4 w-4" /> },
+                  { key: 'seo', label: 'SEO', desc: 'Cerca', icon: <Search className="h-4 w-4" /> },
+                  { key: 'ai', label: 'IA', desc: 'Assistent', icon: <Bot className="h-4 w-4" /> },
+                ] as const).map((t) => {
+                  const active = drawerTab === t.key
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setDrawerTab(t.key)}
+                      aria-pressed={active}
+                      className={cn(
+                        'group flex cursor-pointer flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-all',
+                        active
+                          ? 'border-accent bg-accent-soft text-accent shadow-sm ring-1 ring-accent/20'
+                          : 'border-border bg-surface text-muted hover:border-border-strong hover:text-text hover:bg-surface-hover',
+                      )}
+                    >
+                      <span className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                        active ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
+                      )}>
+                        {t.icon}
+                      </span>
+                      <span className="text-xs font-bold leading-none">{t.label}</span>
+                      <span className={cn('text-[0.65rem] leading-none', active ? 'text-accent/70' : 'text-subtle')}>{t.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Drawer content — scrolls */}
@@ -1334,7 +1386,7 @@ function SettingsPanel({
             title="Pujar imatge"
             className="cursor-pointer shrink-0 flex items-center justify-center w-9 h-9 rounded-lg border border-border bg-surface-subtle text-muted hover:text-text hover:border-border-strong transition-colors disabled:opacity-60"
           >
-            {uploadingFeatured ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {uploadingFeatured ? <KnotSpinner className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
           </button>
           <input
             ref={featuredFileRef}
@@ -1549,7 +1601,7 @@ function AiPanel({
           className="cursor-pointer w-full flex items-center justify-center gap-2 h-10 rounded-lg bg-on-accent text-accent text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {generating
-            ? <><Loader2 className="w-4 h-4 animate-spin" /> Generant l’article…</>
+            ? <><KnotSpinner className="w-4 h-4" /> Generant l’article…</>
             : <><Sparkles className="w-4 h-4" /> Genera un article SEO</>}
         </button>
         {generating && (
@@ -1597,7 +1649,7 @@ function AiPanel({
           )}
         >
           {loading
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analitzant…</>
+            ? <><KnotSpinner className="w-3.5 h-3.5" /> Analitzant…</>
             : canTranslate
               ? <><Sparkles className="w-3.5 h-3.5" /> {analysis ? 'Tornar a analitzar' : 'Analitzar amb el coach'}</>
               : <><Crown className="w-3.5 h-3.5" /> Funció Premium</>}
@@ -1860,7 +1912,7 @@ function AutosaveIndicator({
   onForce: () => void
 }) {
   const view =
-    state === 'saving' ? { icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />, label: 'Desant…', cls: 'text-muted' }
+    state === 'saving' ? { icon: <KnotSpinner className="w-3.5 h-3.5" />, label: 'Desant…', cls: 'text-muted' }
     : state === 'error' ? { icon: <AlertCircle className="w-3.5 h-3.5" />, label: 'Reintentar', cls: 'text-danger' }
     : state === 'saved' ? { icon: <CheckCircle2 className="w-3.5 h-3.5 text-success" />, label: 'Desat', cls: 'text-muted' }
     : hasTitle ? { icon: <CheckCircle2 className="w-3.5 h-3.5 text-success" />, label: 'Desat', cls: 'text-muted' }

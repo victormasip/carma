@@ -3,13 +3,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  X, Globe, Search, Loader2, CheckCircle2, XCircle, AlertCircle, Check,
+  X, Globe, Search, CheckCircle2, XCircle, AlertCircle, Check,
   Upload, RotateCcw, Link2, Minimize2, Maximize2, StopCircle,
   Eye, RefreshCw, Filter, Newspaper, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { isLocale, LOCALE_META } from '@/lib/i18n/config'
 import Button from '@/components/ui/Button'
 import KnotLoader from '@/components/ui/KnotLoader'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { cn } from '@/lib/cn'
 
 type DiscoveredArticle = { url: string; title: string; language?: string | null }
@@ -30,6 +32,10 @@ const SELECTOR_FIELDS = [
   { key: 'date',       label: 'Data' },
   { key: 'categories', label: 'Categories' },
 ]
+
+// Friendly language label for the discovery chips — native name when we support
+// the locale, else the bare uppercase code (so an unmapped code still reads).
+const langLabel = (code: string): string => (isLocale(code) ? LOCALE_META[code].native : code.toUpperCase())
 
 // How many single-article import requests run in parallel for a monolingual set.
 // Each request is one article (the DB-aware i18n merge depends on that), so the
@@ -351,7 +357,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                   <Button
                     glow
                     onClick={() => handleDiscover()} disabled={!url.trim() || phase === 'discovering'}
-                    iconLeft={phase === 'discovering' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    iconLeft={phase === 'discovering' ? <KnotSpinner className="w-4 h-4" /> : <Search className="w-4 h-4" />}
                   >
                     {phase === 'discovering' ? 'Descobrint…' : 'Descobrir'}
                   </Button>
@@ -400,7 +406,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                     <Button
                       onClick={handleCrawl} disabled={!crawlUrl.trim() || !linkSelector.trim() || crawlLoading}
                       variant="secondary"
-                      iconLeft={crawlLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      iconLeft={crawlLoading ? <KnotSpinner className="w-4 h-4" /> : <Search className="w-4 h-4" />}
                     >
                       Rastrejar
                     </Button>
@@ -457,7 +463,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                   <Button
                     onClick={handlePreview} disabled={!manualUrl.trim() || previewLoading}
                     variant="secondary"
-                    iconLeft={previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                    iconLeft={previewLoading ? <KnotSpinner className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   >
                     Previsualitzar
                   </Button>
@@ -550,7 +556,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                   </LangChip>
                   {availableLangs.map(lang => (
                     <LangChip key={lang} active={langFilter === lang} onClick={() => { setLangFilter(lang); setSelected(new Set(discovered.filter(a => a.language === lang).map(a => a.url))) }}>
-                      {lang.toUpperCase()} ({discovered.filter(a => a.language === lang).length})
+                      {langLabel(lang)} ({discovered.filter(a => a.language === lang).length})
                     </LangChip>
                   ))}
                 </div>
@@ -625,7 +631,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
               </div>
               {progress.current && (
                 <p className="text-xs text-muted truncate font-medium flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin shrink-0 text-accent" />{progress.current}
+                  <KnotSpinner className="w-3 h-3 shrink-0 text-accent" />{progress.current}
                 </p>
               )}
               <div className="flex gap-2">
@@ -726,7 +732,7 @@ function ArticleCard({ article, selected, onToggle }: { article: DiscoveredArtic
         <span className="mt-0.5 block truncate text-xs text-subtle">{path}</span>
       </span>
       {article.language && (
-        <span className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-xs font-semibold uppercase text-muted">{article.language}</span>
+        <span title={langLabel(article.language)} className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-xs font-semibold uppercase text-muted">{article.language}</span>
       )}
     </button>
   )

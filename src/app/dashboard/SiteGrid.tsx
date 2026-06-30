@@ -4,8 +4,9 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowUpRight, FileText, PenLine, ExternalLink, Eye, CheckCircle2, Check, Trash2, X, Loader2,
+  ArrowUpRight, FileText, PenLine, ExternalLink, Eye, CheckCircle2, Check, Trash2, X,
 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { deleteSite } from '@/lib/actions/sites'
 import { useConfirm } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -91,7 +92,7 @@ export default function SiteGrid({ sites, canManage }: { sites: SiteWithCounts[]
               disabled={pending}
               className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl bg-danger px-3.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {pending ? <KnotSpinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
               Eliminar
             </button>
             <button onClick={clear} className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted hover:bg-surface-hover hover:text-text">

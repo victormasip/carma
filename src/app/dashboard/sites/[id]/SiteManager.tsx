@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, UserPlus, UserMinus, Users, Loader2, AlertTriangle, Search } from 'lucide-react'
+import { Pencil, Trash2, UserPlus, UserMinus, Users, AlertTriangle, Search } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { updateSiteName, deleteSite, assignUserToSite, removeUserFromSite } from '@/lib/actions/sites'
 import { useToast } from '@/components/ui/Toast'
 import { Modal, ModalClose } from '@/components/ui/Modal'
@@ -265,7 +266,7 @@ export function SiteUsersManager({
                     size="sm"
                     onClick={() => handleAssign(c.id, c.email)}
                     disabled={isPending}
-                    iconLeft={isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                    iconLeft={isPending ? <KnotSpinner className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
                   >
                     Afegir
                   </Button>

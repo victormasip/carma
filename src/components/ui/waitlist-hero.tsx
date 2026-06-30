@@ -96,7 +96,7 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
         .cz-glow { animation: cz-glow 2s ease-in-out infinite; }
       `}</style>
 
-      <div className={`relative w-full ${isSection ? "h-[660px]" : "h-screen"} overflow-hidden`} style={{ backgroundColor: "#0e0d0c", fontFamily: 'var(--font-jakarta), system-ui, sans-serif' }}>
+      <div className={`relative w-full ${isSection ? "h-[660px]" : "h-screen"} overflow-hidden`} style={{ backgroundColor: "#0e0d0c", fontFamily: 'var(--font-ubuntu), system-ui, sans-serif' }}>
         {/* Drifting gold halos (replacing the original spinning images) */}
         <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ perspective: "1200px", transform: "perspective(1200px) rotateX(15deg)", transformOrigin: "center bottom" }}>
           <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 1600, height: 1600, animation: "cz-spin-slow 80s linear infinite", background: "radial-gradient(circle, rgba(245,188,0,0.10), transparent 60%)" }} />

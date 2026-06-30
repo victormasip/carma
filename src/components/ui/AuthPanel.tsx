@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, Globe, MailCheck } from 'lucide-react'
 import KnotLoader from '@/components/ui/KnotLoader'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { createClient } from '@/lib/supabase/client'
 import { AuthCardShell, AuthInput } from '@/components/ui/auth-card-shell'
 import ForgotPasswordModal from '@/app/ForgotPasswordModal'
@@ -65,7 +66,7 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
       className="btn-gold relative mt-1 flex h-10 w-full items-center justify-center gap-1.5 overflow-hidden rounded-lg text-sm font-extrabold transition-transform duration-150 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70"
     >
       {loading
-        ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#1a1400]/70 border-t-transparent" />
+        ? <KnotSpinner className="h-4 w-4" />
         : <>{label} <ArrowRight className="h-4 w-4" /></>}
     </button>
   )

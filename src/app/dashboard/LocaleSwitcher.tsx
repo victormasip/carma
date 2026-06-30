@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Check, ChevronDown, Languages } from 'lucide-react'
-import { LOCALES, LOCALE_META } from '@/lib/i18n/config'
+import { UI_LOCALES, LOCALE_META, uiLocale } from '@/lib/i18n/config'
 import { useLocale, useT } from '@/lib/i18n/LocaleProvider'
 
 export default function LocaleSwitcher() {
@@ -30,7 +30,7 @@ export default function LocaleSwitcher() {
         className="flex w-full items-center gap-2.5 px-3 py-2 text-sm font-medium text-muted hover:text-text hover:bg-surface-hover rounded-lg transition-colors cursor-pointer"
       >
         <Languages className="w-4 h-4 shrink-0" />
-        <span className="flex-1 text-left">{LOCALE_META[locale].native}</span>
+        <span className="flex-1 text-left">{LOCALE_META[uiLocale(locale)].native}</span>
         <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -39,8 +39,8 @@ export default function LocaleSwitcher() {
           role="listbox"
           className="absolute bottom-full left-0 right-0 mb-1.5 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden z-10"
         >
-          {LOCALES.map(loc => {
-            const active = loc === locale
+          {UI_LOCALES.map(loc => {
+            const active = loc === uiLocale(locale)
             return (
               <button
                 key={loc}
@@ -54,7 +54,9 @@ export default function LocaleSwitcher() {
                     : 'text-muted hover:text-text hover:bg-surface-hover font-medium'
                 }`}
               >
-                <span>{LOCALE_META[loc].flag}</span>
+                <span className={`grid h-5 w-7 shrink-0 place-items-center rounded text-[10px] font-bold tracking-wide ${active ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-subtle'}`}>
+                  {LOCALE_META[loc].code}
+                </span>
                 <span className="flex-1 text-left">{LOCALE_META[loc].native}</span>
                 {active && <Check className="w-3.5 h-3.5 text-accent" />}
               </button>

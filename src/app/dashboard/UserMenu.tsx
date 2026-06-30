@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { ChevronUp, LogOut, Check } from 'lucide-react'
-import { LOCALES, LOCALE_META } from '@/lib/i18n/config'
+import { UI_LOCALES, LOCALE_META, uiLocale } from '@/lib/i18n/config'
 import { useLocale, useT } from '@/lib/i18n/LocaleProvider'
 import { useTheme, type ThemeMode } from '@/lib/theme/ThemeProvider'
 import { Sun, Moon, Monitor } from 'lucide-react'
@@ -112,8 +112,8 @@ export default function UserMenu({ userEmail, isSuperAdmin }: Props) {
               {t('nav.language')}
             </p>
             <ul className="space-y-0.5">
-              {LOCALES.map(loc => {
-                const active = loc === locale
+              {UI_LOCALES.map(loc => {
+                const active = loc === uiLocale(locale)
                 return (
                   <li key={loc}>
                     <button
@@ -124,7 +124,12 @@ export default function UserMenu({ userEmail, isSuperAdmin }: Props) {
                         active ? 'text-accent bg-accent-soft font-semibold' : 'text-muted hover:text-text hover:bg-surface-hover font-medium',
                       )}
                     >
-                      <span aria-hidden>{LOCALE_META[loc].flag}</span>
+                      <span aria-hidden className={cn(
+                        'grid h-5 w-7 shrink-0 place-items-center rounded text-[10px] font-bold tracking-wide',
+                        active ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-subtle',
+                      )}>
+                        {LOCALE_META[loc].code}
+                      </span>
                       <span className="flex-1 text-left">{LOCALE_META[loc].native}</span>
                       {active && <Check className="w-3.5 h-3.5 text-accent" />}
                     </button>

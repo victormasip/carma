@@ -12,11 +12,12 @@
 // editing and selecting never fight each other.
 
 import { useRef, useState, useEffect, useLayoutEffect, type KeyboardEvent } from 'react'
-import Link from 'next/link'
 import {
   Pencil, Trash2, ExternalLink, Eye, EyeOff, Check, ImagePlus, X,
-  Loader2, ImageIcon, Calendar,
+  ImageIcon, Calendar,
 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
+import Button from '@/components/ui/Button'
 import type { PostListItem } from '@/lib/actions/posts'
 import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { cn } from '@/lib/cn'
@@ -207,7 +208,7 @@ export default function ArticleCard({
 
         {uploading && (
           <div className="absolute inset-0 bg-bg-elevated/70 backdrop-blur-sm flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <KnotSpinner className="w-5 h-5 text-accent" />
           </div>
         )}
 
@@ -276,53 +277,62 @@ export default function ArticleCard({
           editClassName="text-[13px] text-text font-mono"
         />
 
-        {/* ── Actions — ONE consolidated row: publish toggle + edit + view + delete.
-            The status switch is color-coded (green = live) and lives inline with the
-            primary actions, so nothing is scattered across the card. ── */}
-        <div className="border-t border-border mt-auto pt-2.5 flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onTogglePublish}
-            disabled={busy}
-            role="switch"
-            aria-checked={published}
-            aria-label={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
-            title={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
-            className={cn(
-              'flex items-center gap-1.5 h-9 pl-2 pr-2.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-60 shrink-0',
-              published ? 'border-success/30 bg-success-soft text-success' : 'border-border bg-surface-subtle text-muted hover:bg-surface-hover',
-            )}
-          >
-            {published ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span className={cn('relative w-8 h-[18px] rounded-full transition-colors shrink-0', published ? 'bg-success' : 'bg-border-strong')}>
-              <span className={cn('absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full bg-white shadow transition-transform', published && 'translate-x-[14px]')} />
-            </span>
-          </button>
-          <Link
+        {/* ── Actions — primary Edit (premium gold) on the LEFT; secondary actions
+            (Hide toggle · Preview · Delete) grouped on the RIGHT, each with a clear
+            resting tint so they stand out without competing with the gold CTA. ── */}
+        <div className="border-t border-border mt-auto pt-2.5 flex items-center justify-between gap-2">
+          <Button
             href={`/dashboard/sites/${siteId}/posts/${post.id}/edit`}
+            size="sm"
+            iconLeft={<Pencil className="w-4 h-4" />}
             title="Editar el contingut de l'article"
-            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 h-9 text-[13px] font-bold text-white bg-accent hover:bg-accent-hover rounded-lg transition-colors shadow-sm"
+            // Bump the primary Edit CTA up a notch so it reads as the hero action and
+            // aligns with the h-9 secondary controls beside it (was h-8 / text-xs,
+            // which made the gold button look smaller than its siblings).
+            className="h-9 px-4 text-sm"
           >
-            <Pencil className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Editar</span>
-          </Link>
-          <a
-            href={`/render/${siteId}/${post.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Veure al lloc"
-            className="cursor-pointer flex items-center justify-center w-9 h-9 text-muted bg-surface border border-border hover:border-accent/40 hover:text-accent hover:bg-accent-soft rounded-lg transition-all shrink-0"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-          <button
-            onClick={onDelete}
-            disabled={busy}
-            title="Eliminar"
-            className="cursor-pointer flex items-center justify-center w-9 h-9 text-danger hover:bg-danger-soft border border-transparent hover:border-danger/30 rounded-lg transition-all disabled:opacity-40 shrink-0"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+            Editar
+          </Button>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onTogglePublish}
+              disabled={busy}
+              role="switch"
+              aria-checked={published}
+              aria-label={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
+              title={published ? 'Publicat — clica per ocultar' : 'Esborrany — clica per publicar'}
+              className={cn(
+                'flex items-center gap-1.5 h-9 pl-2 pr-2.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-60 shrink-0',
+                published ? 'border-success/30 bg-success-soft text-success' : 'border-border-strong bg-surface-subtle text-muted hover:bg-surface-hover',
+              )}
+            >
+              {published ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span className={cn('relative w-8 h-[18px] rounded-full transition-colors shrink-0', published ? 'bg-success' : 'bg-border-strong')}>
+                <span className={cn('absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full bg-white shadow transition-transform', published && 'translate-x-[14px]')} />
+              </span>
+            </button>
+            <a
+              href={`/render/${siteId}/${post.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Previsualitzar al lloc"
+              aria-label="Previsualitzar al lloc"
+              className="cursor-pointer flex items-center justify-center w-9 h-9 text-accent bg-accent-soft border border-accent/25 hover:bg-accent hover:text-on-accent rounded-lg transition-all shrink-0"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <button
+              onClick={onDelete}
+              disabled={busy}
+              title="Eliminar"
+              aria-label="Eliminar"
+              className="cursor-pointer flex items-center justify-center w-9 h-9 text-danger bg-danger-soft/60 border border-danger/25 hover:bg-danger hover:text-white rounded-lg transition-all disabled:opacity-40 shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </article>

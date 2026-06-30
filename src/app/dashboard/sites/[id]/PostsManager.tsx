@@ -4,8 +4,9 @@ import { useState, useTransition, useMemo, useRef, useCallback, useEffect } from
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, FileText, Search, Upload, Send, X, EyeOff,
-  ChevronLeft, ChevronRight, Loader2, Sparkles, PenLine, Crown,
+  ChevronLeft, ChevronRight, Sparkles, PenLine, Crown,
 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import {
   deletePost, togglePublish, togglePublishBulk, deletePostsBulk, updatePostFields,
   listPosts, generateAndCreateArticle, type PostListItem, type PostListResult,
@@ -318,6 +319,9 @@ export default function PostsManager({
               Importar
             </Button>
           )}
+          <Button href={`/dashboard/sites/${siteId}/posts/new`} variant="secondary" iconLeft={<Plus className="w-4 h-4" />}>
+            Escriure
+          </Button>
           {/* Magic SEO Article — the premium AI entry point. The signature gold
               CTA (glow) so it reads as the first-class way to start a post. */}
           <Button
@@ -328,9 +332,6 @@ export default function PostsManager({
             iconLeft={isSuperAdmin ? <Sparkles className="w-4 h-4" /> : <Crown className="w-4 h-4" />}
           >
             {generating ? 'Generant…' : 'Genera amb IA'}
-          </Button>
-          <Button href={`/dashboard/sites/${siteId}/posts/new`} variant="secondary" iconLeft={<Plus className="w-4 h-4" />}>
-            Escriure Article
           </Button>
         </div>
       </header>
@@ -360,7 +361,7 @@ export default function PostsManager({
                 className="h-11 pl-10 pr-4 rounded-xl bg-surface font-medium"
               />
               {isPending && (
-                <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-accent animate-spin" />
+                <KnotSpinner className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-accent" />
               )}
             </div>
             <div className="flex gap-1 bg-surface-hover p-1 rounded-xl shrink-0">

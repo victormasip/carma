@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
+import { getStudioArticle, updatePostFields } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
@@ -91,6 +92,11 @@ type ThemeStudio = {
   // preview can reload to pick up structural (header/footer/title) changes
   // without a setState-in-render or impure Date.now() at the consumer.
   savedAt: number
+  // ── Undo / redo over the editable slice (tokens + chrome + section title) ──
+  undo: () => void
+  redo: () => void
+  canUndo: boolean
+  canRedo: boolean
   // capture
   url: string
   setUrl: (v: string) => void
@@ -119,6 +125,21 @@ type ThemeStudio = {
   capture: CaptureState
   closeCapture: () => void
   cancelCapture: () => void
+  // Explicit "I've seen the result, take me to the next step" — fired by the
+  // success CTA. Closes the modal AND advances onboarding (import / layout
+  // picker). Kept separate from closeCapture so dismissing via the X does NOT
+  // auto-advance — the user stays in control of the flow.
+  proceedFromCapture: () => void
+  // ── Canvas view: the live feed, or a single article (premium article-layout
+  //    preview + inline headline/lede editing) ──
+  view: 'feed' | 'article'
+  setView: (v: 'feed' | 'article') => void
+  // The post the Article view previews + inline-edits (newest published). null when
+  // the site has no article yet → the Article view shows a sample (preview only).
+  editableArticle: { id: string; slug: string; title: string } | null
+  // Persist an inline edit of the previewed article's headline or lede. No-op when
+  // there's no real article (sample preview). Bumps savedAt so the canvas refreshes.
+  saveArticleField: (field: 'title' | 'excerpt', value: string) => Promise<void>
   // tokens
   tokens: DesignTokens
   setToken: <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => void
@@ -149,6 +170,9 @@ type ThemeStudio = {
   externalStyles: string[]
   externalScripts: string[]
   fontLinks: string[]
+  // Register an extra font stylesheet (e.g. a Google Fonts URL picked in the
+  // typography panel) so the public render loads it. Deduped; autosaved.
+  addFontLink: (href: string) => void
   // native card replication (GOAL 2): true when the feed mirrors the client's
   // detected blog cards; clearNativeCard reverts to our premium default layout.
   nativeCardActive: boolean
@@ -167,7 +191,7 @@ const FREE_REGENS = 1
 export function ThemeStudioProvider({
   siteId, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
   isPremium = false, initialRegenCount = 0,
-  onCaptureSuccess,
+  onCaptureSuccess, onCaptureProceed,
 }: {
   siteId: string
   initialTheme: Theme | null
@@ -182,15 +206,39 @@ export function ThemeStudioProvider({
   // Wand capture lands — lets the host coordinate the post-capture flow (e.g.
   // jump to the Theme tab, offer WordPress article import).
   onCaptureSuccess?: (info: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => void
+  // Fired when the user EXPLICITLY clicks the success CTA ("Comencem" / "Importa
+  // els articles" / "Editar el tema") — the moment to advance the onboarding.
+  onCaptureProceed?: (info: { framework: string | null }) => void
 }) {
   // Latest-ref so grab()'s memoized callback always sees the current handler
   // without taking it as a dependency.
   const onCaptureSuccessRef = useRef(onCaptureSuccess)
   onCaptureSuccessRef.current = onCaptureSuccess
+  const onCaptureProceedRef = useRef(onCaptureProceed)
+  onCaptureProceedRef.current = onCaptureProceed
 
   const [active, setActive] = useState(!!initialTheme)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [savedAt, setSavedAt] = useState(0)
+
+  // ── Canvas view + inline article editing ──
+  const [view, setView] = useState<'feed' | 'article'>('feed')
+  const [editableArticle, setEditableArticle] = useState<{ id: string; slug: string; title: string } | null>(null)
+  useEffect(() => {
+    let alive = true
+    void getStudioArticle(siteId).then((a) => { if (alive) setEditableArticle(a) }).catch(() => {})
+    return () => { alive = false }
+  }, [siteId])
+  const saveArticleField = useCallback(async (field: 'title' | 'excerpt', value: string) => {
+    const art = editableArticle
+    if (!art) return // sample preview — nothing to persist
+    const fields = field === 'title' ? { title: value } : { excerpt: value }
+    const res = await updatePostFields(art.id, siteId, fields)
+    if (!res.error) {
+      if (field === 'title') setEditableArticle((a) => (a ? { ...a, title: value } : a))
+      setSavedAt(Date.now()) // refresh the canvas to show the persisted state
+    }
+  }, [editableArticle, siteId])
 
   // ── Freemium regeneration quota ──
   const [regenCount, setRegenCount] = useState(initialRegenCount)
@@ -241,6 +289,10 @@ export function ThemeStudioProvider({
   const [fontLinks, setFontLinks] = useState<string[]>(initialTheme?.font_links ?? [])
   const [baseUrl, setBaseUrl] = useState(initialTheme?.base_url ?? '')
   const [detectedFramework, setDetectedFramework] = useState<string | null>(initialTheme?.detected_framework ?? null)
+  // Latest-ref mirror so proceedFromCapture (memoized, [] deps) reads the current
+  // framework without re-creating the callback on every capture.
+  const detectedFrameworkRef = useRef(detectedFramework)
+  detectedFrameworkRef.current = detectedFramework
   const [detectedHosting, setDetectedHosting] = useState<string | null>(initialTheme?.detected_hosting ?? null)
   const [tokens, setTokens] = useState<DesignTokens>({ ...DEFAULT_TOKENS, ...(initialTheme?.design_tokens ?? {}) })
   const [sectionTitle, setSectionTitle] = useState(initialTheme?.section_title ?? '')
@@ -251,6 +303,11 @@ export function ThemeStudioProvider({
   const setToken = useCallback(
     <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) =>
       setTokens(t => ({ ...t, [key]: value })),
+    [],
+  )
+
+  const addFontLink = useCallback(
+    (href: string) => setFontLinks(prev => (prev.includes(href) ? prev : [...prev, href])),
     [],
   )
 
@@ -306,6 +363,69 @@ export function ThemeStudioProvider({
 
     return () => clearTimeout(handle)
   }, [serialized, active, siteId])
+
+  // ── Undo / redo ─────────────────────────────────────────────────────────────
+  // A bounded history of `serialized` snapshots, recorded on a settle debounce so
+  // one "finished" edit = one undo step. Kept fully INDEPENDENT of the autosave
+  // effect above (which stays untouched) — restoring just calls the base setters,
+  // and the autosave persists the restored state like any other change.
+  const historyRef = useRef<string[]>([])
+  const [histIndex, setHistIndex] = useState(-1)
+  const histIndexRef = useRef(-1)
+  histIndexRef.current = histIndex
+  const restoringRef = useRef(false)
+
+  useEffect(() => {
+    if (!active) return
+    // Seed the baseline (the loaded/captured theme) as the first undo point.
+    if (historyRef.current.length === 0) {
+      historyRef.current = [serialized]
+      setHistIndex(0)
+      return
+    }
+    // A restore caused this change — don't record it as a new step.
+    if (restoringRef.current) { restoringRef.current = false; return }
+    if (historyRef.current[histIndexRef.current] === serialized) return
+    const t = setTimeout(() => {
+      if (historyRef.current[histIndexRef.current] === serialized) return
+      const next = historyRef.current.slice(0, histIndexRef.current + 1)
+      next.push(serialized)
+      while (next.length > 60) next.shift()
+      historyRef.current = next
+      setHistIndex(next.length - 1)
+    }, AUTOSAVE_MS)
+    return () => clearTimeout(t)
+  }, [serialized, active])
+
+  const restoreFromSnapshot = useCallback((snap: string) => {
+    try {
+      const d = JSON.parse(snap) as ThemeData
+      restoringRef.current = true
+      setTokens({ ...DEFAULT_TOKENS, ...(d.design_tokens ?? {}) })
+      setSectionTitle(d.section_title ?? '')
+      setExtractedHeader(d.extracted_header ?? '')
+      setExtractedFooter(d.extracted_footer ?? '')
+      setExtractedHead(d.extracted_head ?? '')
+      setChromeI18n((d.chrome_i18n as ChromeI18n) ?? {})
+    } catch { /* malformed snapshot — ignore */ }
+  }, [])
+
+  const undo = useCallback(() => {
+    const i = histIndexRef.current
+    if (i <= 0) return
+    setHistIndex(i - 1)
+    restoreFromSnapshot(historyRef.current[i - 1])
+  }, [restoreFromSnapshot])
+
+  const redo = useCallback(() => {
+    const i = histIndexRef.current
+    if (i < 0 || i >= historyRef.current.length - 1) return
+    setHistIndex(i + 1)
+    restoreFromSnapshot(historyRef.current[i + 1])
+  }, [restoreFromSnapshot])
+
+  const canUndo = histIndex > 0
+  const canRedo = histIndex >= 0 && histIndex < historyRef.current.length - 1
 
   // Apply a finished capture to the live theme state (identical to the old
   // single-response handler — just driven by the streamed `result` event).
@@ -412,8 +532,11 @@ export function ThemeStudioProvider({
           ) as Record<CaptureStepId, CaptureStepStatus>,
         }))
         onCaptureSuccessRef.current?.({ framework: evt.data.detection?.framework ?? null, url: target, siteName: evt.data.site_name ?? null, logoUrl: evt.data.logo_url ?? null })
-        // Linger on the completed state briefly, then reveal the editor.
-        setTimeout(() => setCapture(c => (c.phase === 'success' ? { ...c, open: false } : c)), 1300)
+        // The success state now PERSISTS until the user acts. The modal used to
+        // auto-close after 1.3s, which yanked the "Comencem" CTA away before the
+        // user could read what happened or click it — the onboarding then felt
+        // like it skipped ahead. The user now advances on their own click
+        // (proceedFromCapture) or dismisses with the X (closeCapture).
       } else {
         setError(evt.error)
         setCapture(c => ({
@@ -477,6 +600,12 @@ export function ThemeStudioProvider({
 
   // Dismiss the modal after the stream has ended (success or error).
   const closeCapture = useCallback(() => setCapture(c => ({ ...c, open: false })), [])
+
+  // The user clicked the success CTA: close the modal AND advance the onboarding.
+  const proceedFromCapture = useCallback(() => {
+    setCapture(c => ({ ...c, open: false }))
+    onCaptureProceedRef.current?.({ framework: detectedFrameworkRef.current })
+  }, [])
 
   // Abort an in-flight capture and close the modal — no error UI, the user
   // chose to stop.
@@ -584,11 +713,13 @@ export function ThemeStudioProvider({
     hasTheme: active,
     saveStatus,
     savedAt,
+    undo, redo, canUndo, canRedo,
     url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab, removeTheme,
     isPremium, regenCount, freeRegens: FREE_REGENS, canRegenerate,
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,
-    capture, closeCapture, cancelCapture,
+    capture, closeCapture, cancelCapture, proceedFromCapture,
+    view, setView, editableArticle, saveArticleField,
     tokens, setToken,
     sectionTitle: sectionForLocale, setSectionTitle: setSectionForLocale,
     extractedHeader: headerForLocale, setExtractedHeader: setHeaderForLocale,
@@ -598,7 +729,7 @@ export function ThemeStudioProvider({
     editLocale, setEditLocale, editLocales: [...LOCALES], chromeDefaultLocale,
     canTranslateChrome: canTranslate, translatingChrome, translateChrome,
     detectedFramework, detectedHosting,
-    externalStyles, externalScripts, fontLinks,
+    externalStyles, externalScripts, fontLinks, addFontLink,
     nativeCardActive: !!blogSignature?.card,
     nativeCardColumns: blogSignature?.card?.columns ?? null,
     clearNativeCard: () => setBlogSignature(null),

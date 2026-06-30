@@ -32,12 +32,21 @@ export default function KnotLoader({
       className={cn('flex flex-col items-center justify-center gap-5', ink && 'text-current', className)}
     >
       <div className="relative" style={{ width: size, height: size }}>
-        {/* Soft breathing gold halo behind the mark (gold tone only). */}
+        {/* Soft breathing gold halo behind the mark — a warm, larger wash that
+            softly illuminates the loader's container as the strand draws (gold
+            tone only). Two layers: a wide ambient bloom + a tighter core glow. */}
         {!ink && (
-          <div
-            aria-hidden
-            className="knot-halo absolute -inset-2 -z-10 rounded-full bg-accent/25 blur-2xl"
-          />
+          <>
+            <div
+              aria-hidden
+              className="knot-halo absolute -inset-5 -z-10 rounded-full bg-accent/25 blur-3xl"
+            />
+            <div
+              aria-hidden
+              className="knot-halo absolute -inset-1 -z-10 rounded-full bg-accent/20 blur-xl"
+              style={{ animationDelay: '-1.2s' }}
+            />
+          </>
         )}
         <svg viewBox={KNOT_VIEWBOX} width={size} height={size} aria-hidden style={{ overflow: 'visible' }}>
           <defs>

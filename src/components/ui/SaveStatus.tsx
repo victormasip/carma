@@ -7,7 +7,8 @@
 // focus. Pair with the `useFlashSave` helper to drive the saving→saved→idle cycle.
 
 import { useCallback, useState } from 'react'
-import { Check, Loader2, AlertCircle } from 'lucide-react'
+import { Check, AlertCircle } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { cn } from '@/lib/cn'
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -60,7 +61,7 @@ export default function SaveStatus({
         className,
       )}
     >
-      {state === 'saving' && (<><Loader2 className="w-3.5 h-3.5 animate-spin" />{labels && 'Desant…'}</>)}
+      {state === 'saving' && (<><KnotSpinner className="w-3.5 h-3.5" />{labels && 'Desant…'}</>)}
       {state === 'saved' && (<><Check className="w-3.5 h-3.5" strokeWidth={3} />{labels && 'Desat'}</>)}
       {state === 'error' && (<><AlertCircle className="w-3.5 h-3.5" />{labels && 'No desat'}</>)}
     </span>

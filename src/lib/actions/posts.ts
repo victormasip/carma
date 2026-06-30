@@ -366,7 +366,7 @@ export async function updatePost(
 export async function updatePostFields(
   postId: string,
   siteId: string,
-  fields: { title?: string; slug?: string; featured_image?: string | null; created_at?: string },
+  fields: { title?: string; slug?: string; featured_image?: string | null; created_at?: string; excerpt?: string | null },
 ): Promise<ActionResult & { slug?: string; created_at?: string }> {
   try {
     const admin = await assertSiteAccess(siteId)
@@ -376,6 +376,13 @@ export async function updatePostFields(
       const t = fields.title.trim()
       if (!t) return { error: 'El títol no pot estar buit' }
       patch.title = t
+    }
+
+    // Lede / excerpt — plain text, trimmed; empty string clears it. Used by the
+    // Carma Studio inline article editor (headline + lede edited live in the preview).
+    if (fields.excerpt !== undefined) {
+      const e = (fields.excerpt ?? '').trim()
+      patch.excerpt = e || null
     }
 
     let finalDate: string | undefined
@@ -420,6 +427,30 @@ export async function updatePostFields(
     return { ...(finalSlug ? { slug: finalSlug } : {}), ...(finalDate ? { created_at: finalDate } : {}) }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
+/**
+ * The post the Carma Studio's Article view previews + inline-edits: the most recent
+ * PUBLISHED article. Returns null when the site has none yet (the Studio then shows a
+ * sample article — preview-only, no inline save). Access-gated like every post read.
+ */
+export async function getStudioArticle(
+  siteId: string,
+): Promise<{ id: string; slug: string; title: string } | null> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+    const { data } = await admin
+      .from('posts')
+      .select('id, slug, title')
+      .eq('site_id', siteId)
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data ? { id: data.id as string, slug: data.slug as string, title: (data.title as string) ?? '' } : null
+  } catch {
+    return null
   }
 }
 

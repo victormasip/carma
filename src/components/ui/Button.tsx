@@ -2,7 +2,7 @@
 
 import { forwardRef } from 'react'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
+import KnotSpinner from './KnotSpinner'
 import { cn } from '@/lib/cn'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
@@ -63,7 +63,7 @@ const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, Props>(function
 
   const inner = (
     <span className="relative z-[1] inline-flex items-center justify-center gap-2">
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : iconLeft}
+      {loading ? <KnotSpinner className="h-4 w-4" /> : iconLeft}
       {children}
       {!loading && iconRight}
     </span>
