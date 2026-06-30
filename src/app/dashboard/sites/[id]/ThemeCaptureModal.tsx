@@ -129,7 +129,7 @@ export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: bool
             </div>
           )}
           {phase === 'success' && (
-            <Button fullWidth onClick={closeCapture} iconLeft={<Check className="w-4 h-4" />}>
+            <Button glow fullWidth onClick={closeCapture} iconLeft={<Check className="w-4 h-4" />}>
               Editar el tema
             </Button>
           )}

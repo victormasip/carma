@@ -33,6 +33,10 @@ function ok() {
   return NextResponse.json({ success: true })
 }
 
+// Dev-only request tracing so an inbound POST — and WHY it is accepted or dropped —
+// is visible in the `next dev` console. Never logs in production; never logs the secret.
+const DEV = process.env.NODE_ENV !== 'production'
+
 // ─── Kapso signature (HMAC-SHA256 hex over the raw body, `X-Webhook-Signature`) ──
 // We sign the RAW request body string exactly as received: that string IS the JSON
 // Kapso stringified and signed, so re-parsing/re-stringifying (which could reorder
@@ -71,6 +75,19 @@ async function enqueueAgentTurn(
   })
 }
 
+// Kapso (and most webhook platforms) probe the endpoint with a GET to verify it is
+// reachable BEFORE enabling delivery. A 405 here can make the platform mark the hook
+// unhealthy and never POST events. Answer 200, echoing a verification challenge if one
+// is sent (Meta-style hub.challenge, or a plain ?challenge=).
+export function GET(request: NextRequest) {
+  const q = request.nextUrl.searchParams
+  const challenge =
+    q.get('challenge') || q.get('hub.challenge') || q.get('verify_token') || q.get('hub.verify_token')
+  if (challenge) return new NextResponse(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } })
+  if (DEV) console.log(`[wa/webhook] GET probe from host=${request.headers.get('host')} → 200`)
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(request: NextRequest) {
   // 1. Read the RAW body ONCE (the signature is computed over these exact bytes;
   //    consuming json() first would make the raw form unavailable).
@@ -81,8 +98,22 @@ export async function POST(request: NextRequest) {
     return new NextResponse('bad request', { status: 400 })
   }
 
+  const sigHeader = request.headers.get('x-webhook-signature')
+  if (DEV) {
+    console.log(`[wa/webhook] POST host=${request.headers.get('host')} bytes=${rawBody.length} sig=${(sigHeader ?? '∅').slice(0, 10)}…`)
+  }
+
   // 2. Verify the signature. Fail closed (no retry storm on a missing secret).
-  if (!verifyKapso(rawBody, request.headers.get('x-webhook-signature'))) {
+  if (!verifyKapso(rawBody, sigHeader)) {
+    if (DEV) {
+      const secret = process.env.KAPSO_WEBHOOK_SECRET
+      const recv = (sigHeader ?? '').replace(/^sha256=/i, '').trim()
+      const expected = secret ? createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex') : ''
+      console.warn(
+        `[wa/webhook] 403 signature rejected · secretLoaded=${!!secret} · recv=${recv.slice(0, 12)}… · expected=${expected.slice(0, 12) || '(no secret)'}… ` +
+          '→ check KAPSO_WEBHOOK_SECRET matches the Kapso dashboard, then RESTART `next dev` (env is read at boot).',
+      )
+    }
     return new NextResponse('forbidden', { status: 403 })
   }
 
@@ -94,7 +125,10 @@ export async function POST(request: NextRequest) {
     return ok()
   }
   const event = request.headers.get('x-webhook-event') || String(body.event ?? '')
-  if (event !== 'whatsapp.message.received') return ok()
+  if (event !== 'whatsapp.message.received') {
+    if (DEV) console.log(`[wa/webhook] ignored event=${event || '(none)'}`)
+    return ok()
+  }
 
   const data = ((body.data as Record<string, unknown>) ?? body) ?? {}
   const message = data.message as Record<string, unknown> | undefined
@@ -121,7 +155,10 @@ export async function POST(request: NextRequest) {
     .select('id, user_id, status')
     .eq('phone_e164', phone)
     .maybeSingle()
-  if (!identity || identity.status !== 'active') return ok()
+  if (!identity || identity.status !== 'active') {
+    if (DEV) console.log(`[wa/webhook] dropped: no ACTIVE wa_identities row for ${phone} (status=${identity?.status ?? 'none'})`)
+    return ok()
+  }
 
   // Cheap per-phone ceiling on enqueues (defense; the DB cost-gate in the worker is
   // the real spend guard). Over the limit ⇒ ack and drop, never 429 (no retries).
@@ -243,6 +280,8 @@ export async function POST(request: NextRequest) {
     console.error('[wa/webhook] job enqueue failed:', jErr.message)
     return new NextResponse('error', { status: 500 })
   }
+
+  if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → wake the worker: GET /api/whatsapp/cron`)
 
   // The worker is kicked by the 1-min Scheduled re-driver (T4); no synchronous
   // trigger here keeps the webhook fast and within the function timeout.

@@ -62,7 +62,7 @@ export default function FeedLayoutPicker({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="mt-9 flex justify-center">
-            <Button onClick={onDone} size="lg" iconRight={<ArrowRight className="w-4 h-4" />}>
+            <Button glow onClick={onDone} size="lg" iconRight={<ArrowRight className="w-4 h-4" />}>
               Continuar al meu blog
             </Button>
           </div>

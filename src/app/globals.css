@@ -201,6 +201,24 @@ body {
 /* Theme-aware selection */
 ::selection { background: var(--c-accent-soft); color: var(--c-text); }
 
+/* Subtle gold accents — a premium gold scrollbar thumb that brightens on hover,
+   tying the whole surface to the brand without shouting. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--c-accent) 55%, transparent) transparent;
+}
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  background-color: color-mix(in oklab, var(--c-accent) 55%, var(--c-border-strong));
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--c-accent);
+}
+
 /* ── Global micro-interactions ─────────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
@@ -529,8 +547,10 @@ a[role="button"]:active {
 }
 @keyframes gold-aura-pulse { 0%, 100% { opacity: .4; } 50% { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) {
-  .gold-trace::before { animation: none; --gold-angle: 130deg; }
-  .gold-trace.gold-trace-aura::after { animation: none; opacity: .5; }
+  /* Keep the tracing border alive (it's the brand's signature CTA cue). Re-assert
+     with !important so it beats the blanket `*` reduced-motion rule. */
+  .gold-trace::before { animation: gold-trace-spin 3.2s linear infinite !important; }
+  .gold-trace.gold-trace-aura::after { animation: gold-aura-pulse 3.2s ease-in-out infinite !important; }
 }
 /* Hover-only trace — the ring fades in and the spin only runs while hovered, so a
    whole grid of cards doesn't animate at once. Pair with `.gold-trace`. */
@@ -653,6 +673,62 @@ section[id] { scroll-margin-top: 110px; }
 @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
 
 /* ════════════════════════════════════════════════════════════════════════════
+ * ENDLESS KNOT — the brand mark + the app's signature loader.
+ * `.knot-draw` traces the single-stroke knot via stroke-dashoffset (the path is
+ * normalised with pathLength=100), glowing gold as it goes, then erases and
+ * loops — "infinite wisdom, drawing itself". `.knot-glow` / `.knot-spin` give the
+ * header mark a soft gold pulse and a serene rotation.
+ * ══════════════════════════════════════════════════════════════════════════ */
+@keyframes knot-draw {
+  0%   { stroke-dashoffset: 100; opacity: 0.30; }
+  45%  { opacity: 1; }
+  55%  { stroke-dashoffset: 0;   opacity: 1; }
+  72%  { stroke-dashoffset: 0;   opacity: 1; }
+  100% { stroke-dashoffset: -100; opacity: 0.30; }
+}
+.knot-draw {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: knot-draw 2.4s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
+  filter: drop-shadow(0 0 5px rgba(245, 188, 0, 0.55));
+}
+@keyframes knot-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(245, 188, 0, 0.30)); }
+  50%      { filter: drop-shadow(0 0 7px rgba(245, 188, 0, 0.70)); }
+}
+@keyframes knot-spin-slow { to { transform: rotate(360deg); } }
+.knot-glow { animation: knot-glow-pulse 3.4s ease-in-out infinite; }
+/* Serene, "endless" rotation that also breathes its glow. */
+.knot-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: knot-glow-pulse 3.4s ease-in-out infinite, knot-spin-slow 16s linear infinite;
+}
+.knot-halo { animation: gold-aura-pulse 2.4s ease-in-out infinite; }
+
+/* The brand glow + the loader are intentional, low-vestibular effects (a soft
+   light pulse and a slow trace) that should stay visible even when the OS has
+   "reduce motion" enabled — Windows users very often disable animations globally,
+   which is why the glow appeared to "only work on phone". Re-assert them with
+   !important so they beat the blanket `*` reduced-motion rule above (class
+   specificity wins). The rotation is gentle (16s) so it rides along with the glow. */
+@media (prefers-reduced-motion: reduce) {
+  .knot-draw {
+    animation: knot-draw 2.4s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite !important;
+  }
+  .knot-glow { animation: knot-glow-pulse 3.4s ease-in-out infinite !important; }
+  .knot-spin {
+    animation: knot-glow-pulse 3.4s ease-in-out infinite, knot-spin-slow 16s linear infinite !important;
+  }
+  .knot-halo { animation: gold-aura-pulse 2.4s ease-in-out infinite !important; }
+  /* Signature gold "alive" effects — light/colour sheen, not vestibular motion.
+     The founder wants these visible even when the OS disables animations. */
+  .btn-gold { animation: btn-gold-sheen 3.6s linear infinite !important; }
+  .shimmer-gold { animation: shimmer-text 5.5s linear infinite !important; }
+  .eyebrow .dot { animation: eyebrow-glow 2.5s ease-in-out infinite !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
  * ZEN MOTION — the calm, breathing pacing of the client onboarding capture.
  * One indicator, gentle transitions, nothing frantic. Used by ZenCaptureModal.
  * ══════════════════════════════════════════════════════════════════════════ */
@@ -665,7 +741,11 @@ section[id] { scroll-margin-top: 110px; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1; transform: none; transition: none; }
-  .halo-drift-a, .halo-drift-b, .shimmer-gold, .hero-word, .btn-gold { animation: none !important; }
+  /* Genuine "motion" (parallax drift, entrance translate) is still stilled.
+     The signature gold sheen/shimmer is a light effect, not motion — it's
+     re-asserted in the brand-exemption block below so it stays alive on
+     desktops that have "reduce animations" turned on. */
+  .halo-drift-a, .halo-drift-b, .hero-word { animation: none !important; }
   .hero-word { opacity: 1; transform: none; }
   .skeleton::after { display: none; }
   .zen-breathe { animation: none; opacity: .6; }

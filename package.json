@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:render": "node --experimental-strip-types --import ./tests/register.mjs tests/render-stress.mjs"
+    "test:render": "node --experimental-strip-types --import ./tests/register.mjs tests/render-stress.mjs",
+    "wa:replay": "node scripts/wa-replay.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

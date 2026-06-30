@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition, useMemo, useRef, useCallback, useEffect } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, FileText, Search, Upload, Send, X, EyeOff,
@@ -315,34 +314,24 @@ export default function PostsManager({
         </div>
         <div className="flex items-center gap-2">
           {onImport && (
-            <button
-              onClick={onImport}
-              className="cursor-pointer flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-muted bg-surface border border-border hover:border-border-strong hover:bg-surface-subtle rounded-xl shadow-sm transition-all"
-            >
-              <Upload className="w-4 h-4" />
+            <Button variant="secondary" onClick={onImport} iconLeft={<Upload className="w-4 h-4" />}>
               Importar
-            </button>
+            </Button>
           )}
-          {/* Magic SEO Article — the AI entry point, sat right beside "Write
-              Article" and styled in the premium gold accent so it reads as a
-              first-class way to start a post. */}
-          <button
-            type="button"
+          {/* Magic SEO Article — the premium AI entry point. The signature gold
+              CTA (glow) so it reads as the first-class way to start a post. */}
+          <Button
+            glow
             onClick={handleGenerateAI}
-            disabled={generating}
+            loading={generating}
             title="Genera un article complet i optimitzat per SEO amb IA"
-            className="cursor-pointer flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-on-accent bg-gradient-to-br from-accent to-accent-hover rounded-xl shadow-card hover:shadow-pop hover:opacity-95 transition-all disabled:opacity-60"
+            iconLeft={isSuperAdmin ? <Sparkles className="w-4 h-4" /> : <Crown className="w-4 h-4" />}
           >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSuperAdmin ? <Sparkles className="w-4 h-4" /> : <Crown className="w-4 h-4" />}
             {generating ? 'Generant…' : 'Genera amb IA'}
-          </button>
-          <Link
-            href={`/dashboard/sites/${siteId}/posts/new`}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-text bg-surface border border-border hover:border-accent/40 hover:bg-accent-soft hover:text-accent rounded-xl shadow-sm transition-all"
-          >
-            <Plus className="w-4 h-4" />
+          </Button>
+          <Button href={`/dashboard/sites/${siteId}/posts/new`} variant="secondary" iconLeft={<Plus className="w-4 h-4" />}>
             Escriure Article
-          </Link>
+          </Button>
         </div>
       </header>
 
@@ -353,12 +342,9 @@ export default function PostsManager({
           </div>
           <h3 className="text-lg font-bold text-text">Cap article encara</h3>
           <p className="text-subtle text-sm mt-1.5 max-w-xs">Crea el primer article per a {siteName}.</p>
-          <Link
-            href={`/dashboard/sites/${siteId}/posts/new`}
-            className="mt-6 cursor-pointer bg-accent hover:bg-accent-hover text-on-accent px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 shadow-card"
-          >
-            <Plus className="w-4 h-4" />Escriure el primer article
-          </Link>
+          <Button href={`/dashboard/sites/${siteId}/posts/new`} glow className="mt-6" iconLeft={<Plus className="w-4 h-4" />}>
+            Escriure el primer article
+          </Button>
         </div>
       ) : (
         <>
@@ -406,22 +392,16 @@ export default function PostsManager({
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2.5">
-                <Button onClick={handleGenerateAI} loading={generating} glow iconLeft={!generating ? <Sparkles className="w-4 h-4" /> : undefined}>
+                <Button onClick={handleGenerateAI} loading={generating} glow iconLeft={<Sparkles className="w-4 h-4" />}>
                   {generating ? 'Generant amb IA…' : 'Genera amb IA'}
                 </Button>
-                <Link
-                  href={`/dashboard/sites/${siteId}/posts/new`}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:bg-surface-hover hover:border-border-strong"
-                >
-                  <PenLine className="w-4 h-4" /> Escriure
-                </Link>
+                <Button href={`/dashboard/sites/${siteId}/posts/new`} variant="secondary" iconLeft={<PenLine className="w-4 h-4" />}>
+                  Escriure
+                </Button>
                 {onImport && (
-                  <button
-                    onClick={onImport}
-                    className="cursor-pointer inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:bg-surface-hover hover:border-border-strong"
-                  >
-                    <Upload className="w-4 h-4" /> Importar
-                  </button>
+                  <Button variant="secondary" onClick={onImport} iconLeft={<Upload className="w-4 h-4" />}>
+                    Importar
+                  </Button>
                 )}
               </div>
             </div>

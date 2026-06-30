@@ -60,7 +60,7 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)} iconLeft={<Plus className="w-4 h-4" />}>
+      <Button glow onClick={() => setIsOpen(true)} iconLeft={<Plus className="w-4 h-4" />}>
         Nou Lloc
       </Button>
 
@@ -165,7 +165,7 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
               <Button type="button" variant="ghost" onClick={handleClose}>
                 Cancel·lar
               </Button>
-              <Button type="submit" loading={loading}>
+              <Button type="submit" glow loading={loading}>
                 {loading ? 'Creant el lloc…' : 'Crear Lloc'}
               </Button>
             </div>

@@ -585,6 +585,7 @@ function EmptyGrabber({
         {/* The capture modal is the single progress surface — no inline spinner
             here (that produced the "double loader"). Disabled while in flight. */}
         <Button
+          glow
           onClick={() => onGrab()}
           disabled={!url.trim() || analyzing}
           iconLeft={<Wand2 className="w-4 h-4" />}

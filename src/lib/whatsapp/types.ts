@@ -55,6 +55,11 @@ export interface WaAgentState {
   // Held while we ask "which client?" (>1 candidate site), so we can draft from
   // the original brief once the owner picks a site.
   pending_brief?: string
+  // Transparency: the inbound message id we've already sent the "rebut" receipt
+  // ack / the "preparant…" progress notice for, so a transient retry of the same
+  // job never double-sends those status updates.
+  ack_for?: string
+  writing_for?: string
 }
 
 // ─── Row types ────────────────────────────────────────────────────────────────

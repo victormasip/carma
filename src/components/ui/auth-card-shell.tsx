@@ -3,6 +3,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import EndlessKnot from '@/components/ui/EndlessKnot'
 
 // Shared dark/gold glass shell for the auth cards (login + register).
 //
@@ -51,10 +52,10 @@ export function AuthCardShell({
         <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-carma-400/15 shadow-[0_20px_60px_-20px_rgba(245,188,0,0.25),0_8px_24px_-12px_rgba(0,0,0,0.6)] overflow-hidden">
           <div className="text-center space-y-1 mb-5">
             <div
-              className="mx-auto w-10 h-10 rounded-full border border-carma-400/30 flex items-center justify-center"
+              className="mx-auto w-12 h-12 rounded-full border border-carma-400/30 flex items-center justify-center"
               style={{ background: 'linear-gradient(135deg, rgba(245,188,0,0.25), transparent)' }}
             >
-              <span className="text-lg font-extrabold text-white">C<span className="text-carma-400">.</span></span>
+              <EndlessKnot size={26} glow title="Carma" />
             </div>
             <h1 className="text-xl font-bold text-white">{title}</h1>
             <p className="text-white/60 text-xs">{subtitle}</p>

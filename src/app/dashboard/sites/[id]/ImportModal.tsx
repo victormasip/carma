@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import Button from '@/components/ui/Button'
+import KnotLoader from '@/components/ui/KnotLoader'
 import { cn } from '@/lib/cn'
 
 type DiscoveredArticle = { url: string; title: string; language?: string | null }
@@ -348,6 +349,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                     />
                   </div>
                   <Button
+                    glow
                     onClick={() => handleDiscover()} disabled={!url.trim() || phase === 'discovering'}
                     iconLeft={phase === 'discovering' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   >
@@ -469,8 +471,8 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
           {phase === 'preview-manual' && (
             <>
               {previewLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                <div className="flex items-center justify-center py-10">
+                  <KnotLoader size={56} />
                 </div>
               )}
               {!previewLoading && previewData && (
@@ -529,7 +531,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setPhase('input')} iconLeft={<RotateCcw className="w-3.5 h-3.5" />}>Tornar</Button>
                     <Button variant="secondary" size="sm" onClick={handlePreview} disabled={previewLoading} iconLeft={<RefreshCw className="w-3.5 h-3.5" />}>Re-analitzar</Button>
-                    <Button onClick={handleManualImport} iconLeft={<Upload className="w-4 h-4" />}>Importar</Button>
+                    <Button glow onClick={handleManualImport} iconLeft={<Upload className="w-4 h-4" />}>Importar</Button>
                   </div>
                 </div>
               )}
@@ -604,7 +606,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                 <Button variant="ghost" onClick={() => { setPhase('input'); setDiscoverError(null) }} iconLeft={<RotateCcw className="w-4 h-4" />}>
                   Nova cerca
                 </Button>
-                <Button onClick={() => handleImport([...selected])} disabled={selected.size === 0} iconLeft={<Upload className="w-4 h-4" />}>
+                <Button glow onClick={() => handleImport([...selected])} disabled={selected.size === 0} iconLeft={<Upload className="w-4 h-4" />}>
                   Importar {selected.size} article{selected.size !== 1 ? 's' : ''}
                 </Button>
               </div>

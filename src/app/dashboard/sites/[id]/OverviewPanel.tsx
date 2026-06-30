@@ -8,7 +8,8 @@
 // hasn't run yet (the read layer returns an empty series, never throws).
 
 import { useRef, useState } from 'react'
-import { Eye, Users, FileText, TrendingUp, TrendingDown, ArrowUpRight, BarChart3, Loader2 } from 'lucide-react'
+import { Eye, Users, FileText, TrendingUp, TrendingDown, ArrowUpRight, BarChart3 } from 'lucide-react'
+import KnotLoader from '@/components/ui/KnotLoader'
 import { getSiteStats } from '@/lib/actions/analytics'
 import { formatNumber } from '@/lib/format'
 import type { SiteStats } from '@/lib/analytics/read'
@@ -97,7 +98,7 @@ export default function OverviewPanel({
           {stats?.capped && <span className="text-xs text-subtle">(mostra parcial)</span>}
         </div>
         {loading ? (
-          <div className="h-[140px] flex items-center justify-center text-subtle"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          <div className="h-[140px] flex items-center justify-center"><KnotLoader size={44} /></div>
         ) : (
           <BarChart series={stats?.series ?? []} />
         )}

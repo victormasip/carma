@@ -77,7 +77,7 @@ export default function ZenCaptureModal() {
             </button>
           )}
           {phase === 'success' && (
-            <Button fullWidth onClick={closeCapture} iconRight={<ArrowRight className="h-4 w-4" />}>
+            <Button glow fullWidth onClick={closeCapture} iconRight={<ArrowRight className="h-4 w-4" />}>
               Comencem
             </Button>
           )}

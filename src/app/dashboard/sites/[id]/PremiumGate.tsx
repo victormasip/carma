@@ -57,6 +57,7 @@ export function PremiumPanel({
 
         <div className="mt-8">
           <Button
+            glow
             onClick={() => toast('La facturació encara no està disponible. Contacta amb el teu administrador per passar a Premium.', 'info')}
             iconLeft={<Crown className="w-4 h-4" />}
           >

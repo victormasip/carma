@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Monitor, Smartphone, RotateCw, ExternalLink, Loader2 } from 'lucide-react'
+import KnotLoader from '@/components/ui/KnotLoader'
 import { tokensToParams } from '@/lib/render/embedParams'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 import { cn } from '@/lib/cn'
@@ -106,7 +107,7 @@ export default function ThemePreview({
       <div className="relative flex-1 min-h-[460px] bg-surface-subtle flex justify-center">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface/60 backdrop-blur-[1px] z-10 pointer-events-none">
-            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <KnotLoader size={52} />
           </div>
         )}
         <iframe

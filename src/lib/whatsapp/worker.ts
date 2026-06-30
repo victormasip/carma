@@ -176,6 +176,18 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   const state: WaAgentState = (t.agent_state as WaAgentState) ?? { phase: 'await_brief' }
 
+  // ── Transparency beat 1: acknowledge receipt the moment we pick the job up, so
+  // the owner always knows Carma got it and is on it. Once per inbound message
+  // (guarded by ack_for) so a transient retry never re-sends. No LLM spend. ──
+  if (state.ack_for !== job.message_id) {
+    const ackMsg = msg.msg_type === 'audio'
+      ? "🎧 He rebut la teva nota de veu! L'estic escoltant…"
+      : '📝 He rebut el teu missatge! M’hi poso…'
+    await sendWhatsApp(phone, ackMsg, pnid)
+    state.ack_for = job.message_id ?? undefined
+    await updateThread(admin, t.id, { agent_state: { ...state } })
+  }
+
   // ── Input text: transcribe audio (T3) or use the text body ──
   let inboundText = (msg.text ?? '').trim()
   let usedAudio = false
@@ -250,6 +262,15 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   const { name: siteName, locale } = await siteMeta(admin, siteId!)
   const cats = await existingCategories(admin, siteId!)
 
+  // ── Transparency beat 2: name the destination + signal the working phase before
+  // the (slow) generation, so the wait is never silent. Neutral wording so it fits
+  // whether the agent drafts or asks a clarification. Once per message. ──
+  if (state.writing_for !== job.message_id) {
+    await sendWhatsApp(phone, `🪄 Estic preparant l'article per a ${siteName || 'el teu blog'}… Et responc en un momentet.`, pnid)
+    state.writing_for = job.message_id ?? undefined
+    await updateThread(admin, t.id, { agent_state: { ...state } })
+  }
+
   // Turn-Budget-1: once we've spent our one clarification (or budget is 0), draft.
   const mustDraft = !!state.clarification_used || WA_TURN_BUDGET <= 0
 
@@ -303,8 +324,22 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     agent_state: { ...state, phase: 'awaiting_review', pending_brief: undefined },
   })
 
-  const reply = `Ja tens l'esborrany: «${d.title}» ✍️ ${d.strategy} Fes-hi un cop d'ull i publica'l aquí: ${reviewUrl(raw)}`
-  await sendWhatsApp(phone, reply, pnid)
+  const link = reviewUrl(raw)
+  // Local testing aid: the raw token lives ONLY in this reply (we persist just its
+  // hash), so in dev — where Kapso delivery may not reach you — echo the link to the
+  // server console. Never logs in production.
+  if (process.env.NODE_ENV !== 'production') console.log(`[wa/dev] review link → ${link}`)
+  const reply = `Ja tens l'esborrany: «${d.title}» ✍️ ${d.strategy} Fes-hi un cop d'ull i publica'l aquí: ${link}`
+  const sent = await sendWhatsApp(phone, reply, pnid)
+  // The draft + token already exist, so we must NOT retry here (that would mint a
+  // duplicate draft on the next tick). But a failed delivery must never masquerade as
+  // success: record it on the job so a silent send failure — e.g. a stale
+  // KAPSO_PHONE_NUMBER_ID (Kapso 404 'WhatsApp configuration not found') or a closed
+  // 24h window — is visible in the queue instead of looking 'done'.
+  if (!sent) {
+    console.error(`[wa/worker] job ${job.id}: draft ${postId} saved but the WhatsApp reply FAILED to send — check KAPSO_PHONE_NUMBER_ID / 24h window. Review link: ${link}`)
+    return finishJob(admin, job.id, 'done', { error: 'reply send failed (draft saved)' })
+  }
   return finishJob(admin, job.id, 'done')
 }
 
@@ -328,6 +363,9 @@ export async function runDueJobs(limit = 5, budgetMs = 20_000): Promise<number> 
       await processJob(admin, job)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`[wa/worker] job ${job.id} failed (attempt ${job.attempts}/${WA_JOB_MAX_ATTEMPTS}): ${message}`)
+      }
       if ((job.attempts ?? 1) >= WA_JOB_MAX_ATTEMPTS) {
         // Out of retries → fail safe. Apologize to the owner, stop the loop.
         await finishJob(admin, job.id, 'error', { error: message })

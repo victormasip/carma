@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Lock, Loader2, Wand2, Sparkles, ArrowRight } from 'lucide-react'
+import { ArrowLeft, Lock, Sparkles, ArrowRight } from 'lucide-react'
+import KnotLoader from '@/components/ui/KnotLoader'
 import Wordmark from '@/components/ui/Wordmark'
 import { createClient } from '@/lib/supabase/client'
 import { normalizeUrl, displayUrl as toDisplay } from '@/lib/onboarding/url'
@@ -86,16 +87,9 @@ function PreviewInner() {
         />
 
         {!loaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-bg">
-            <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
-              <span className="absolute inset-0 animate-spin rounded-2xl border-2 border-accent/70 border-r-transparent" />
-              <Wand2 className="relative h-6 w-6" />
-            </span>
-            <div className="text-center">
-              <p className="text-base font-extrabold tracking-tight text-text">Clonant {display}…</p>
-              <p className="mt-1 text-sm text-muted">Llegim la teva capçalera, el peu i els teus estils.</p>
-            </div>
-            <Loader2 className="h-5 w-5 animate-spin text-subtle" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-bg">
+            <KnotLoader size={84} label={`Clonant ${display}…`} />
+            <p className="text-sm text-muted">Llegim la teva capçalera, el peu i els teus estils.</p>
           </div>
         )}
       </div>
@@ -132,7 +126,7 @@ function PreviewInner() {
 
 export default function PreviewPage() {
   return (
-    <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-bg"><Loader2 className="h-6 w-6 animate-spin text-accent" /></main>}>
+    <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-bg"><KnotLoader /></main>}>
       <PreviewInner />
     </Suspense>
   )

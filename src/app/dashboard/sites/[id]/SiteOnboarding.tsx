@@ -133,6 +133,7 @@ export default function SiteOnboarding({
                       />
                     </div>
                     <Button
+                      glow
                       onClick={startMagicWand}
                       disabled={!url.trim()}
                       fullWidth

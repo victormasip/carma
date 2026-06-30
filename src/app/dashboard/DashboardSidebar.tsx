@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { Menu, X } from 'lucide-react'
 import SidebarNav from './SidebarNav'
 import UserMenu from './UserMenu'
+import Wordmark from '@/components/ui/Wordmark'
 import { useT } from '@/lib/i18n/LocaleProvider'
 
 type Site = { id: string; name: string }
@@ -40,8 +41,8 @@ export default function DashboardSidebar({
   const inner = (
     <>
       <div className="h-16 flex items-center px-5 border-b border-border">
-        <Link href="/dashboard" className="text-2xl font-bold tracking-tight text-text">
-          Carma<span className="text-accent">.</span>
+        <Link href="/dashboard" className="text-text no-underline">
+          <Wordmark size="text-2xl" spin />
         </Link>
       </div>
 
@@ -62,8 +63,8 @@ export default function DashboardSidebar({
 
       {/* Mobile top bar */}
       <div className="lg:hidden sticky top-0 z-30 h-14 bg-bg-elevated/95 backdrop-blur border-b border-border flex items-center justify-between px-4">
-        <Link href="/dashboard" className="text-xl font-bold tracking-tight text-text">
-          Carma<span className="text-accent">.</span>
+        <Link href="/dashboard" className="text-text no-underline">
+          <Wordmark size="text-xl" spin />
         </Link>
         <button
           type="button"

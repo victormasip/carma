@@ -3,8 +3,10 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowRight, Check, Loader2, Eye, EyeOff } from 'lucide-react'
+import { ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import KnotLoader from '@/components/ui/KnotLoader'
+import Wordmark from '@/components/ui/Wordmark'
 
 type Phase = 'verifying' | 'ready' | 'done' | 'error'
 
@@ -12,7 +14,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
       <main className="flex min-h-screen w-full items-center justify-center bg-bg">
-        <Loader2 className="animate-spin h-6 w-6 text-accent" />
+        <KnotLoader />
       </main>
     }>
       <ResetPasswordInner />
@@ -98,18 +100,15 @@ function ResetPasswordInner() {
       <div className="pointer-events-none absolute top-[-20%] right-[-15%] h-[480px] w-[480px] rounded-full bg-accent opacity-[0.06] blur-[140px]" />
 
       <div className="relative w-full max-w-[420px]">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-text">
-            Carma<span className="text-accent">.</span>
-          </h1>
+        <div className="flex flex-col items-center text-center mb-8">
+          <Wordmark as="h1" size="text-3xl" />
           <p className="text-sm text-muted mt-2">Restablir la contrasenya</p>
         </div>
 
         <div className="bg-bg-elevated border border-border rounded-2xl shadow-card p-8">
           {phase === 'verifying' && (
-            <div className="flex flex-col items-center text-center py-6">
-              <Loader2 className="animate-spin h-6 w-6 text-accent mb-3" />
-              <p className="text-sm text-muted">Verificant l’enllaç…</p>
+            <div className="py-4">
+              <KnotLoader size={56} label="Verificant l’enllaç…" />
             </div>
           )}
 

@@ -25,6 +25,7 @@ import { addSiteLocale } from '@/lib/actions/locales'
 import { LOCALES, DEFAULT_LOCALE, LOCALE_META, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { detectLocale, htmlToPlain } from '@/lib/i18n/detect'
 import { useToast } from '@/components/ui/Toast'
+import KnotLoader from '@/components/ui/KnotLoader'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Modal, useConfirm } from '@/components/ui/Modal'
 import { PremiumPanel } from '@/app/dashboard/sites/[id]/PremiumGate'
@@ -1552,9 +1553,12 @@ function AiPanel({
             : <><Sparkles className="w-4 h-4" /> Genera un article SEO</>}
         </button>
         {generating && (
-          <p className="text-xs opacity-90 leading-snug text-center">
-            Pot trigar fins a un minut. No tanquis l’editor.
-          </p>
+          <div className="flex flex-col items-center gap-2 pt-1">
+            <KnotLoader size={52} tone="ink" />
+            <p className="text-xs opacity-90 leading-snug text-center">
+              La IA està teixint el teu article. Pot trigar fins a un minut; no tanquis l’editor.
+            </p>
+          </div>
         )}
       </div>
 

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, Globe, MailCheck, Loader2 } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, Globe, MailCheck } from 'lucide-react'
+import KnotLoader from '@/components/ui/KnotLoader'
 import { createClient } from '@/lib/supabase/client'
 import { AuthCardShell, AuthInput } from '@/components/ui/auth-card-shell'
 import ForgotPasswordModal from '@/app/ForgotPasswordModal'
@@ -170,8 +171,8 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
 
   if (checkingSession) {
     return (
-      <main className="flex min-h-screen w-full items-center justify-center bg-[#0e0d0c]">
-        <Loader2 className="animate-spin h-6 w-6 text-carma-400" />
+      <main className="flex min-h-screen w-full items-center justify-center bg-bg">
+        <KnotLoader />
       </main>
     )
   }
