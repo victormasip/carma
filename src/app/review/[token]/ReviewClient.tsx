@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
-import { approveAndPublish } from './actions'
+import { approveAndPublish, requestEditViaWhatsApp } from './actions'
 
 // ─── Atmospheric gold halos (the one decorative device) ───────────────────────
 function Halos() {
@@ -103,14 +103,36 @@ export default function ReviewScreen(props: ReviewScreenProps) {
   const [done, setDone] = useState<{ url: string } | null>(null)
   const [expired, setExpired] = useState(false)
   const [error, setError] = useState('')
+  const [editPending, startEdit] = useTransition()
+  const [editSent, setEditSent] = useState(false)
+  const [editErr, setEditErr] = useState('')
 
   function onApprove() {
     setError('')
     startTransition(async () => {
-      const res = await approveAndPublish(token)
-      if (res.ok) setDone({ url: res.url })
-      else if (res.state === 'expired') setExpired(true)
-      else setError(res.error)
+      try {
+        const res = await approveAndPublish(token)
+        if (res.ok) setDone({ url: res.url })
+        else if (res.state === 'expired') setExpired(true)
+        else setError(res.error)
+      } catch {
+        // A thrown Server Action (e.g. a blocked cross-origin POST) used to fail
+        // silently — surface it instead of leaving the button looking dead.
+        setError('No s’ha pogut connectar amb el servidor. Torna-ho a provar d’aquí un moment.')
+      }
+    })
+  }
+
+  function onEditViaWhatsApp() {
+    setEditErr('')
+    startEdit(async () => {
+      try {
+        const res = await requestEditViaWhatsApp(token)
+        if (res.ok) setEditSent(true)
+        else setEditErr(res.error)
+      } catch {
+        setEditErr('No s’ha pogut connectar amb el servidor. Torna-ho a provar.')
+      }
     })
   }
 
@@ -199,12 +221,33 @@ export default function ReviewScreen(props: ReviewScreenProps) {
           >
             {pending ? 'Publicant…' : 'Aprovar i Publicar'}
           </Button>
-          <a
-            href={editUrl}
-            className="mt-2.5 flex items-center justify-center gap-1.5 text-sm font-semibold text-muted hover:text-text transition-colors"
-          >
-            <Pencil className="h-3.5 w-3.5" /> Edita-ho primer al Carma
-          </a>
+
+          {/* Edit: WhatsApp edit loop (token-gated, no login) OR the full editor. */}
+          {editSent ? (
+            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-sm font-semibold text-success">
+              <MessageCircle className="h-4 w-4" /> T&apos;he enviat un WhatsApp — respon-me amb els canvis
+            </p>
+          ) : (
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+              <button
+                type="button"
+                onClick={onEditViaWhatsApp}
+                disabled={editPending}
+                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-text disabled:opacity-60"
+              >
+                <MessageCircle className="h-3.5 w-3.5 text-[#25D366]" />
+                {editPending ? 'Enviant…' : 'Editar des de WhatsApp'}
+              </button>
+              <span className="text-subtle" aria-hidden>·</span>
+              <a
+                href={editUrl}
+                className="flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-text"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Obrir a l&apos;editor
+              </a>
+            </div>
+          )}
+          {editErr && <p className="mt-2 text-center text-xs font-medium text-danger">{editErr}</p>}
         </div>
       </div>
     </main>

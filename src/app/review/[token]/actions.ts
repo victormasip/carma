@@ -51,6 +51,59 @@ async function notifyPublished(admin: ReturnType<typeof createAdminClient>, thre
   }
 }
 
+export type EditResult = { ok: true } | { ok: false; error: string }
+
+// "Editar" from the public review page → kick off the WhatsApp edit loop. Token-gated
+// (no login needed, unlike the dashboard editor), so it works straight from the review
+// link on a phone: we flip the agent thread into `awaiting_edit`, point it at this
+// draft, and WhatsApp the owner asking for the changes. Their next message is revised
+// by the worker's edit loop. Falls back gracefully if there's no bound thread.
+export async function requestEditViaWhatsApp(rawToken: string): Promise<EditResult> {
+  const token = (rawToken ?? '').trim()
+  if (!token) return { ok: false, error: 'Enllaç no vàlid.' }
+  if (!rateLimit(`review-edit:${await clientIp()}`, 20, 60_000).ok) {
+    return { ok: false, error: 'Massa intents. Torna-ho a provar en un minut.' }
+  }
+
+  const admin = createAdminClient()
+  const { data: tk } = await admin
+    .from(WA_TABLES.reviewTokens)
+    .select('post_id, site_id, thread_id, status, expires_at')
+    .eq('token_hash', hashToken(token))
+    .maybeSingle()
+  if (!tk) return { ok: false, error: 'Enllaç no vàlid.' }
+  if (!tk.thread_id) {
+    return { ok: false, error: 'Aquest esborrany no està lligat a cap xat de WhatsApp. Obre’l a l’editor del Carma.' }
+  }
+
+  const { data: thread } = await admin
+    .from(WA_TABLES.threads)
+    .select('id, identity_id, agent_state')
+    .eq('id', tk.thread_id)
+    .maybeSingle()
+  if (!thread) return { ok: false, error: 'No puc obrir l’edició des d’aquí. Obre’l a l’editor del Carma.' }
+
+  // Flip the thread into the edit loop and pin it to THIS draft.
+  const stateNow = (thread.agent_state as Record<string, unknown> | null) ?? {}
+  await admin
+    .from(WA_TABLES.threads)
+    .update({ agent_state: { ...stateNow, phase: 'awaiting_edit', writing_for: undefined }, current_post_id: tk.post_id })
+    .eq('id', thread.id)
+
+  // WhatsApp the owner to collect the changes (best-effort; the state is already set).
+  const { data: identity } = await admin
+    .from(WA_TABLES.identities).select('phone_e164').eq('id', thread.identity_id).maybeSingle()
+  if (identity?.phone_e164) {
+    const { data: post } = await admin.from('posts').select('title').eq('id', tk.post_id).maybeSingle()
+    const title = (post?.title as string) || 'l’article'
+    await sendWhatsApp(
+      identity.phone_e164 as string,
+      `✏️ Editem «${title}»! Escriu-me (o envia’m un àudio amb) els canvis que vols — to, longitud, què afegir o treure — i el reescric.`,
+    )
+  }
+  return { ok: true }
+}
+
 export async function approveAndPublish(rawToken: string): Promise<ApproveResult> {
   const token = (rawToken ?? '').trim()
   if (!token) return { ok: false, error: 'Enllaç no vàlid.', state: 'invalid' }
