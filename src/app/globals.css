@@ -476,19 +476,24 @@ a[role="button"]:active {
 .btn-gold {
   position: relative;
   /* A bright gold sheen band baked into the gradient; the animation sweeps it
-     across so the button INTERIOR is always visibly alive. */
+     across so the button INTERIOR is always visibly alive. The two ends are the
+     SAME colour (#c79722) so the tile seam is invisible — that, plus a position
+     delta of exactly one tile (200%), makes the sweep loop seamlessly with no
+     abrupt reset. */
   background-image: linear-gradient(110deg, #c79722 0%, #f5bc00 18%, #ffe27a 34%, #fff7d6 46%, #ffe27a 58%, #f5bc00 74%, #c79722 100%);
-  background-size: 250% 100%;
+  background-size: 200% 100%;
+  background-repeat: repeat;
   background-position: 0% 0;
   color: #1a1400;
   transition: transform .2s var(--ease-emphasis, ease), box-shadow .35s ease, filter .25s ease;
   box-shadow: 0 10px 30px -6px rgba(245, 188, 0, 0.40), inset 0 1px 0 rgba(255,255,255,0.55);
-  animation: btn-gold-sheen 3.6s linear infinite;
+  animation: btn-gold-sheen 4.2s linear infinite;
 }
 /* The interior is ALWAYS alive — a bright band sweeps across continuously; on
-   hover it accelerates (constant motion under the cursor). */
-@keyframes btn-gold-sheen { 0% { background-position: 165% 0; } 100% { background-position: -65% 0; } }
-.btn-gold:hover { animation-duration: 1.25s; transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 18px 44px -8px rgba(245, 188, 0, 0.60), inset 0 1px 0 rgba(255,255,255,0.7); }
+   hover it accelerates (constant motion under the cursor). Shifting by exactly
+   one 200% tile means phase 0% ≡ phase 200%, so the keyframe wrap is invisible. */
+@keyframes btn-gold-sheen { from { background-position: 200% 0; } to { background-position: 0% 0; } }
+.btn-gold:hover { animation-duration: 1.5s; transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 18px 44px -8px rgba(245, 188, 0, 0.60), inset 0 1px 0 rgba(255,255,255,0.7); }
 .btn-gold:active { transform: scale(0.985); }
 
 /* ── Animated glowing border that traces the perimeter (CTAs + hero cards) ──
@@ -680,17 +685,19 @@ section[id] { scroll-margin-top: 110px; }
  * header mark a soft gold pulse and a serene rotation.
  * ══════════════════════════════════════════════════════════════════════════ */
 @keyframes knot-draw {
-  0%   { stroke-dashoffset: 100; opacity: 0.30; }
-  45%  { opacity: 1; }
-  55%  { stroke-dashoffset: 0;   opacity: 1; }
-  72%  { stroke-dashoffset: 0;   opacity: 1; }
-  100% { stroke-dashoffset: -100; opacity: 0.30; }
+  0%   { stroke-dashoffset: 100; opacity: 0.22; filter: drop-shadow(0 0 2px rgba(245, 188, 0, 0.30)); }
+  12%  { opacity: 1; }
+  52%  { stroke-dashoffset: 0;   opacity: 1; filter: drop-shadow(0 0 10px rgba(245, 188, 0, 0.85)); }
+  68%  { stroke-dashoffset: 0;   opacity: 1; filter: drop-shadow(0 0 7px rgba(245, 188, 0, 0.70)); }
+  100% { stroke-dashoffset: -100; opacity: 0.22; filter: drop-shadow(0 0 2px rgba(245, 188, 0, 0.30)); }
 }
+/* Slower, deliberate "drawing itself" trace (3.8s) whose gold glow swells as the
+   strand completes, then gently erases and loops — the path is fully gone at the
+   wrap (dashoffset −100), so the loop is seamless. */
 .knot-draw {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  animation: knot-draw 2.4s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
-  filter: drop-shadow(0 0 5px rgba(245, 188, 0, 0.55));
+  animation: knot-draw 3.8s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
 }
 @keyframes knot-glow-pulse {
   0%, 100% { filter: drop-shadow(0 0 2px rgba(245, 188, 0, 0.30)); }
@@ -704,7 +711,7 @@ section[id] { scroll-margin-top: 110px; }
   transform-origin: center;
   animation: knot-glow-pulse 3.4s ease-in-out infinite, knot-spin-slow 16s linear infinite;
 }
-.knot-halo { animation: gold-aura-pulse 2.4s ease-in-out infinite; }
+.knot-halo { animation: gold-aura-pulse 3.8s ease-in-out infinite; }
 
 /* The brand glow + the loader are intentional, low-vestibular effects (a soft
    light pulse and a slow trace) that should stay visible even when the OS has
@@ -714,7 +721,7 @@ section[id] { scroll-margin-top: 110px; }
    specificity wins). The rotation is gentle (16s) so it rides along with the glow. */
 @media (prefers-reduced-motion: reduce) {
   .knot-draw {
-    animation: knot-draw 2.4s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite !important;
+    animation: knot-draw 3.8s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite !important;
   }
   .knot-glow { animation: knot-glow-pulse 3.4s ease-in-out infinite !important; }
   .knot-spin {
