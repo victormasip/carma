@@ -11,11 +11,12 @@
 
 import { useCallback, useRef, useState } from 'react'
 import {
-  Play, Wand2, Save, Trash2, RotateCcw, ChevronDown, Copy, Check, Loader2,
+  Play, Wand2, Save, Trash2, RotateCcw, ChevronDown, Copy, Check,
   Cpu, Server, Globe2, Languages, Type, Link2, FileCode2, ClipboardPaste, History,
   Plus, ArrowLeft, Clock, FlaskConical,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
@@ -34,7 +35,11 @@ import {
   type LabCapture, type LabPreviewTheme, type LabSampleInput,
   type LabSampleListItem, type LabSampleRow, type LabSampleStatus,
 } from '@/lib/grabber-lab/types'
+import { diagnoseCapture, type DiagSeverity } from '@/lib/grabber-lab/diagnose'
 import LabPreview from './LabPreview'
+
+// Auto-diagnostics severity → dot colour + score-ring tint.
+const SEV_DOT: Record<DiagSeverity, string> = { pass: 'bg-success', warn: 'bg-warning', fail: 'bg-danger' }
 
 const STEP_IDS = CAPTURE_STEPS.map(s => s.id)
 const initialSteps = () =>
@@ -205,6 +210,14 @@ export default function GrabberLab({ recent }: { recent: LabSampleListItem[] }) 
     extracted_footer: truthFooter.trim() || capture.rawFooter,
     extracted_body_attrs: truthBodyAttrs.trim() || capture.bodyAttrs,
   }
+
+  // Automatic capture diagnostics — objective quality signals + suggested failure
+  // tags, recomputed from the current capture. Pure, so it's cheap to derive here.
+  const diagnosis = capture ? diagnoseCapture(capture) : null
+  const applySuggestedTags = useCallback(() => {
+    if (!diagnosis) return
+    setTags(prev => Array.from(new Set([...prev, ...diagnosis.suggestedTags])))
+  }, [diagnosis])
 
   // ── save / reset / reopen / delete ─────────────────────────────────────────
   const save = useCallback(async () => {
@@ -419,6 +432,50 @@ export default function GrabberLab({ recent }: { recent: LabSampleListItem[] }) 
               </div>
             )}
           </Card>
+
+          {/* Auto-diagnostics — objective signals + one-click suggested tags */}
+          {capture && diagnosis && (
+            <Card padded>
+              <div className="flex items-center justify-between gap-3">
+                <SectionTitle icon={<FlaskConical className="w-4 h-4" />} title="Diagnòstic automàtic" hint="Senyals objectius de la captura" />
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center min-w-12 h-9 px-2.5 rounded-lg text-sm font-extrabold tabular-nums',
+                      diagnosis.score >= 80 ? 'bg-success-soft text-success'
+                        : diagnosis.score >= 50 ? 'bg-warning-soft text-warning'
+                        : 'bg-danger-soft text-danger',
+                    )}
+                    title="Puntuació de salut de la captura (100 = clonatge net)"
+                  >
+                    {diagnosis.score}
+                  </span>
+                </div>
+              </div>
+              <ul className="mt-3 flex flex-col divide-y divide-border">
+                {diagnosis.signals.map(s => (
+                  <li key={s.id} className="flex items-start gap-2.5 py-2">
+                    <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', SEV_DOT[s.severity])} aria-hidden />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text">{s.label}</p>
+                      <p className="text-xs text-muted leading-snug">{s.detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {diagnosis.suggestedTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                  <span className="text-xs font-semibold text-subtle">Etiquetes suggerides:</span>
+                  {diagnosis.suggestedTags.map(t => (
+                    <span key={t} className="rounded-full bg-surface-subtle px-2.5 py-1 text-xs font-medium text-muted border border-border">{t}</span>
+                  ))}
+                  <Button variant="ghost" size="sm" onClick={applySuggestedTags} iconLeft={<Plus className="w-3.5 h-3.5" />}>
+                    Aplica-les
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Ground-truth overrides (editable) */}
           <Card padded>
@@ -689,7 +746,7 @@ function StepProgress({
               )}
             >
               {st === 'running'
-                ? <Loader2 className="w-3 h-3 animate-spin" />
+                ? <KnotSpinner className="w-3 h-3" />
                 : <span className={cn('w-1.5 h-1.5 rounded-full',
                     st === 'done' ? 'bg-success' : st === 'error' ? 'bg-danger' : st === 'skipped' ? 'bg-warning' : 'bg-subtle')} />}
               {s.label}

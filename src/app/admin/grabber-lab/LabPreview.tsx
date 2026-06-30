@@ -8,7 +8,8 @@
 // resolve exactly like the public /render page does.
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Monitor, Tablet, Smartphone, ExternalLink, TriangleAlert, Maximize2, Minimize2 } from 'lucide-react'
+import { Monitor, Tablet, Smartphone, ExternalLink, TriangleAlert, Maximize2, Minimize2 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
 import { cn } from '@/lib/cn'
 import type { LabPreviewRequest, LabPreviewTheme } from '@/lib/grabber-lab/types'
 
@@ -187,7 +188,7 @@ function PreviewFrame({
       <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-border bg-bg-elevated/60 shrink-0">
         <span className="text-xs font-semibold text-muted truncate">{label}</span>
         <div className="flex items-center gap-2">
-          {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-subtle" />}
+          {loading && <KnotSpinner className="w-3.5 h-3.5 text-subtle" />}
           {url && (
             <button
               type="button"
