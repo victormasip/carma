@@ -13,7 +13,7 @@
 // it can't collide with the feed/article CSS or the client chrome.
 
 import { parse } from 'node-html-parser'
-import type { Locale } from '@/lib/i18n/config'
+import { uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import {
   resolveModule, optStr, optBool, optNum, optArr,
   type SiteModules,
@@ -70,7 +70,7 @@ type Strings = {
   lightDark: string
 }
 
-const STRINGS: Record<Locale, Strings> = {
+const STRINGS: Record<UiLocale, Strings> = {
   ca: {
     readMin: n => `${n} min de lectura`, searchPlaceholder: 'Cerca articles…', all: 'Totes',
     featured: 'Destacats', prev: 'Anterior', next: 'Següent', share: 'Comparteix',
@@ -190,7 +190,7 @@ export function buildListingModuleParts(
   locale: Locale,
   h: ModuleHelpers,
 ): ListingModuleParts {
-  const s = STRINGS[locale] ?? STRINGS.en
+  const s = STRINGS[uiLocale(locale)] ?? STRINGS.en
   const css: string[] = [BASE_OVERLAY_CSS]
   const top: string[] = []
   const beforeFeed: string[] = []
@@ -278,7 +278,7 @@ export function buildArticleModuleParts(
   },
 ): ArticleModuleParts {
   const { post, siblings, unlocked, locale, h } = ctx
-  const s = STRINGS[locale] ?? STRINGS.en
+  const s = STRINGS[uiLocale(locale)] ?? STRINGS.en
   const css: string[] = [BASE_OVERLAY_CSS]
   const top: string[] = []
   const before: string[] = []
@@ -687,12 +687,16 @@ export function modulesRuntimeScript(modules: SiteModules | null | undefined, si
     // ── dark mode (respects the saved pref, else the module's default) ──
     try{var pref=localStorage.getItem('carma-theme');var dbtn=R.querySelector('[data-carma-darktoggle]');var def=dbtn?dbtn.getAttribute('data-carma-dark-default'):null;var sysDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var wantDark=pref?(pref==='dark'):(def==='dark'||(def==='system'&&sysDark));if(wantDark&&host)host.setAttribute('data-carma-theme','dark');}catch(e){}
     R.querySelectorAll('[data-carma-darktoggle]').forEach(function(b){b.addEventListener('click',function(){var sr=b.getRootNode();var h=sr&&sr.host?sr.host:host;if(!h)return;var on=h.getAttribute('data-carma-theme')==='dark';if(on){h.removeAttribute('data-carma-theme');}else{h.setAttribute('data-carma-theme','dark');}try{localStorage.setItem('carma-theme',on?'light':'dark');}catch(e){}});});
-    // ── feed filtering (search + categories) ──
+    // ── feed filtering (search + categories), real-time on every keystroke ──
     var cards=[].slice.call(R.querySelectorAll('.carma-card'));
     var term='',cat='';
     var counts=R.querySelectorAll('[data-carma-search-count]');
-    function apply(){var vis=0;cards.forEach(function(c){var t=(c.getAttribute('data-carma-search')||'').toLowerCase();var cs=(c.getAttribute('data-carma-cats')||'');var okT=!term||t.indexOf(term)>=0;var okC=!cat||cs.split(',').indexOf(cat)>=0;var show=okT&&okC;c.style.display=show?'':'none';if(show)vis++;});counts.forEach(function(el){if(term||cat){el.hidden=false;el.textContent=vis+' '+(vis===1?'resultat':'resultats');}else{el.hidden=true;}});}
-    R.querySelectorAll('[data-carma-search-input]').forEach(function(i){i.addEventListener('input',function(){term=(i.value||'').toLowerCase().trim();apply();});});
+    // Live "no results" state: a filtered-to-empty feed used to be a blank void that
+    // read as broken. Inject a message after the grid and toggle it as the user types.
+    var grid=R.querySelector('.carma-grid');var noRes=null;
+    if(grid&&grid.parentNode){noRes=document.createElement('p');noRes.className='carma-mod-noresults';noRes.setAttribute('data-carma-noresults','');noRes.hidden=true;noRes.textContent='No s\\u2019ha trobat cap article.';grid.parentNode.insertBefore(noRes,grid.nextSibling);}
+    function apply(){var vis=0;cards.forEach(function(c){var t=(c.getAttribute('data-carma-search')||'').toLowerCase();var cs=(c.getAttribute('data-carma-cats')||'');var okT=!term||t.indexOf(term)>=0;var okC=!cat||cs.split(',').indexOf(cat)>=0;var show=okT&&okC;c.style.display=show?'':'none';if(show)vis++;});counts.forEach(function(el){if(term||cat){el.hidden=false;el.textContent=vis+' '+(vis===1?'resultat':'resultats');}else{el.hidden=true;}});if(noRes)noRes.hidden=!((term||cat)&&vis===0);}
+    R.querySelectorAll('[data-carma-search-input]').forEach(function(i){i.addEventListener('input',function(){term=(i.value||'').toLowerCase().trim();apply();});i.addEventListener('search',function(){term=(i.value||'').toLowerCase().trim();apply();});});
     R.querySelectorAll('[data-carma-cat]').forEach(function(b){b.addEventListener('click',function(){cat=b.getAttribute('data-carma-cat')||'';R.querySelectorAll('[data-carma-cat]').forEach(function(x){x.classList.toggle('is-active',x===b);});apply();});});
     R.querySelectorAll('[data-carma-cat-select]').forEach(function(sel){sel.addEventListener('change',function(){cat=sel.value||'';apply();});});
     // expandable search
@@ -802,6 +806,7 @@ const HERO_CSS = `
 
 const DISCOVERY_CSS = `
 .carma-mod-discovery{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.9rem!important;margin:0 0 1.75rem!important}
+.carma-mod-noresults{margin:2rem 0!important;padding:2rem 1rem!important;text-align:center!important;color:var(--ct-muted)!important;font-family:var(--ct-font-body)!important;font-size:1rem!important;font-weight:600!important}
 .carma-mod-search{position:relative!important;display:flex!important;align-items:center!important;flex:1 1 260px!important;min-width:200px!important}
 .carma-mod-search-ic{position:absolute!important;left:.9rem!important;font-size:1rem!important;color:var(--ct-muted)!important;pointer-events:none!important}
 .carma-mod-search-input{width:100%!important;height:46px!important;padding:0 1rem 0 2.5rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;background:var(--ct-surface)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.95rem!important;outline:none!important}

@@ -31,7 +31,10 @@ export type ArticleSchemaInput = {
   articleBody?: string | null
 }
 
-const BCP47: Record<Locale, string> = { en: 'en-US', es: 'es-ES', ca: 'ca-ES' }
+const BCP47: Record<Locale, string> = {
+  ca: 'ca-ES', es: 'es-ES', en: 'en-US', fr: 'fr-FR', de: 'de-DE',
+  it: 'it-IT', pt: 'pt-PT', gl: 'gl-ES', eu: 'eu-ES', nl: 'nl-NL',
+}
 
 /** JSON.stringify with sane defaults for embedding into an HTML `<script>`. */
 function safeStringify(value: unknown): string {

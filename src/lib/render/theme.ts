@@ -33,7 +33,7 @@ import {
 import type { SiteModules } from '@/lib/modules/registry'
 import type { BlogSignature, CardStyle } from '@/lib/scrape/blogDetect'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
-import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, type Locale } from '@/lib/i18n/config'
+import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
 import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } from './image'
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
@@ -112,7 +112,10 @@ function escapeHtml(s: string): string {
 }
 const escapeAttr = escapeHtml
 
-const BCP47: Record<Locale, string> = { en: 'en-US', es: 'es-ES', ca: 'ca-ES' }
+const BCP47: Record<Locale, string> = {
+  ca: 'ca-ES', es: 'es-ES', en: 'en-US', fr: 'fr-FR', de: 'de-DE',
+  it: 'it-IT', pt: 'pt-PT', gl: 'gl-ES', eu: 'eu-ES', nl: 'nl-NL',
+}
 
 function formatDate(iso: string, locale: Locale = DEFAULT_LOCALE): string {
   try {
@@ -121,8 +124,9 @@ function formatDate(iso: string, locale: Locale = DEFAULT_LOCALE): string {
 }
 
 // The few UI strings the render emits itself (everything else is the client's
-// own content). Localized so a non-default-language blog reads natively.
-const RENDER_STRINGS: Record<Locale, { back: string; home: string; articles: string; emptyTitle: string; emptyDesc: (s: string) => string }> = {
+// own content). Localized in the UI languages; a content site in another
+// language borrows the closest one via uiLocale().
+const RENDER_STRINGS: Record<UiLocale, { back: string; home: string; articles: string; emptyTitle: string; emptyDesc: (s: string) => string }> = {
   en: {
     back: '← Back to list', home: 'Home', articles: 'Articles',
     emptyTitle: 'No published articles yet',
@@ -208,12 +212,14 @@ function articleUrl(siteId: string, post: Post, locale: Locale): string {
   return needsLang ? `${path}?lang=${locale}` : path
 }
 
-// URL for the LISTING in a given locale. The listing has no slug, so we still
-// use ?lang= for non-default locales (and a clean path for the default).
+// URL for the LISTING in a given locale. ALWAYS explicit `?lang=` — even for the
+// platform default. The previous "clean URL for the default locale" optimisation was
+// the root of the "clicking the language switcher does nothing" bug: a clean
+// `/render/<id>` resolves to the SITE's default locale, which is NOT always the
+// platform default, so clicking e.g. "Català" on a Spanish-default site landed back
+// on Spanish. An explicit `?lang=` makes every switch unambiguous.
 function listingUrl(siteId: string, locale: Locale): string {
-  return locale === DEFAULT_LOCALE
-    ? `/render/${siteId}`
-    : `/render/${siteId}?lang=${locale}`
+  return `/render/${siteId}?lang=${locale}`
 }
 
 // Overlay a non-default locale's variant onto the post. Any field the variant
@@ -239,7 +245,7 @@ function buildLangSwitcher(locales: Locale[], current: Locale, urlForLocale: (l:
   if (locales.length < 2) return ''
   const items = locales.map(loc => {
     const active = loc === current
-    return `<a class="carma-lang${active ? ' is-active' : ''}" href="${escapeAttr(urlForLocale(loc))}"${active ? ' aria-current="true"' : ''} hreflang="${loc}" title="${escapeAttr(LOCALE_META[loc].label)}">${LOCALE_META[loc].flag} ${escapeHtml(loc.toUpperCase())}</a>`
+    return `<a class="carma-lang${active ? ' is-active' : ''}" href="${escapeAttr(urlForLocale(loc))}"${active ? ' aria-current="true"' : ''} hreflang="${loc}" title="${escapeAttr(LOCALE_META[loc].label)}">${escapeHtml(LOCALE_META[loc].native)}</a>`
   }).join('')
   return `<nav class="carma-langbar" aria-label="Language">${items}</nav>`
 }
@@ -432,10 +438,14 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 .carma-root ::selection{background:color-mix(in srgb,var(--ct-accent) 24%,transparent)}
 
 /* ── Layout ──
-   Full-width fluid blog area. We intentionally do NOT use the scraped --ct-max
-   here (sites often expose a narrow container, which cramped the grid). The feed
-   uses the full width up to a generous cap, with fluid side padding. */
-.carma-main{width:100%!important;max-width:1600px!important;margin:0 auto!important;padding:3rem clamp(1rem,4vw,3.5rem)!important}
+   The feed/article container MIRRORS the cloned site's own content width
+   (--ct-max, extracted from the source container) so the blog lines up with the
+   cloned header + footer instead of bleeding past them. clamp() is a safety net:
+   it floors a too-narrow mis-extraction (so a multi-column grid never cramps) and
+   caps a runaway one, while respecting the real width across the common range.
+   Side padding is kept tight so the feed content sits at the same x as the chrome
+   content, not indented from it. */
+.carma-main{width:100%!important;max-width:clamp(720px,var(--ct-max),1600px)!important;margin:0 auto!important;padding:3rem clamp(1rem,3vw,2rem)!important}
 
 /* Language switcher */
 .carma-langbar{display:flex!important;gap:.4rem!important;flex-wrap:wrap!important;margin:0 0 1.1rem!important}
@@ -870,7 +880,7 @@ function localizedSectionTitle(theme: Theme, locale: Locale): string {
     const t = theme?.chrome_i18n?.[locale]?.section_title
     if (t && t.trim()) return t.trim()
   }
-  return theme?.section_title?.trim() || RENDER_STRINGS[locale].articles
+  return theme?.section_title?.trim() || RENDER_STRINGS[uiLocale(locale)].articles
 }
 
 // Strip <script> tags from a markup fragment. Used only for the SCOPED
@@ -943,7 +953,7 @@ function bodyOpenTag(theme: Theme): string {
 }
 
 // Localized label for demo/sample cards (preview-only). See Post.demo + buildCard.
-const DEMO_BADGE: Record<Locale, string> = {
+const DEMO_BADGE: Record<UiLocale, string> = {
   ca: 'Article de mostra',
   es: 'Artículo de muestra',
   en: 'Sample article',
@@ -963,11 +973,13 @@ function buildCard(post: Post, siteId: string, locale: Locale): string {
   // Data hooks for the client-side Smart Modules (search + category filter). Inert
   // when no module is enabled; never affect the default render's appearance.
   const cats = (loc.categories ?? []).map(c => c.toLowerCase()).join(',')
-  const searchText = `${loc.title} ${loc.excerpt ?? ''}`.toLowerCase()
+  // Search matches title + excerpt + categories + tags, so a query for a topic or a
+  // category name surfaces the article (title-only search felt broken).
+  const searchText = `${loc.title} ${loc.excerpt ?? ''} ${(loc.categories ?? []).join(' ')} ${(loc.tags ?? []).join(' ')}`.toLowerCase()
   // Preview-only demo posts get an unmistakable badge so they're never confused
   // with real content (onboarding / theme-selection grids).
   const demoBadge = post.demo
-    ? `<span class="carma-card-demo">${escapeHtml(DEMO_BADGE[locale] ?? DEMO_BADGE.ca)}</span>`
+    ? `<span class="carma-card-demo">${escapeHtml(DEMO_BADGE[uiLocale(locale)] ?? DEMO_BADGE.ca)}</span>`
     : ''
   return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}">${demoBadge}<a class="carma-card-link" href="${escapeAttr(href)}">
   ${media}
@@ -980,7 +992,7 @@ function buildCard(post: Post, siteId: string, locale: Locale): string {
 }
 
 function buildEmptyState(siteName: string, locale: Locale): string {
-  const s = RENDER_STRINGS[locale]
+  const s = RENDER_STRINGS[uiLocale(locale)]
   return `<div class="carma-empty">
   <h2 class="carma-empty-title">${escapeHtml(s.emptyTitle)}</h2>
   <p class="carma-empty-desc">${s.emptyDesc(siteName)}</p>
@@ -1088,17 +1100,24 @@ function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts:
   const tokens = tokensOf(theme)
   const available = LOCALES.filter(l => posts.some(p => postLocales(p).includes(l)))
   const urlForLocale = (l: Locale) => listingUrl(siteId, l)
+  // STRICT locale filtering (founder directive 2026-06-30): the feed shows ONLY the
+  // posts that actually have content in the active language — a Spanish-only article
+  // must never appear under the Catalan tab. If the active locale has no content but
+  // other languages do (rare: a site default with no posts in it), fall back to the
+  // first language that does, so a real catalogue never renders as an empty feed.
+  const feedLocale = available.includes(locale) ? locale : (available[0] ?? locale)
+  const visiblePosts = posts.filter(p => postLocales(p).includes(feedLocale))
   // The language switcher lives on OUR navigation surface (clicking the client's
   // own nav navigates to the source site, so it can't host our switcher).
-  const bodySwitcher = buildLangSwitcher(available, locale, urlForLocale)
+  const bodySwitcher = buildLangSwitcher(available, feedLocale, urlForLocale)
 
   const sectionTitle = localizedSectionTitle(theme, locale)
-  const feed = posts.length === 0
+  const feed = visiblePosts.length === 0
     ? buildEmptyState(siteName, locale)
-    : `<div class="carma-grid">\n${posts.map(p => buildCard(p, siteId, locale)).join('\n')}\n</div>`
+    : `<div class="carma-grid">\n${visiblePosts.map(p => buildCard(p, siteId, feedLocale)).join('\n')}\n</div>`
 
   const crumb = tokens.showBreadcrumb
-    ? `<nav class="carma-breadcrumb"><a href="${escapeAttr(urlForLocale(locale))}">${escapeHtml(RENDER_STRINGS[locale].home)}</a><span>›</span><span>${escapeHtml(sectionTitle)}</span></nav>`
+    ? `<nav class="carma-breadcrumb"><a href="${escapeAttr(urlForLocale(locale))}">${escapeHtml(RENDER_STRINGS[uiLocale(locale)].home)}</a><span>›</span><span>${escapeHtml(sectionTitle)}</span></nav>`
     : ''
   const hasImage = !!tokens.headingImage
   const headStyle = hasImage ? ` style="background-image:url('${escapeAttr(tokens.headingImage!)}')"` : ''
@@ -1134,7 +1153,7 @@ function listingBodyHtml(theme: Theme, siteName: string, siteId: string, posts: 
 // `parts` carries the Smart Modules HTML + the (possibly paywalled) content.
 function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const loc = localizePost(post, locale)
-  const s = RENDER_STRINGS[locale]
+  const s = RENDER_STRINGS[uiLocale(locale)]
   const available = postLocales(post)
   // CRITICAL: each language gets its OWN URL via its localized slug. The
   // switcher links to /render/<siteId>/<localized-slug-for-locale> directly,

@@ -2,7 +2,7 @@
 // This is the pattern to extend for full dashboard localization — components call
 // useT() and look up keys instead of hardcoding strings.
 
-import { DEFAULT_LOCALE, type Locale } from './config'
+import { uiLocale, type Locale, type UiLocale } from './config'
 
 export type Dict = Record<string, string>
 
@@ -72,11 +72,15 @@ const ca: Dict = {
   'embed.loadError': 'No s\'ha pogut carregar el blog.',
 }
 
-export const MESSAGES: Record<Locale, Dict> = { en, es, ca }
+// Keyed by UI locale only — these are the languages with a hand-written
+// dictionary. Content locales beyond ca/es/en (fr, de, …) map onto the closest
+// UI locale via uiLocale() so the chrome still renders in a real language.
+export const MESSAGES: Record<UiLocale, Dict> = { en, es, ca }
 
 // Server-safe lookup for non-React contexts (route handlers, the embed loader
-// builder). Falls back to the Catalan default, then the raw key, so a missing
-// translation degrades gracefully instead of rendering "undefined".
+// builder). Clamps any content locale to a UI locale, then falls back to the
+// raw key, so a missing translation degrades gracefully instead of "undefined".
 export function tr(locale: Locale, key: string): string {
-  return MESSAGES[locale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key] ?? key
+  const ui = uiLocale(locale)
+  return MESSAGES[ui]?.[key] ?? MESSAGES.ca[key] ?? key
 }

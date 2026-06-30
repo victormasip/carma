@@ -12,11 +12,22 @@
 import { franc } from 'franc-min'
 import { LOCALES, type Locale } from './config'
 
-// franc returns ISO 639-3; map to our 639-1 codes.
+// franc returns ISO 639-3; map to our 639-1 content locales. Covers every
+// publishing language in config.LOCALES that franc-min can recognise, so a
+// detected French/German/Italian/… article keeps its real language instead of
+// collapsing to the Catalan default (the old 3-language map was the root of the
+// "importer only ever finds ca/es/en" bug).
 const FRANC_TO_LOCALE: Record<string, Locale> = {
   cat: 'ca',
   spa: 'es',
   eng: 'en',
+  fra: 'fr',
+  deu: 'de',
+  ita: 'it',
+  por: 'pt',
+  glg: 'gl',
+  eus: 'eu',
+  nld: 'nl',
 }
 
 const MIN_TEXT_LENGTH = 60
@@ -43,30 +54,54 @@ const CATALAN_MARKERS = new Set([
 // lookahead (not a trailing \b), so accents on the next word don't break it.
 const CATALAN_APOSTROPHE = /\b[ldsnmt]['’](?=[haeiouàèéíòóúHAEIOUÀÈÉÍÒÓÚ])/g
 
-/**
- * ≥3 hits across ≥2 distinct Catalan markers in the plain text.
- *
- * Tokenizes on Unicode letter runs (`\p{L}` + the `u` flag) instead of per-word
- * `\b…\b` regexes: JS `\b` is ASCII-only, so a trailing boundary after an
- * accented letter (això, també, què…) never matches — that would silently
- * disable our most distinctive markers.
- */
-function hasCatalanSignals(plain: string): boolean {
+// ── Spanish-first token rule ──────────────────────────────────────────────────
+// franc-min's trigram model confuses Spanish with its Iberian neighbours (Galician,
+// Portuguese, even Catalan) on short or mixed text, so a clearly-Spanish article was
+// sometimes labelled 'gl'/'pt' — the "importer still fails to detect Spanish" bug.
+// These markers are SPANISH-DISTINCTIVE: everyday function words that Galician,
+// Portuguese and Catalan spell differently (gl 'moi'/'tamén'/'agora', pt
+// 'muito'/'também'/'agora', ca 'molt'/'també'/'ara'), so a real Spanish text trips
+// the rule but a Galician/Portuguese/Catalan one does not.
+const SPANISH_MARKERS = new Set([
+  'muy', 'también', 'hacia', 'esto', 'eso', 'mismo', 'misma', 'ahora', 'entonces',
+  'siempre', 'aunque', 'español', 'años', 'cómo', 'según', 'hasta', 'desde', 'cuando',
+  'donde', 'porque', 'pero', 'está', 'están', 'ningún', 'alguna',
+])
+
+// Shared marker scan: ≥3 total hits across ≥2 distinct markers in the plain text.
+// Tokenizes on Unicode letter runs (`\p{L}` + the `u` flag); JS `\b` is ASCII-only,
+// so a trailing boundary after an accented letter (això, también, què…) never
+// matches — that would silently disable our most distinctive markers.
+function markerSignals(plain: string, markers: Set<string>): boolean {
   const lower = plain.toLowerCase()
   let hits = 0
   const kinds = new Set<string>()
   for (const tok of lower.split(/[^\p{L}]+/u)) {
-    if (CATALAN_MARKERS.has(tok)) {
-      hits += 1
-      kinds.add(tok)
-    }
-  }
-  const apostrophes = lower.match(CATALAN_APOSTROPHE)
-  if (apostrophes) {
-    hits += apostrophes.length
-    kinds.add('apostrophe')
+    if (markers.has(tok)) { hits += 1; kinds.add(tok) }
   }
   return hits >= 3 && kinds.size >= 2
+}
+
+function hasCatalanSignals(plain: string): boolean {
+  if (markerSignals(plain, CATALAN_MARKERS)) {
+    // Already ≥3/≥2 on the plain markers; the apostrophe rule only strengthens it.
+    return true
+  }
+  // Apostrophized articles/pronouns (l'/d'/s'/…) are Catalan-distinctive too; fold
+  // them in so loaded Catalan with few stopwords still trips the ≥3/≥2 threshold.
+  const lower = plain.toLowerCase()
+  let hits = 0
+  const kinds = new Set<string>()
+  for (const tok of lower.split(/[^\p{L}]+/u)) {
+    if (CATALAN_MARKERS.has(tok)) { hits += 1; kinds.add(tok) }
+  }
+  const apostrophes = lower.match(CATALAN_APOSTROPHE)
+  if (apostrophes) { hits += apostrophes.length; kinds.add('apostrophe') }
+  return hits >= 3 && kinds.size >= 2
+}
+
+function hasSpanishSignals(plain: string): boolean {
+  return markerSignals(plain, SPANISH_MARKERS)
 }
 
 /** Strip HTML tags + collapse whitespace to get usable plain text. */
@@ -93,9 +128,15 @@ export function detectLocale(textOrHtml: string): DetectionResult {
 
   // Language-first heuristic: distinctive Catalan function words beat the
   // statistical model outright — high precision, and it fires from the 60-char
-  // floor, so loaded/typed Catalan is labeled immediately.
+  // floor, so loaded/typed Catalan is labeled immediately. Catalan is checked
+  // before Spanish because ca↔es is the closest pair and ca is the home market.
   if (hasCatalanSignals(plain)) {
     return { locale: 'ca', confidence: 0.95, sample, source: 'tokens' }
+  }
+  // Spanish-distinctive markers beat franc's ca/gl/pt confusion (the "still fails
+  // to detect Spanish" bug). Runs after Catalan so a ca article is never stolen.
+  if (hasSpanishSignals(plain)) {
+    return { locale: 'es', confidence: 0.92, sample, source: 'tokens' }
   }
 
   // `franc` returns an ISO 639-3 code, or 'und' (undetermined).

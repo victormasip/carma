@@ -339,8 +339,40 @@ export function extractTokens(opts: {
   }
 
   // ── Max width (content container) ──
-  const containerMax = ruleFor(s => /\b(container|wrapper|content|main|site)\b/.test(s), 'max-width')
-  if (containerMax && /^[\d.]+(px|rem)$/.test(containerMax.trim())) tokens.maxWidth = containerMax.trim()
+  // The blog feed must align with the cloned header/footer's inner container. A site
+  // typically declares the SAME content max-width on several wrappers (header inner,
+  // main, footer inner, .container, .row…), so the MOST FREQUENT container max-width
+  // is the true content width — far more reliable than the first match, which could
+  // be a narrow aside or a hero-only override (the "too compressed / misaligned"
+  // bug). We tally every container-like max-width, normalise rem→px, and pick the
+  // mode within a sane 600–1760px range (ties → the wider value, i.e. the site shell
+  // rather than an inset column).
+  const containerSel = /\b(container|wrapper|content|main|site|inner|row|layout|page|shell)\b/
+  const maxWidthToPx = (raw: string): number | null => {
+    const m = raw.trim().match(/^([\d.]+)(px|rem|em)$/)
+    if (!m) return null
+    const px = m[2] === 'px' ? parseFloat(m[1]) : parseFloat(m[1]) * 16
+    return px >= 600 && px <= 1760 ? Math.round(px) : null
+  }
+  const widthTally = new Map<number, number>()
+  for (const r of rules) {
+    if (!containerSel.test(r.selector)) continue
+    const decl = getDecl(r.body, 'max-width')
+    if (!decl) continue
+    const px = maxWidthToPx(resolveVar(decl, vars))
+    if (px != null) widthTally.set(px, (widthTally.get(px) ?? 0) + 1)
+  }
+  if (widthTally.size) {
+    let best = 0, bestCount = 0
+    for (const [px, count] of widthTally) {
+      if (count > bestCount || (count === bestCount && px > best)) { best = px; bestCount = count }
+    }
+    tokens.maxWidth = `${best}px`
+  } else {
+    // Fallback: first container max-width (covers unusual/rem-var-only setups).
+    const containerMax = ruleFor(s => containerSel.test(s), 'max-width')
+    if (containerMax && /^[\d.]+(px|rem)$/.test(containerMax.trim())) tokens.maxWidth = containerMax.trim()
+  }
 
   // ── Body typography rhythm — line-height, paragraph spacing, link & quote
   //    styling. Captured optimistically (any clean match wins); the renderer

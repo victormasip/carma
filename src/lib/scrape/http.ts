@@ -477,14 +477,29 @@ export function decodeEntities(s: string): string {
   })
 }
 
-/** Detect a language code from a URL's ?lang= param or first path segment. */
+/**
+ * Detect a language code from a URL — checked in order of reliability:
+ *   1. ?lang=xx / ?l=xx query param
+ *   2. first path segment, incl. region tags (/en/, /en-us/, /pt-br/)
+ *   3. language subdomain (en.example.com, fr.example.com) — a very common
+ *      WPML / multisite pattern the old version missed entirely
+ * Returns a 2-letter code from LANG_CODES, or null.
+ */
 export function detectLangFromUrl(url: string): string | null {
   try {
     const u = new URL(url)
-    const lang = u.searchParams.get('lang')?.toLowerCase()
-    if (lang && LANG_CODES.includes(lang)) return lang
-    const firstSeg = u.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
+
+    // 1. ?lang= / ?l= query parameter (accepts a region tag like es-ES).
+    const q = (u.searchParams.get('lang') || u.searchParams.get('l') || '').toLowerCase().split(/[-_]/)[0]
+    if (q && LANG_CODES.includes(q)) return q
+
+    // 2. First path segment, with an optional region suffix (/en-us/, /pt-br/).
+    const firstSeg = u.pathname.split('/').filter(Boolean)[0]?.toLowerCase().split(/[-_]/)[0]
     if (firstSeg && LANG_CODES.includes(firstSeg)) return firstSeg
+
+    // 3. Language subdomain: <lang>.example.com (ignore www / bare apex).
+    const sub = u.hostname.toLowerCase().split('.')[0]
+    if (sub && sub !== 'www' && LANG_CODES.includes(sub)) return sub
   } catch {
     /* ignore */
   }

@@ -7,11 +7,14 @@
 // rows `buildListingPage`/`buildListingFragment` consume (same fields the
 // template-preview route already uses successfully).
 
-import type { Locale } from '@/lib/i18n/config'
+import { uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 
 type Sample = { title: string; excerpt: string; cat: string; seed: string }
 
-const SAMPLES: Record<Locale, Sample[]> = {
+// Placeholder copy exists only in the UI languages; a French/Italian/… preview
+// site borrows the closest one (uiLocale) — these are demo cards, never served
+// to real visitors.
+const SAMPLES: Record<UiLocale, Sample[]> = {
   ca: [
     { title: 'Com construir una marca que perduri en el temps', excerpt: 'Una guia pràctica sobre identitat, to de veu i consistència visual a cada punt de contacte.', cat: 'Estratègia', seed: 'carma-a' },
     { title: 'Les tendències de disseny editorial per al 2026', excerpt: 'El que ve en tipografia, color i composició per a publicacions digitals modernes.', cat: 'Disseny', seed: 'carma-b' },
@@ -39,7 +42,7 @@ const SAMPLES: Record<Locale, Sample[]> = {
 }
 
 export function buildSamplePosts(locale: Locale, authorName = 'Carma') {
-  const set = SAMPLES[locale] ?? SAMPLES.ca
+  const set = SAMPLES[uiLocale(locale)] ?? SAMPLES.ca
   return set.map((s, i) => ({
     id: `sample-${i}`,
     title: s.title,
@@ -65,7 +68,7 @@ export function buildSamplePosts(locale: Locale, authorName = 'Carma') {
 
 type ArticleSample = { title: string; excerpt: string; cat: string; tags: string[]; html: string }
 
-const ARTICLE_SAMPLES: Record<Locale, ArticleSample> = {
+const ARTICLE_SAMPLES: Record<UiLocale, ArticleSample> = {
   ca: {
     title: 'Com construir una marca editorial que perduri',
     excerpt: 'Identitat, veu i constància: la guia pràctica per fer que cada article reforci la teva marca.',
@@ -114,7 +117,7 @@ const ARTICLE_SAMPLES: Record<Locale, ArticleSample> = {
 }
 
 export function buildSampleArticle(locale: Locale, authorName = 'Carma') {
-  const a = ARTICLE_SAMPLES[locale] ?? ARTICLE_SAMPLES.ca
+  const a = ARTICLE_SAMPLES[uiLocale(locale)] ?? ARTICLE_SAMPLES.ca
   return {
     id: 'sample-article',
     title: a.title,

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DEFAULT_LOCALE, LOCALE_COOKIE, normalizeLocale, type Locale } from './config'
+import { LOCALE_COOKIE, normalizeLocale, uiLocale, type Locale } from './config'
 import { MESSAGES } from './messages'
 
 type LocaleContextValue = {
@@ -32,7 +32,7 @@ export function LocaleProvider({
   }, [router])
 
   const t = useCallback(
-    (key: string) => MESSAGES[locale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key] ?? key,
+    (key: string) => MESSAGES[uiLocale(locale)]?.[key] ?? MESSAGES.ca[key] ?? key,
     [locale],
   )
 

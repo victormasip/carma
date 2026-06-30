@@ -29,6 +29,11 @@ export const MAX_HEAD_HTML = 250_000
 // <head> children we KEEP (everything else — title/meta/base — is dropped).
 const KEEP_LINK_RELS = /(^|\s)(stylesheet|preconnect|dns-prefetch|preload|modulepreload|prefetch)(\s|$)/i
 
+// Font/CDN stylesheet hosts that ALREADY send permissive CORS (so their
+// @font-face fonts load cross-origin fine). We leave these linked directly —
+// proxying them would needlessly funnel large font-CDN sheets through us.
+const CORS_SAFE_FONT_SHEET = /fonts\.(?:googleapis|gstatic)\.com|use\.typekit|typography\.com|cloud\.typography|fonts\.adobe|fonts\.bunny|cdnjs\.cloudflare|cdn\.jsdelivr|unpkg\.com|kit\.fontawesome/i
+
 // ─── Script safety (anti blank-page) ──────────────────────────────────────────
 // We KEEP the client's real scripts so its native menus / accordions / dropdowns
 // work on the clone. Only a NARROW set is dropped: those that genuinely TAKE OVER
@@ -128,7 +133,20 @@ export function buildExtractedHead(root: HTMLElement, base: URL): string {
       if (!KEEP_LINK_RELS.test(rel)) continue
       const href = absolutise(el.getAttribute('href'), base)
       if (!href) continue
-      parts.push(`<link${serializeAttrs(el, { href })}>`)
+      // CORS fix (parity with the landing preview): route a SELF-HOSTED external
+      // stylesheet through /api/asset so the proxy rewrites its @font-face fonts +
+      // url() assets to same-origin — otherwise the clone's self-hosted icon/web
+      // fonts are CORS-blocked when served from our domain. CORS-safe font CDNs and
+      // non-stylesheet links (preload/preconnect) are left untouched.
+      const shouldProxy = rel.includes('stylesheet') && /^https?:\/\//i.test(href) && !CORS_SAFE_FONT_SHEET.test(href)
+      if (shouldProxy) {
+        // SRI (integrity) is computed over the ORIGINAL bytes; the proxy rewrites
+        // url()s, so the hash would no longer match — drop integrity/crossorigin.
+        el.removeAttribute('integrity')
+        el.removeAttribute('crossorigin')
+      }
+      const finalHref = shouldProxy ? `/api/asset?u=${encodeURIComponent(href)}` : href
+      parts.push(`<link${serializeAttrs(el, { href: finalHref })}>`)
     } else if (tag === 'STYLE') {
       const css = el.text ?? ''
       if (!css.trim()) continue
