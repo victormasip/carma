@@ -11,7 +11,7 @@
 
 import OpenAI from 'openai'
 import { sanitizeHtml, slugify } from '@/lib/writing/generate'
-import { WA_AGENT_MODEL } from './config'
+import { WA_AGENT_MODEL, WA_MOCK_AGENT } from './config'
 
 export type AgentDraft = {
   title: string
@@ -41,6 +41,11 @@ export type AgentInput = {
   // True once the single clarification has been spent (or the budget is 0): the
   // model MUST draft, never clarify.
   mustDraft: boolean
+  // Edit loop (founder directive 2026-06-30): when the owner taps "Editar" and
+  // sends change instructions, we re-run the agent to REVISE the existing draft
+  // instead of writing a new one. Both fields are set together.
+  editInstructions?: string
+  currentDraft?: { title: string; contentHtml: string; excerpt?: string }
 }
 
 const SYSTEM_PROMPT = `You are Carma, an assistant that turns a short brief (often a transcribed WhatsApp voice note) from a small-business or agency owner into a publish-ready SEO blog article.
@@ -104,8 +109,58 @@ function buildUserMessage(input: AgentInput): string {
   if (input.existingCategories?.length) {
     lines.push(`EXISTING CATEGORIES (reuse when they fit): ${input.existingCategories.join(' · ')}`)
   }
+  // Edit loop: hand the model the current draft + the owner's change request so it
+  // REVISES (keeps what works, applies the changes) rather than rewriting from zero.
+  if (input.editInstructions && input.currentDraft) {
+    lines.push(
+      '',
+      'REVISION MODE: the owner already has the draft below and wants changes. Apply the change request faithfully, keep everything else, and return the full updated article (decision="draft").',
+      `CURRENT TITLE: ${input.currentDraft.title}`,
+      'CURRENT CONTENT (HTML):', '"""', input.currentDraft.contentHtml, '"""',
+      "CHANGE REQUEST (the owner's WhatsApp note):", '"""', input.editInstructions, '"""',
+    )
+    return lines.join('\n')
+  }
   lines.push('', "BRIEF (the owner's WhatsApp note):", '"""', input.brief, '"""')
   return lines.join('\n')
+}
+
+// ─── Mock generator (WA_MOCK_AGENT) ───────────────────────────────────────────
+// Deterministic, credit-free draft so the ack → buttons → approve/edit → publish
+// flow can be tested without OpenAI. Echoes the brief/edit so it feels alive; the
+// HTML clears the worker's "≥80 visible chars" sanity check. Never used in prod.
+function mockAgent(input: AgentInput): AgentResult {
+  const editing = !!(input.editInstructions && input.currentDraft)
+  const topicRaw = (editing ? input.editInstructions : input.brief) || ''
+  const topic = topicRaw.replace(/\s+/g, ' ').trim().slice(0, 80) || 'el teu tema'
+  const focus = topic.toLowerCase().split(' ').slice(0, 3).join(' ') || 'tema'
+  const title = editing
+    ? `${input.currentDraft!.title} (revisat)`
+    : `${topic.charAt(0).toUpperCase()}${topic.slice(1)}: guia pràctica`
+  const contentHtml =
+    `<p>[ESBORRANY DE PROVA · ${input.siteName || 'Carma'}] Aquest article s'ha generat amb el mode de proves (sense IA) per validar el flux de WhatsApp. ` +
+    `Tema rebut: <strong>${topic}</strong>.</p>` +
+    (editing ? `<p>Canvis aplicats: <em>${topic}</em>.</p>` : '') +
+    `<h2>Per què és important ${focus}</h2><p>Contingut de mostra amb prou longitud per superar la validació del worker i renderitzar-se correctament a la pàgina de revisió. Pots aprovar-lo o editar-lo des de WhatsApp.</p>` +
+    `<h2>Com aplicar-ho</h2><ul><li>Primer pas de mostra.</li><li>Segon pas de mostra.</li><li>Tercer pas de mostra.</li></ul>` +
+    `<h3>Conclusió</h3><p>Aquest és un esborrany fictici. Desactiva WA_MOCK_AGENT per generar articles reals.</p>`
+  return {
+    kind: 'draft',
+    usage: { in: 0, out: 0 },
+    draft: {
+      title,
+      slug: slugify(title),
+      excerpt: `Esborrany de prova sobre ${topic}.`,
+      contentHtml: sanitizeHtml(contentHtml),
+      seoTitle: title.slice(0, 60),
+      seoDescription: `Guia de mostra sobre ${topic}. Generada en mode de proves de Carma.`.slice(0, 160),
+      focusKeyword: focus,
+      categories: ['Proves'],
+      tags: ['mock', 'whatsapp', 'carma'],
+      niche: `Blog de mostra de ${input.siteName || 'Carma'}.`,
+      strategy: editing ? 'He aplicat els teus canvis (mode de proves).' : 'Esborrany de prova per validar el flux.',
+    },
+  }
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -116,6 +171,9 @@ const FALLBACK_CLARIFY = "No m'ha arribat cap tema! 😅 Envia'm de què vols l'
 
 /** Run one agent turn. Throws on missing key / provider error (worker retries). */
 export async function runAgent(input: AgentInput): Promise<AgentResult> {
+  // Credit-free testing path (never in production): skip OpenAI entirely.
+  if (WA_MOCK_AGENT) return mockAgent(input)
+
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY no està configurada')
 
   const client = new OpenAI({ maxRetries: 1 })

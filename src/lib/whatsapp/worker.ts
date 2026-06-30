@@ -17,13 +17,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_LOCALE, LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
 import {
   WA_JOB_LEASE_MIN, WA_JOB_MAX_ATTEMPTS, WA_REVIEW_TOKEN_TTL_HOURS,
-  WA_THREAD_COST_CENTS_CEILING, WA_THREAD_MAX_TURNS, WA_TURN_BUDGET,
+  WA_THREAD_COST_CENTS_CEILING, WA_THREAD_MAX_TURNS, WA_TURN_BUDGET, WA_DAILY_GEN_CAP,
+  WA_MESSAGE_RETENTION_DAYS, WA_JOB_RETENTION_DAYS,
 } from './config'
-import { WA_TABLES, type GenerationJobRow, type WaAgentState, type WaThreadRow, type WaMessageRow } from './types'
+import { WA_TABLES, WA_BUTTON, type GenerationJobRow, type WaAgentState, type WaThreadRow, type WaMessageRow } from './types'
 import { mintReviewToken, reviewTokenExpiry } from './tokens'
 import { downloadKapsoMedia, transcribeAudio } from './transcribe'
-import { runAgent, type AgentUsage } from './agent'
-import { sendWhatsApp, reviewUrl } from './kapso'
+import { runAgent, type AgentUsage, type AgentDraft } from './agent'
+import { sendWhatsApp, sendWhatsAppButtons, reviewUrl } from './kapso'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -142,6 +143,52 @@ async function saveDraft(
   throw new Error('draft insert failed after slug retries')
 }
 
+// Mint a fresh single-use review token for a post, superseding any prior ACTIVE
+// token on the same thread, so an edit re-issues exactly one live link + button set.
+async function issueReviewToken(admin: Admin, postId: string, siteId: string, threadId: string): Promise<string> {
+  await admin
+    .from(WA_TABLES.reviewTokens)
+    .update({ status: 'revoked' })
+    .eq('thread_id', threadId)
+    .eq('action', 'publish')
+    .eq('status', 'active')
+  const { raw, hash } = mintReviewToken()
+  await admin.from(WA_TABLES.reviewTokens).insert({
+    token_hash: hash,
+    post_id: postId,
+    site_id: siteId,
+    thread_id: threadId,
+    action: 'publish',
+    status: 'active',
+    expires_at: reviewTokenExpiry(WA_REVIEW_TOKEN_TTL_HOURS).toISOString(),
+  })
+  return raw
+}
+
+// The draft-ready reply: interactive Approve/Edit buttons with the review link in
+// the body. Falls back to a plain text+link send when interactive is unavailable so
+// the owner always has a working way to publish (the web link still approves).
+async function sendDraftReady(
+  phone: string,
+  d: Pick<AgentDraft, 'title' | 'strategy'>,
+  link: string,
+  pnid?: string,
+  revised = false,
+): Promise<boolean> {
+  const lead = revised ? '📝 Esborrany actualitzat' : 'Ja tens l’esborrany'
+  const body = `${lead}: «${d.title}» ✍️\n${d.strategy}\n\nTambé el pots revisar aquí: ${link}`
+  const ok = await sendWhatsAppButtons(
+    phone,
+    body,
+    [
+      { id: WA_BUTTON.approve, title: '✅ Publicar' },
+      { id: WA_BUTTON.edit, title: '✏️ Editar' },
+    ],
+    pnid,
+  )
+  return ok || sendWhatsApp(phone, body, pnid)
+}
+
 // ─── One job ──────────────────────────────────────────────────────────────────
 async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   // Permanent guards: a missing message/thread can never succeed → 'error', no retry.
@@ -170,23 +217,37 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     return finishJob(admin, job.id, 'done')
   }
 
+  // Daily per-IDENTITY generation cap (A1) — a hard backstop across ALL the owner's
+  // threads, checked BEFORE any transcription/OpenAI spend. We proxy a "generation"
+  // by inbound messages in the last 24h (Turn-Budget-1 → ~1 inbound per article), so
+  // a bound user can never burn the budget. Cheap (indexed thread_id + created_at).
+  if (WA_DAILY_GEN_CAP > 0) {
+    const since = new Date(Date.now() - 24 * 3600_000).toISOString()
+    const { data: idThreads } = await admin.from(WA_TABLES.threads).select('id').eq('identity_id', t.identity_id)
+    const threadIds = (idThreads ?? []).map((r) => r.id as string)
+    if (threadIds.length) {
+      const { count } = await admin
+        .from(WA_TABLES.messages)
+        .select('id', { count: 'exact', head: true })
+        .in('thread_id', threadIds)
+        .eq('direction', 'in')
+        .gte('created_at', since)
+      if ((count ?? 0) > WA_DAILY_GEN_CAP) {
+        await sendWhatsApp(phone, "Has arribat al límit d'articles per avui 🙌 Torna-m'ho a enviar demà i seguim.", pnid)
+        return finishJob(admin, job.id, 'done')
+      }
+    }
+  }
+
   const { data: msgRow } = await admin.from(WA_TABLES.messages).select('*').eq('id', job.message_id).maybeSingle()
   if (!msgRow) return finishJob(admin, job.id, 'error', { error: 'message missing' })
   const msg = msgRow as WaMessageRow
 
   const state: WaAgentState = (t.agent_state as WaAgentState) ?? { phase: 'await_brief' }
 
-  // ── Transparency beat 1: acknowledge receipt the moment we pick the job up, so
-  // the owner always knows Carma got it and is on it. Once per inbound message
-  // (guarded by ack_for) so a transient retry never re-sends. No LLM spend. ──
-  if (state.ack_for !== job.message_id) {
-    const ackMsg = msg.msg_type === 'audio'
-      ? "🎧 He rebut la teva nota de veu! L'estic escoltant…"
-      : '📝 He rebut el teu missatge! M’hi poso…'
-    await sendWhatsApp(phone, ackMsg, pnid)
-    state.ack_for = job.message_id ?? undefined
-    await updateThread(admin, t.id, { agent_state: { ...state } })
-  }
+  // (Receipt ack — "he rebut" — is now sent instantly by the webhook the moment the
+  // message lands, so the owner is never left waiting on the 1-min worker cron. The
+  // worker still owns every later beat: "preparant…", the draft, clarifications.)
 
   // ── Input text: transcribe audio (T3) or use the text body ──
   let inboundText = (msg.text ?? '').trim()
@@ -216,6 +277,60 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
       turn_count: t.turn_count + 1,
       agent_state: { ...state, phase: 'await_brief', clarification_used: true },
     })
+    return finishJob(admin, job.id, 'done')
+  }
+
+  // ── Edit loop (founder directive 2026-06-30): the owner tapped "Editar" and this
+  // message is their change request. Revise the SAME post in place, re-issue the
+  // review token and re-send the Approve/Edit buttons — no site resolution needed
+  // (we already drafted for t.site_id). ──
+  if (state.phase === 'awaiting_edit' && t.current_post_id && t.site_id) {
+    const { name: siteName, locale } = await siteMeta(admin, t.site_id)
+    const { data: cur } = await admin
+      .from('posts').select('title, content, excerpt').eq('id', t.current_post_id).maybeSingle()
+    const curContent = cur?.content as { html?: unknown } | null
+    const currentHtml = curContent && typeof curContent === 'object' ? String(curContent.html ?? '') : ''
+
+    if (state.writing_for !== job.message_id) {
+      await sendWhatsApp(phone, '✏️ Estic aplicant els teus canvis… Un momentet.', pnid)
+      state.writing_for = job.message_id ?? undefined
+      await updateThread(admin, t.id, { agent_state: { ...state } })
+    }
+
+    const editResult = await runAgent({
+      brief: '',
+      articleLanguage: LOCALE_META[normalizeLocale(locale)].native,
+      siteName,
+      mustDraft: true,
+      editInstructions: inboundText,
+      currentDraft: { title: String(cur?.title ?? ''), contentHtml: currentHtml, excerpt: String(cur?.excerpt ?? '') },
+    })
+    const editCost = estimateCostCents(editResult.usage, usedAudio)
+    if (editResult.kind !== 'draft') {
+      await sendWhatsApp(phone, editResult.message, pnid)
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + editCost })
+      return finishJob(admin, job.id, 'done')
+    }
+    const ed = editResult.draft
+    await admin.from('posts').update({
+      title: ed.title,
+      content: { html: ed.contentHtml },
+      excerpt: ed.excerpt || null,
+      seo_title: ed.seoTitle || null,
+      seo_description: ed.seoDescription || null,
+      categories: ed.categories,
+      tags: ed.tags,
+      meta: { seo_title: ed.seoTitle, seo_description: ed.seoDescription, canonical: '', noindex: false, focus_keyword: ed.focusKeyword },
+    }).eq('id', t.current_post_id).eq('site_id', t.site_id)
+
+    const editRaw = await issueReviewToken(admin, t.current_post_id, t.site_id, t.id)
+    const sent = await sendDraftReady(phone, ed, reviewUrl(editRaw), pnid, true)
+    await updateThread(admin, t.id, {
+      turn_count: t.turn_count + 1,
+      cost_cents: t.cost_cents + editCost,
+      agent_state: { ...state, phase: 'awaiting_review' },
+    })
+    if (!sent) return finishJob(admin, job.id, 'done', { error: 'edit reply send failed (post updated)' })
     return finishJob(admin, job.id, 'done')
   }
 
@@ -298,16 +413,7 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   const d = result.draft
   const postId = await saveDraft(admin, siteId!, normalizeLocale(locale), d)
 
-  const { raw, hash } = mintReviewToken()
-  await admin.from(WA_TABLES.reviewTokens).insert({
-    token_hash: hash,
-    post_id: postId,
-    site_id: siteId,
-    thread_id: t.id,
-    action: 'publish',
-    status: 'active',
-    expires_at: reviewTokenExpiry(WA_REVIEW_TOKEN_TTL_HOURS).toISOString(),
-  })
+  const raw = await issueReviewToken(admin, postId, siteId!, t.id)
 
   // G3: capture the front of the outcome loop now (published_at fills on approve).
   await admin.from(WA_TABLES.outcomes).insert({
@@ -329,8 +435,8 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   // hash), so in dev — where Kapso delivery may not reach you — echo the link to the
   // server console. Never logs in production.
   if (process.env.NODE_ENV !== 'production') console.log(`[wa/dev] review link → ${link}`)
-  const reply = `Ja tens l'esborrany: «${d.title}» ✍️ ${d.strategy} Fes-hi un cop d'ull i publica'l aquí: ${link}`
-  const sent = await sendWhatsApp(phone, reply, pnid)
+  // Interactive Approve/Edit buttons (text+link fallback inside sendDraftReady).
+  const sent = await sendDraftReady(phone, d, link, pnid)
   // The draft + token already exist, so we must NOT retry here (that would mint a
   // duplicate draft on the next tick). But a failed delivery must never masquerade as
   // success: record it on the job so a silent send failure — e.g. a stale
@@ -385,4 +491,34 @@ export async function runDueJobs(limit = 5, budgetMs = 20_000): Promise<number> 
   }
 
   return processed
+}
+
+// ─── Retention purge (B1, GDPR + table bloat) ─────────────────────────────────
+/**
+ * Delete data past its retention window: WhatsApp messages (which carry the voice
+ * transcript + the raw provider payload) older than WA_MESSAGE_RETENTION_DAYS, and
+ * finished jobs older than WA_JOB_RETENTION_DAYS. Date-filtered + idempotent (safe
+ * to call repeatedly); the cron gates it to roughly hourly. The 60-day outcome loop
+ * is unaffected — it reads `wa_article_outcomes.transcript`, a snapshot copied at
+ * draft time, not `wa_messages`.
+ */
+export async function purgeExpiredWaData(): Promise<{ messages: number; jobs: number }> {
+  const admin = createAdminClient()
+  let messages = 0
+  let jobs = 0
+  try {
+    if (WA_MESSAGE_RETENTION_DAYS > 0) {
+      const cutoff = new Date(Date.now() - WA_MESSAGE_RETENTION_DAYS * 86_400_000).toISOString()
+      const { data } = await admin.from(WA_TABLES.messages).delete().lt('created_at', cutoff).select('id')
+      messages = data?.length ?? 0
+    }
+    if (WA_JOB_RETENTION_DAYS > 0) {
+      const cutoff = new Date(Date.now() - WA_JOB_RETENTION_DAYS * 86_400_000).toISOString()
+      const { data } = await admin.from(WA_TABLES.jobs).delete().in('status', ['done', 'error']).lt('updated_at', cutoff).select('id')
+      jobs = data?.length ?? 0
+    }
+  } catch (e) {
+    console.error('[wa/purge] failed:', e instanceof Error ? e.message : e)
+  }
+  return { messages, jobs }
 }

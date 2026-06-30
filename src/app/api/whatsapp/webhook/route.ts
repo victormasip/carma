@@ -17,12 +17,15 @@
 // Provider note: the agent/generation worker (T4) runs on OpenAI (WA_AGENT_MODEL),
 // not Anthropic. This route is LLM-agnostic — it touches no model.
 
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest, after } from 'next/server'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/ratelimit'
 import { WA_WINDOW_HOURS } from '@/lib/whatsapp/config'
-import type { WaMsgType } from '@/lib/whatsapp/types'
+import { sendWhatsApp } from '@/lib/whatsapp/kapso'
+import { publishThreadDraft } from '@/lib/whatsapp/publish'
+import { inboundMatchesCode } from '@/lib/whatsapp/verify'
+import { WA_BUTTON, type WaMsgType } from '@/lib/whatsapp/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -56,6 +59,25 @@ function toMsgType(kapsoType: string): WaMsgType {
   if (kapsoType === 'audio' || kapsoType === 'voice') return 'audio'
   if (kapsoType === 'image') return 'image'
   return 'text'
+}
+
+// Read an interactive postback (the owner tapped an Approve/Edit/… button). Covers
+// both Meta interactive replies (button_reply / list_reply) and template quick-reply
+// buttons (button.payload). Returns null for an ordinary text/audio/image message.
+function readButton(message: Record<string, unknown>): { id: string; title: string } | null {
+  const interactive = message.interactive as Record<string, unknown> | undefined
+  if (interactive && typeof interactive === 'object') {
+    const reply = (interactive.button_reply ?? interactive.list_reply) as Record<string, unknown> | undefined
+    if (reply && typeof reply.id === 'string' && reply.id.trim()) {
+      return { id: reply.id.trim(), title: typeof reply.title === 'string' ? reply.title : '' }
+    }
+  }
+  const button = message.button as Record<string, unknown> | undefined
+  if (button && typeof button === 'object') {
+    const id = String(button.payload ?? button.text ?? '').trim()
+    if (id) return { id, title: typeof button.text === 'string' ? button.text : id }
+  }
+  return null
 }
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -152,9 +174,41 @@ export async function POST(request: NextRequest) {
   //    (the bind-link onboarding reply is T7; the outbound send is wired in T4).
   const { data: identity } = await admin
     .from('wa_identities')
-    .select('id, user_id, status')
+    .select('id, user_id, status, verify_code, verify_expires_at')
     .eq('phone_e164', phone)
     .maybeSingle()
+
+  // 4a. Phone-binding verification (T7). A still-PENDING number that texts its
+  //     6-digit code activates here — that inbound is also the GDPR opt-in. No
+  //     thread, no LLM, no job: flip to active and confirm over WhatsApp.
+  if (identity && identity.status === 'pending') {
+    if (!rateLimit(`wa-verify:${phone}`, 6, 60_000).ok) return ok()
+    const bodyText =
+      typeof (message.text as Record<string, unknown> | undefined)?.body === 'string'
+        ? ((message.text as Record<string, unknown>).body as string)
+        : ''
+    const notExpired = identity.verify_expires_at
+      ? new Date(identity.verify_expires_at).getTime() > Date.now()
+      : false
+    const verified = notExpired && inboundMatchesCode(bodyText, identity.verify_code)
+    if (verified) {
+      const nowIso = new Date().toISOString()
+      await admin
+        .from('wa_identities')
+        .update({ status: 'active', verified_at: nowIso, opt_in_at: nowIso, verify_code: null, verify_expires_at: null })
+        .eq('id', identity.id)
+      if (DEV) console.log(`[wa/webhook] verified ${phone} → active`)
+    }
+    const reply = verified
+      ? '✅ Número verificat! Ja em pots enviar una nota de veu o un text amb la idea i et prepararé un esborrany.'
+      : 'Per connectar el teu número, envia\'m el codi de 6 xifres que veus a Carma › Configuració › Agent de WhatsApp.'
+    // Defer the outbound Kapso call to AFTER the 200 (A2): a slow provider can
+    // never push this webhook toward the serverless timeout. The activation above
+    // is already persisted, so the state is correct regardless of send latency.
+    after(async () => { await sendWhatsApp(phone, reply, phoneNumberId) })
+    return ok()
+  }
+
   if (!identity || identity.status !== 'active') {
     if (DEV) console.log(`[wa/webhook] dropped: no ACTIVE wa_identities row for ${phone} (status=${identity?.status ?? 'none'})`)
     return ok()
@@ -213,6 +267,64 @@ export async function POST(request: NextRequest) {
       return new NextResponse('error', { status: 500 }) // let Kapso retry; dedupe protects us
     }
     threadId = created.id as string
+  }
+
+  // ── Interactive postback (Approve / Edit / …) — founder directive 2026-06-30 ──
+  // The owner tapped a button on a draft-ready message. These are handled inline
+  // (no LLM, no generation job): Approve publishes instantly, Edit flips the thread
+  // into the edit loop, and the foundation buttons acknowledge. We still record the
+  // tap (dedupe on the WhatsApp message id) for the audit/outcome trail.
+  const button = readButton(message)
+  if (button) {
+    const { error: bErr } = await admin.from('wa_messages').insert({
+      thread_id: threadId, direction: 'in', wa_message_id: sid,
+      msg_type: 'text', text: button.title || button.id, raw: body,
+    })
+    if (bErr) {
+      if (bErr.code === '23505') return ok() // duplicate tap → already handled
+      console.error('[wa/webhook] button insert failed:', bErr.message)
+      return new NextResponse('error', { status: 500 })
+    }
+
+    const { data: th } = await admin
+      .from('wa_threads').select('agent_state').eq('id', threadId).maybeSingle()
+    const stateNow = (th?.agent_state as Record<string, unknown> | null) ?? {}
+
+    if (button.id === WA_BUTTON.approve) {
+      const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? undefined
+      const res = await publishThreadDraft(admin, threadId, host)
+      const reply = res.ok
+        ? (res.already ? `Aquest article ja és online 🎉\n${res.url}` : `Publicat! 🎉 Ja és online:\n${res.url}`)
+        : res.reason === 'expired'
+          ? 'Aquest esborrany ja ha caducat 😕 Envia’m el tema un altre cop i te’n preparo un de nou.'
+          : res.reason === 'no_draft'
+            ? 'No tinc cap esborrany pendent per publicar 🤔 Envia’m un tema i te’n preparo un.'
+            : 'Ups, no he pogut publicar-lo 😕 Torna-ho a provar d’aquí un moment.'
+      if (res.ok) {
+        await admin.from('wa_threads').update({ agent_state: { ...stateNow, phase: 'done' } }).eq('id', threadId)
+      }
+      after(async () => { await sendWhatsApp(phone, reply, phoneNumberId) })
+      return ok()
+    }
+
+    if (button.id === WA_BUTTON.edit) {
+      await admin.from('wa_threads')
+        .update({ agent_state: { ...stateNow, phase: 'awaiting_edit', writing_for: undefined } })
+        .eq('id', threadId)
+      after(async () => {
+        await sendWhatsApp(phone, 'Què vols canviar? ✏️ Escriu-me (o envia’m un àudio amb) els canvis — to, longitud, què afegir o treure — i el reescric.', phoneNumberId)
+      })
+      return ok()
+    }
+
+    // Foundation buttons (cover image / translation) — acknowledged for now.
+    const soon = button.id === WA_BUTTON.cover
+      ? '🖼️ Les portades generades amb IA arriben molt aviat! De moment, aprova l’article i pots afegir-hi una imatge des del Carma.'
+      : button.id === WA_BUTTON.translate
+        ? '🌍 Les traduccions automàtiques arriben molt aviat! De moment, aprova l’article i el podràs traduir des del Carma.'
+        : 'Rebut! 👍'
+    after(async () => { await sendWhatsApp(phone, soon, phoneNumberId) })
+    return ok()
   }
 
   // Message payload. Media (audio/image) is referenced now by its Meta media id; the
@@ -282,6 +394,16 @@ export async function POST(request: NextRequest) {
   }
 
   if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → wake the worker: GET /api/whatsapp/cron`)
+
+  // ── Instant acknowledgment (founder directive 2026-06-30): the moment we accept
+  // the message, tell the owner we're on it — don't wait for the worker, which the
+  // 1-min cron may pick up seconds-to-a-minute later. Sent AFTER the 200 via after()
+  // so a slow provider can't push this webhook toward the function timeout. The worker
+  // owns every later beat (preparant…, draft ready); this is purely the "rebut".
+  const ackMsg = msgType === 'audio'
+    ? '🎧 He rebut la teva nota de veu! Ara l’escolto i m’hi poso…'
+    : '📝 He rebut el teu missatge! M’hi poso ara mateix…'
+  after(async () => { await sendWhatsApp(phone, ackMsg, phoneNumberId) })
 
   // The worker is kicked by the 1-min Scheduled re-driver (T4); no synchronous
   // trigger here keeps the webhook fast and within the function timeout.

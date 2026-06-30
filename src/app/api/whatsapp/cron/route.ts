@@ -25,7 +25,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
-import { runDueJobs } from '@/lib/whatsapp/worker'
+import { runDueJobs, purgeExpiredWaData } from '@/lib/whatsapp/worker'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -62,7 +62,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const processed = await runDueJobs(limit)
-    return NextResponse.json({ ok: true, processed })
+    // Retention purge (B1) — gated to the top of the hour so an every-minute driver
+    // doesn't run deletes 60×/hour. Date-filtered, so it's a cheap no-op otherwise.
+    const purged = new Date().getUTCMinutes() === 0 ? await purgeExpiredWaData() : undefined
+    return NextResponse.json({ ok: true, processed, purged })
   } catch (e) {
     console.error('[wa/cron] run failed:', e instanceof Error ? e.message : e)
     return NextResponse.json({ ok: false }, { status: 500 })

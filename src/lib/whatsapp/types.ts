@@ -39,8 +39,20 @@ export type WaAgentPhase =
   | 'await_brief'       // waiting for the first usable note
   | 'resolving_site'    // owner has >1 candidate site → asked "which client?"
   | 'drafting'          // generateArticle in flight
-  | 'awaiting_review'   // draft sent, review link live
+  | 'awaiting_review'   // draft sent (with Approve/Edit buttons), review link live
+  | 'awaiting_edit'     // owner tapped "Editar" → waiting for the change instructions
   | 'done'              // published or closed
+
+// ─── Interactive button ids (postback payloads) ───────────────────────────────
+// The owner taps these in WhatsApp; the inbound webhook routes on the id. Kept here
+// so the send side (worker) and the receive side (webhook) never drift.
+export const WA_BUTTON = {
+  approve: 'wa_approve',
+  edit: 'wa_edit',
+  cover: 'wa_cover',     // foundations: offer a cover image (nano-banana)
+  translate: 'wa_translate', // foundations: offer translations
+} as const
+export type WaButtonId = (typeof WA_BUTTON)[keyof typeof WA_BUTTON]
 
 export interface WaAgentState {
   phase: WaAgentPhase

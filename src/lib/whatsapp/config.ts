@@ -45,6 +45,12 @@ export const WA_JOB_LEASE_MIN = intEnv('WA_JOB_LEASE_MIN', 5)
 // retries). Transcription/OpenAI timeouts retry until this; then we fail safely.
 export const WA_JOB_MAX_ATTEMPTS = intEnv('WA_JOB_MAX_ATTEMPTS', 3)
 
+// PII / data retention (GDPR + table bloat). The scheduled purge (cron) deletes
+// inbound messages (which carry the transcript + raw provider payload) older than
+// this, and finished jobs older than the job window. 0 disables a purge.
+export const WA_MESSAGE_RETENTION_DAYS = intEnv('WA_MESSAGE_RETENTION_DAYS', 30)
+export const WA_JOB_RETENTION_DAYS = intEnv('WA_JOB_RETENTION_DAYS', 7)
+
 // LLM for the agent loop + article generation in the worker (T4). Founder
 // directive 2026-06-26: the WhatsApp agent and its generation worker run on
 // OpenAI, NOT Anthropic. (The shipped src/lib/writing/generate.ts stays on Opus
@@ -53,6 +59,12 @@ export const WA_JOB_MAX_ATTEMPTS = intEnv('WA_JOB_MAX_ATTEMPTS', 3)
 // default; set WA_AGENT_MODEL to a gpt-5 id when available.
 export const WA_AGENT_MODEL = process.env.WA_AGENT_MODEL || 'gpt-4o'
 
+// Dev/testing escape hatch (founder directive 2026-06-30): when set, the agent
+// returns a deterministic, hardcoded draft INSTEAD of calling OpenAI, so the whole
+// WhatsApp flow — ack → buttons → approve/edit → publish — can be exercised end to
+// end without spending API credits. Never enable in production. Accepts 1/true/yes.
+export const WA_MOCK_AGENT = /^(1|true|yes)$/i.test((process.env.WA_MOCK_AGENT || '').trim())
+
 // WhatsApp PROVIDER (founder directive 2026-06-26): Twilio → Kapso. The agent's
 // WhatsApp channel runs through Kapso's Meta WhatsApp proxy. The inbound webhook is
 // signed with KAPSO_WEBHOOK_SECRET (HMAC-SHA256); outbound send + inbound media
@@ -60,3 +72,17 @@ export const WA_AGENT_MODEL = process.env.WA_AGENT_MODEL || 'gpt-4o'
 // default sender (the prepaid-SIM number) when a job has no per-message phone_number_id.
 export const KAPSO_API_BASE = (process.env.KAPSO_API_BASE || 'https://api.kapso.ai/meta/whatsapp').replace(/\/+$/, '')
 export const KAPSO_GRAPH_VERSION = process.env.KAPSO_GRAPH_VERSION || 'v24.0'
+
+// The public-facing agent number (the prepaid-SIM E.164) shown to owners in
+// Settings so they know which WhatsApp to text. Display-only; the actual routing
+// id is KAPSO_PHONE_NUMBER_ID. Falls back to empty → the Settings card shows a
+// "not configured yet" state instead of a broken link.
+export const WA_AGENT_NUMBER = (process.env.WA_AGENT_NUMBER || '').trim()
+
+/** Build a wa.me deep link to the agent, optionally pre-filling a message. */
+export function agentWaMeLink(prefill?: string): string | null {
+  const digits = WA_AGENT_NUMBER.replace(/[^\d]/g, '')
+  if (!digits) return null
+  const base = `https://wa.me/${digits}`
+  return prefill ? `${base}?text=${encodeURIComponent(prefill)}` : base
+}
