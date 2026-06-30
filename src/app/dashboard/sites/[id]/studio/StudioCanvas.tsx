@@ -7,9 +7,11 @@
 // edit layer is injected into the render's OPEN shadow root and fully guarded.
 
 import { useEffect, useRef, useState } from 'react'
+import { PenLine } from 'lucide-react'
 import KnotLoader from '@/components/ui/KnotLoader'
 import { tokensToParams } from '@/lib/render/embedParams'
 import { useThemeStudio } from '../ThemeStudioContext'
+import StudioBodyEditor from './StudioBodyEditor'
 import { regionForElement, highlightTargetFor, type RegionId } from './regions'
 import { cn } from '@/lib/cn'
 
@@ -23,6 +25,8 @@ const EDIT_CSS = `
 .cstudio-editable{cursor:text!important;border-radius:5px;transition:box-shadow .15s ease}
 .cstudio-editable:hover{box-shadow:0 0 0 2px rgba(245,188,0,.28)!important}
 .cstudio-editable:focus{outline:2px solid #f5bc00!important;outline-offset:4px!important}
+.cstudio-bodyedit{cursor:pointer!important;border-radius:8px;transition:outline-color .15s ease}
+.cstudio-bodyedit:hover{outline:2px dashed rgba(245,188,0,.55)!important;outline-offset:8px!important}
 `
 
 export default function StudioCanvas({ region, onRegion, device }: {
@@ -32,6 +36,8 @@ export default function StudioCanvas({ region, onRegion, device }: {
 }) {
   const { siteId, tokens, savedAt, setSectionTitle, view, editableArticle, saveArticleField } = useThemeStudio()
   const [loading, setLoading] = useState(true)
+  // Body editing swaps the preview for the TipTap canvas (StudioBodyEditor).
+  const [editingBody, setEditingBody] = useState(false)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const rootRef = useRef<ParentNode | null>(null)
 
@@ -40,6 +46,10 @@ export default function StudioCanvas({ region, onRegion, device }: {
   const setTitleRef = useRef(setSectionTitle); setTitleRef.current = setSectionTitle
   const regionRef = useRef(region); regionRef.current = region
   const saveArticleRef = useRef(saveArticleField); saveArticleRef.current = saveArticleField
+  const onEditBodyRef = useRef(() => setEditingBody(true)); onEditBodyRef.current = () => setEditingBody(true)
+  // Whether a real article is loaded (so body click-to-edit is active in the iframe).
+  const canEditBody = view === 'article' && !!editableArticle
+  const canEditBodyRef = useRef(canEditBody); canEditBodyRef.current = canEditBody
 
   // Debounce token→params so dragging a picker doesn't thrash the frame.
   const liveParams = tokensToParams(tokens)
@@ -52,6 +62,8 @@ export default function StudioCanvas({ region, onRegion, device }: {
   // Show the loader while the frame swaps between Feed and Article (or to the real
   // article once it resolves).
   useEffect(() => { setLoading(true) }, [view, editableArticle?.slug])
+  // Leaving the Article view closes the body editor.
+  useEffect(() => { if (view !== 'article') setEditingBody(false) }, [view])
 
   // Feed → /render/<id> ; Article → /render/<id>/<slug> (the real published post, or
   // a sample under ?preview when the site has none yet). Same edit layer either way.
@@ -95,6 +107,12 @@ export default function StudioCanvas({ region, onRegion, device }: {
       root.addEventListener('click', (e) => {
         const el = e.target as Element | null
         if (!el || typeof el.closest !== 'function') return
+        // Article view + real post: clicking the body enters the TipTap editor
+        // (seamless reading → editing) instead of selecting a theme region.
+        if (canEditBodyRef.current && el.closest('.carma-article-content')) {
+          onEditBodyRef.current()
+          return
+        }
         const r = regionForElement(el)
         clearHover()
         onRegionRef.current(r)
@@ -135,6 +153,9 @@ export default function StudioCanvas({ region, onRegion, device }: {
         }
         bindField('.carma-article-title', 'title')
         bindField('.carma-article-lede', 'excerpt')
+        // Body → click-to-edit hint (the click handler opens the TipTap editor).
+        const contentEl = root.querySelector('.carma-article-content') as HTMLElement | null
+        if (contentEl) contentEl.classList.add('cstudio-bodyedit')
       }
 
       applySelected(root, regionRef.current)
@@ -163,6 +184,24 @@ export default function StudioCanvas({ region, onRegion, device }: {
         sandbox="allow-scripts allow-same-origin allow-popups"
         className={cn('bg-white', frameClass)}
       />
+
+      {/* Article view + real post: a clear entry to the body editor (the body is also
+          click-to-edit). Hidden while editing. */}
+      {canEditBody && !editingBody && (
+        <button
+          type="button"
+          onClick={() => setEditingBody(true)}
+          className="btn-gold gold-trace [--gold-trace-w:1.5px] absolute bottom-4 left-1/2 z-20 flex h-10 -translate-x-1/2 items-center gap-2 rounded-full px-4 text-sm font-extrabold shadow-premium"
+          title="Editar el contingut de l’article amb l’editor enriquit"
+        >
+          <span className="relative z-[1] inline-flex items-center gap-2">
+            <PenLine className="h-4 w-4" /> Edita el contingut
+          </span>
+        </button>
+      )}
+
+      {/* The TipTap body editor — overlays the canvas; saving reloads the preview. */}
+      {editingBody && <StudioBodyEditor device={device} onClose={() => setEditingBody(false)} />}
     </div>
   )
 }

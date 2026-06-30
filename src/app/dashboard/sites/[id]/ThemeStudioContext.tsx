@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
-import { getStudioArticle, updatePostFields } from '@/lib/actions/posts'
+import { getStudioArticle, getPostContent, updatePostFields } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
@@ -140,6 +140,10 @@ type ThemeStudio = {
   // Persist an inline edit of the previewed article's headline or lede. No-op when
   // there's no real article (sample preview). Bumps savedAt so the canvas refreshes.
   saveArticleField: (field: 'title' | 'excerpt', value: string) => Promise<void>
+  // Body editing (TipTap): load the article's content HTML on entering edit mode,
+  // and persist the serialized+sanitized HTML on save (bumps savedAt → preview reload).
+  loadArticleBody: () => Promise<string>
+  saveArticleBody: (html: string) => Promise<boolean>
   // tokens
   tokens: DesignTokens
   setToken: <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => void
@@ -238,6 +242,20 @@ export function ThemeStudioProvider({
       if (field === 'title') setEditableArticle((a) => (a ? { ...a, title: value } : a))
       setSavedAt(Date.now()) // refresh the canvas to show the persisted state
     }
+  }, [editableArticle, siteId])
+  const loadArticleBody = useCallback(async (): Promise<string> => {
+    const art = editableArticle
+    if (!art) return ''
+    const res = await getPostContent(art.id, siteId)
+    return res?.html ?? ''
+  }, [editableArticle, siteId])
+  const saveArticleBody = useCallback(async (html: string): Promise<boolean> => {
+    const art = editableArticle
+    if (!art) return false
+    const res = await updatePostFields(art.id, siteId, { content: html })
+    if (res.error) return false
+    setSavedAt(Date.now())
+    return true
   }, [editableArticle, siteId])
 
   // ── Freemium regeneration quota ──
@@ -719,7 +737,7 @@ export function ThemeStudioProvider({
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,
     capture, closeCapture, cancelCapture, proceedFromCapture,
-    view, setView, editableArticle, saveArticleField,
+    view, setView, editableArticle, saveArticleField, loadArticleBody, saveArticleBody,
     tokens, setToken,
     sectionTitle: sectionForLocale, setSectionTitle: setSectionForLocale,
     extractedHeader: headerForLocale, setExtractedHeader: setHeaderForLocale,

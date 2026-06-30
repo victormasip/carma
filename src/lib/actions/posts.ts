@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale } from '@/lib/i18n/config'
 import { translateFieldsWithClaude, type TranslatableFields } from '@/lib/i18n/translate'
 import { analyzeWriting, type WritingAnalysis } from '@/lib/writing/coach'
-import { harvestSiteBrief, generateArticle, type GeneratedArticle } from '@/lib/writing/generate'
+import { harvestSiteBrief, generateArticle, sanitizeHtml, type GeneratedArticle } from '@/lib/writing/generate'
 
 type ActionResult = { error?: string }
 type CreateResult = ActionResult & { id?: string }
@@ -366,7 +366,7 @@ export async function updatePost(
 export async function updatePostFields(
   postId: string,
   siteId: string,
-  fields: { title?: string; slug?: string; featured_image?: string | null; created_at?: string; excerpt?: string | null },
+  fields: { title?: string; slug?: string; featured_image?: string | null; created_at?: string; excerpt?: string | null; content?: string },
 ): Promise<ActionResult & { slug?: string; created_at?: string }> {
   try {
     const admin = await assertSiteAccess(siteId)
@@ -383,6 +383,14 @@ export async function updatePostFields(
     if (fields.excerpt !== undefined) {
       const e = (fields.excerpt ?? '').trim()
       patch.excerpt = e || null
+    }
+
+    // Body — the Carma Studio TipTap inline editor serializes the ProseMirror doc to
+    // HTML; we sanitize it server-side (same allow-list as the full editor) before
+    // storing the canonical { html } content shape. ProseMirror guarantees the HTML
+    // is well-formed, so this is a clean, lossless round-trip (no contenteditable cruft).
+    if (fields.content !== undefined) {
+      patch.content = { html: sanitizeHtml(fields.content) }
     }
 
     let finalDate: string | undefined
@@ -449,6 +457,19 @@ export async function getStudioArticle(
       .limit(1)
       .maybeSingle()
     return data ? { id: data.id as string, slug: data.slug as string, title: (data.title as string) ?? '' } : null
+  } catch {
+    return null
+  }
+}
+
+/** The article body HTML, loaded on demand when the Studio enters TipTap edit mode. */
+export async function getPostContent(postId: string, siteId: string): Promise<{ html: string } | null> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+    const { data } = await admin.from('posts').select('content').eq('id', postId).eq('site_id', siteId).maybeSingle()
+    if (!data) return null
+    const c = data.content as { html?: unknown } | null
+    return { html: c && typeof c === 'object' && typeof c.html === 'string' ? c.html : '' }
   } catch {
     return null
   }
