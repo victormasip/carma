@@ -189,6 +189,24 @@ async function sendDraftReady(
   return ok || sendWhatsApp(phone, body, pnid)
 }
 
+// Free-flow step (founder directive 2026-06-30): after the draft, proactively offer
+// to generate a cover image. A dedicated Yes/No interactive message — the owner taps
+// "Sí" and the webhook runs generateNanoBananaCover. Best-effort (never blocks/fails
+// the job); falls back to a plain prompt if interactive is unavailable.
+async function sendCoverOffer(phone: string, pnid?: string): Promise<void> {
+  const body = '🖼️ Vols que generi una imatge de portada per a aquest article?'
+  const ok = await sendWhatsAppButtons(
+    phone,
+    body,
+    [
+      { id: WA_BUTTON.coverYes, title: '✨ Sí, fes-la' },
+      { id: WA_BUTTON.coverNo, title: 'No cal' },
+    ],
+    pnid,
+  )
+  if (!ok) await sendWhatsApp(phone, `${body} Respon "sí" o "no".`, pnid)
+}
+
 // ─── One job ──────────────────────────────────────────────────────────────────
 async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   // Permanent guards: a missing message/thread can never succeed → 'error', no retry.
@@ -427,7 +445,7 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     current_post_id: postId,
     turn_count: t.turn_count + 1,
     cost_cents: t.cost_cents + cost,
-    agent_state: { ...state, phase: 'awaiting_review', pending_brief: undefined },
+    agent_state: { ...state, phase: 'awaiting_review', pending_brief: undefined, cover_offered_for: postId },
   })
 
   const link = reviewUrl(raw)
@@ -446,6 +464,8 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     console.error(`[wa/worker] job ${job.id}: draft ${postId} saved but the WhatsApp reply FAILED to send — check KAPSO_PHONE_NUMBER_ID / 24h window. Review link: ${link}`)
     return finishJob(admin, job.id, 'done', { error: 'reply send failed (draft saved)' })
   }
+  // Free-flow multi-step: proactively offer a cover image (separate Yes/No message).
+  await sendCoverOffer(phone, pnid)
   return finishJob(admin, job.id, 'done')
 }
 

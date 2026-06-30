@@ -50,6 +50,8 @@ export const WA_BUTTON = {
   approve: 'wa_approve',
   edit: 'wa_edit',
   cover: 'wa_cover',     // foundations: offer a cover image (nano-banana)
+  coverYes: 'wa_cover_yes', // free-flow: "Sí, genera la portada"
+  coverNo: 'wa_cover_no',   // free-flow: "No cal portada"
   translate: 'wa_translate', // foundations: offer translations
 } as const
 export type WaButtonId = (typeof WA_BUTTON)[keyof typeof WA_BUTTON]
@@ -72,6 +74,9 @@ export interface WaAgentState {
   // job never double-sends those status updates.
   ack_for?: string
   writing_for?: string
+  // Free-flow cover step: the post id we've already offered a cover image for, so
+  // the "Vols una portada?" Yes/No prompt is sent at most once per draft.
+  cover_offered_for?: string
 }
 
 // ─── Row types ────────────────────────────────────────────────────────────────

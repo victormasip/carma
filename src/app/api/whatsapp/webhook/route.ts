@@ -24,6 +24,7 @@ import { rateLimit } from '@/lib/ratelimit'
 import { WA_WINDOW_HOURS } from '@/lib/whatsapp/config'
 import { sendWhatsApp } from '@/lib/whatsapp/kapso'
 import { publishThreadDraft } from '@/lib/whatsapp/publish'
+import { generateNanoBananaCover } from '@/lib/whatsapp/coverImage'
 import { inboundMatchesCode } from '@/lib/whatsapp/verify'
 import { WA_BUTTON, type WaMsgType } from '@/lib/whatsapp/types'
 
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Verify the signature. Fail closed (no retry storm on a missing secret).
+  //    This is the ONLY synchronous DB-free step before the 200 — it's microseconds.
   if (!verifyKapso(rawBody, sigHeader)) {
     if (DEV) {
       const secret = process.env.KAPSO_WEBHOOK_SECRET
@@ -139,7 +141,8 @@ export async function POST(request: NextRequest) {
     return new NextResponse('forbidden', { status: 403 })
   }
 
-  // 3. Parse + event-gate. Only inbound messages enqueue work; ack everything else.
+  // 3. Parse + event-gate. Only inbound messages do work; ack everything else. All of
+  //    this is pure (no I/O), so it stays before the 200.
   let body: Record<string, unknown>
   try {
     body = JSON.parse(rawBody) as Record<string, unknown>
@@ -167,11 +170,48 @@ export async function POST(request: NextRequest) {
   const kapsoType = String(message.type ?? 'text')
   const msgType = toMsgType(kapsoType)
   const phoneNumberId = String(data.phone_number_id ?? '') || null
+  // Header values must be captured NOW (request isn't safe to read inside after()).
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? undefined
 
+  // ── CRITICAL (founder directive 2026-06-30): WhatsApp/Meta drops the connection
+  // and marks the webhook unhealthy if it doesn't get an HTTP 200 within ~3 seconds.
+  // Interactive button taps were "doing nothing" because the handler did up to ~8
+  // sequential DB round-trips (identity → thread → insert → publish → …) before
+  // responding — slow over a local tunnel. So we ACK 200 IMMEDIATELY and run the
+  // ENTIRE pipeline (identity gate, verification, button postbacks, publish, enqueue,
+  // every outbound send) in the background via after(), which the platform keeps
+  // alive after the response is flushed (Netlify/Vercel waitUntil). Provider, tunnel
+  // and DB latency can never time out the webhook again. ──
+  after(async () => {
+    try {
+      await processInbound({ body, message, sid, phone, msgType, kapsoType, phoneNumberId, host })
+    } catch (e) {
+      console.error('[wa/webhook] background processing failed:', e instanceof Error ? e.message : e)
+    }
+  })
+  return ok()
+}
+
+// ─── Background pipeline (runs AFTER the 200 is flushed) ───────────────────────
+// Everything below was previously inline in POST; moving it here is the structural
+// fix for the 3s timeout. Each early exit is a plain `return` (the 200 already went
+// out). Idempotency (UNIQUE wa_message_id) still guards the rare provider duplicate.
+type Inbound = {
+  body: Record<string, unknown>
+  message: Record<string, unknown>
+  sid: string
+  phone: string
+  msgType: WaMsgType
+  kapsoType: string
+  phoneNumberId: string | null
+  host?: string
+}
+
+async function processInbound(i: Inbound): Promise<void> {
+  const { body, message, sid, phone, msgType, kapsoType, phoneNumberId, host } = i
   const admin = createAdminClient()
 
-  // 4. Identity gate — map phone → ACTIVE owner. No active binding ⇒ zero LLM work
-  //    (the bind-link onboarding reply is T7; the outbound send is wired in T4).
+  // 4. Identity gate — map phone → ACTIVE owner. No active binding ⇒ zero LLM work.
   const { data: identity } = await admin
     .from('wa_identities')
     .select('id, user_id, status, verify_code, verify_expires_at')
@@ -179,10 +219,9 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   // 4a. Phone-binding verification (T7). A still-PENDING number that texts its
-  //     6-digit code activates here — that inbound is also the GDPR opt-in. No
-  //     thread, no LLM, no job: flip to active and confirm over WhatsApp.
+  //     6-digit code activates here — that inbound is also the GDPR opt-in.
   if (identity && identity.status === 'pending') {
-    if (!rateLimit(`wa-verify:${phone}`, 6, 60_000).ok) return ok()
+    if (!rateLimit(`wa-verify:${phone}`, 6, 60_000).ok) return
     const bodyText =
       typeof (message.text as Record<string, unknown> | undefined)?.body === 'string'
         ? ((message.text as Record<string, unknown>).body as string)
@@ -202,21 +241,17 @@ export async function POST(request: NextRequest) {
     const reply = verified
       ? '✅ Número verificat! Ja em pots enviar una nota de veu o un text amb la idea i et prepararé un esborrany.'
       : 'Per connectar el teu número, envia\'m el codi de 6 xifres que veus a Carma › Configuració › Agent de WhatsApp.'
-    // Defer the outbound Kapso call to AFTER the 200 (A2): a slow provider can
-    // never push this webhook toward the serverless timeout. The activation above
-    // is already persisted, so the state is correct regardless of send latency.
-    after(async () => { await sendWhatsApp(phone, reply, phoneNumberId) })
-    return ok()
+    await sendWhatsApp(phone, reply, phoneNumberId)
+    return
   }
 
   if (!identity || identity.status !== 'active') {
     if (DEV) console.log(`[wa/webhook] dropped: no ACTIVE wa_identities row for ${phone} (status=${identity?.status ?? 'none'})`)
-    return ok()
+    return
   }
 
-  // Cheap per-phone ceiling on enqueues (defense; the DB cost-gate in the worker is
-  // the real spend guard). Over the limit ⇒ ack and drop, never 429 (no retries).
-  if (!rateLimit(`wa:${phone}`, 30, 60_000).ok) return ok()
+  // Cheap per-phone ceiling (defense; the DB cost-gate in the worker is the real spend guard).
+  if (!rateLimit(`wa:${phone}`, 30, 60_000).ok) return
 
   // Candidate sites for the worker's G2 resolver: the per-phone allow-list if set,
   // else every site the owner is a member of. 1 ⇒ auto-route; >1 ⇒ agent asks.
@@ -235,8 +270,7 @@ export async function POST(request: NextRequest) {
     candidateSiteIds = (memberships ?? []).map((r) => r.site_id as string)
   }
 
-  // 5. Resolve the active thread (cycle one: one active thread per identity) and
-  //    refresh the 24h window.
+  // 5. Resolve the active thread (one active thread per identity) + refresh the window.
   const nowIso = new Date().toISOString()
   const windowExpIso = new Date(Date.now() + WA_WINDOW_HOURS * 3600_000).toISOString()
 
@@ -264,16 +298,12 @@ export async function POST(request: NextRequest) {
       .single()
     if (tErr || !created) {
       console.error('[wa/webhook] thread create failed:', tErr?.message)
-      return new NextResponse('error', { status: 500 }) // let Kapso retry; dedupe protects us
+      return
     }
     threadId = created.id as string
   }
 
-  // ── Interactive postback (Approve / Edit / …) — founder directive 2026-06-30 ──
-  // The owner tapped a button on a draft-ready message. These are handled inline
-  // (no LLM, no generation job): Approve publishes instantly, Edit flips the thread
-  // into the edit loop, and the foundation buttons acknowledge. We still record the
-  // tap (dedupe on the WhatsApp message id) for the audit/outcome trail.
+  // ── Interactive postback (Approve / Edit / Cover …) ──
   const button = readButton(message)
   if (button) {
     const { error: bErr } = await admin.from('wa_messages').insert({
@@ -281,55 +311,15 @@ export async function POST(request: NextRequest) {
       msg_type: 'text', text: button.title || button.id, raw: body,
     })
     if (bErr) {
-      if (bErr.code === '23505') return ok() // duplicate tap → already handled
-      console.error('[wa/webhook] button insert failed:', bErr.message)
-      return new NextResponse('error', { status: 500 })
+      if (bErr.code !== '23505') console.error('[wa/webhook] button insert failed:', bErr.message)
+      return // duplicate tap (23505) or insert error → already handled / nothing to do
     }
-
-    const { data: th } = await admin
-      .from('wa_threads').select('agent_state').eq('id', threadId).maybeSingle()
-    const stateNow = (th?.agent_state as Record<string, unknown> | null) ?? {}
-
-    if (button.id === WA_BUTTON.approve) {
-      const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? undefined
-      const res = await publishThreadDraft(admin, threadId, host)
-      const reply = res.ok
-        ? (res.already ? `Aquest article ja és online 🎉\n${res.url}` : `Publicat! 🎉 Ja és online:\n${res.url}`)
-        : res.reason === 'expired'
-          ? 'Aquest esborrany ja ha caducat 😕 Envia’m el tema un altre cop i te’n preparo un de nou.'
-          : res.reason === 'no_draft'
-            ? 'No tinc cap esborrany pendent per publicar 🤔 Envia’m un tema i te’n preparo un.'
-            : 'Ups, no he pogut publicar-lo 😕 Torna-ho a provar d’aquí un moment.'
-      if (res.ok) {
-        await admin.from('wa_threads').update({ agent_state: { ...stateNow, phase: 'done' } }).eq('id', threadId)
-      }
-      after(async () => { await sendWhatsApp(phone, reply, phoneNumberId) })
-      return ok()
-    }
-
-    if (button.id === WA_BUTTON.edit) {
-      await admin.from('wa_threads')
-        .update({ agent_state: { ...stateNow, phase: 'awaiting_edit', writing_for: undefined } })
-        .eq('id', threadId)
-      after(async () => {
-        await sendWhatsApp(phone, 'Què vols canviar? ✏️ Escriu-me (o envia’m un àudio amb) els canvis — to, longitud, què afegir o treure — i el reescric.', phoneNumberId)
-      })
-      return ok()
-    }
-
-    // Foundation buttons (cover image / translation) — acknowledged for now.
-    const soon = button.id === WA_BUTTON.cover
-      ? '🖼️ Les portades generades amb IA arriben molt aviat! De moment, aprova l’article i pots afegir-hi una imatge des del Carma.'
-      : button.id === WA_BUTTON.translate
-        ? '🌍 Les traduccions automàtiques arriben molt aviat! De moment, aprova l’article i el podràs traduir des del Carma.'
-        : 'Rebut! 👍'
-    after(async () => { await sendWhatsApp(phone, soon, phoneNumberId) })
-    return ok()
+    await handleButton(admin, { button, threadId, phone, phoneNumberId, host })
+    return
   }
 
-  // Message payload. Media (audio/image) is referenced now by its Meta media id; the
-  // worker downloads it via Kapso (safeFetchBinary, T3). Store the full Kapso payload
-  // in `raw` for debugging/observability.
+  // Message payload. Media (audio/image) referenced by its Meta media id; the worker
+  // downloads it via Kapso. Store the full Kapso payload in `raw` for observability.
   const mediaNode = (message[kapsoType] as Record<string, unknown> | undefined) ?? undefined
   const mediaId = mediaNode && typeof mediaNode.id === 'string' ? (mediaNode.id as string) : null
   const kapso = message.kapso as Record<string, unknown> | undefined
@@ -348,64 +338,101 @@ export async function POST(request: NextRequest) {
     phone_number_id: phoneNumberId,
   }
 
-  // 3 (cont.) Idempotent insert: UNIQUE(wa_message_id) is the dedupe guard.
+  // Idempotent insert: UNIQUE(wa_message_id) is the dedupe guard.
   const { data: msgRow, error: mErr } = await admin
     .from('wa_messages')
-    .insert({
-      thread_id: threadId,
-      direction: 'in',
-      wa_message_id: sid,
-      msg_type: msgType,
-      text,
-      raw: body,
-    })
+    .insert({ thread_id: threadId, direction: 'in', wa_message_id: sid, msg_type: msgType, text, raw: body })
     .select('id')
     .single()
 
   if (mErr) {
     if (mErr.code === '23505') {
-      // Duplicate redelivery. Recover from a prior partial failure (message landed
-      // but the job did not) by ensuring exactly one job exists, then ack.
+      // Duplicate redelivery — ensure exactly one job exists, then stop.
       const { data: existing } = await admin
-        .from('wa_messages')
-        .select('id')
-        .eq('wa_message_id', sid)
-        .maybeSingle()
+        .from('wa_messages').select('id').eq('wa_message_id', sid).maybeSingle()
       if (existing) {
         const { data: job } = await admin
-          .from('generation_jobs')
-          .select('id')
-          .eq('message_id', existing.id)
-          .maybeSingle()
+          .from('generation_jobs').select('id').eq('message_id', existing.id).maybeSingle()
         if (!job) await enqueueAgentTurn(admin, threadId, existing.id as string, jobPayload)
       }
-      return ok()
+      return
     }
     console.error('[wa/webhook] message insert failed:', mErr.message)
-    return new NextResponse('error', { status: 500 })
+    return
   }
 
-  // Enqueue the agent turn. On failure return 500 so Kapso retries; the retry hits
-  // the 23505 path above, which enqueues the (still missing) job.
   const { error: jErr } = await enqueueAgentTurn(admin, threadId, msgRow.id as string, jobPayload)
   if (jErr) {
     console.error('[wa/webhook] job enqueue failed:', jErr.message)
-    return new NextResponse('error', { status: 500 })
+    return
   }
+  if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → worker via /api/whatsapp/cron`)
 
-  if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → wake the worker: GET /api/whatsapp/cron`)
-
-  // ── Instant acknowledgment (founder directive 2026-06-30): the moment we accept
-  // the message, tell the owner we're on it — don't wait for the worker, which the
-  // 1-min cron may pick up seconds-to-a-minute later. Sent AFTER the 200 via after()
-  // so a slow provider can't push this webhook toward the function timeout. The worker
-  // owns every later beat (preparant…, draft ready); this is purely the "rebut".
+  // Instant "rebut" ack — the worker owns every later beat (preparant…, draft ready).
   const ackMsg = msgType === 'audio'
     ? '🎧 He rebut la teva nota de veu! Ara l’escolto i m’hi poso…'
     : '📝 He rebut el teu missatge! M’hi poso ara mateix…'
-  after(async () => { await sendWhatsApp(phone, ackMsg, phoneNumberId) })
+  await sendWhatsApp(phone, ackMsg, phoneNumberId)
+}
 
-  // The worker is kicked by the 1-min Scheduled re-driver (T4); no synchronous
-  // trigger here keeps the webhook fast and within the function timeout.
-  return ok()
+// ─── Interactive button postbacks (Approve / Edit / Cover) ────────────────────
+async function handleButton(
+  admin: Admin,
+  ctx: { button: { id: string; title: string }; threadId: string; phone: string; phoneNumberId: string | null; host?: string },
+): Promise<void> {
+  const { button, threadId, phone, phoneNumberId, host } = ctx
+  const { data: th } = await admin
+    .from('wa_threads').select('agent_state, current_post_id, site_id').eq('id', threadId).maybeSingle()
+  const stateNow = (th?.agent_state as Record<string, unknown> | null) ?? {}
+
+  if (button.id === WA_BUTTON.approve) {
+    const res = await publishThreadDraft(admin, threadId, host)
+    const reply = res.ok
+      ? (res.already ? `Aquest article ja és online 🎉\n${res.url}` : `Publicat! 🎉 Ja és online:\n${res.url}`)
+      : res.reason === 'expired'
+        ? 'Aquest esborrany ja ha caducat 😕 Envia’m el tema un altre cop i te’n preparo un de nou.'
+        : res.reason === 'no_draft'
+          ? 'No tinc cap esborrany pendent per publicar 🤔 Envia’m un tema i te’n preparo un.'
+          : 'Ups, no he pogut publicar-lo 😕 Torna-ho a provar d’aquí un moment.'
+    if (res.ok) await admin.from('wa_threads').update({ agent_state: { ...stateNow, phase: 'done' } }).eq('id', threadId)
+    await sendWhatsApp(phone, reply, phoneNumberId)
+    return
+  }
+
+  if (button.id === WA_BUTTON.edit) {
+    await admin.from('wa_threads')
+      .update({ agent_state: { ...stateNow, phase: 'awaiting_edit', writing_for: undefined } })
+      .eq('id', threadId)
+    await sendWhatsApp(phone, 'Què vols canviar? ✏️ Escriu-me (o envia’m un àudio amb) els canvis — to, longitud, què afegir o treure — i el reescric.', phoneNumberId)
+    return
+  }
+
+  // Free-flow cover image (founder directive 2026-06-30): "Vols una portada?" Yes/No.
+  if (button.id === WA_BUTTON.coverYes) {
+    const postId = (th?.current_post_id as string | null) ?? null
+    if (!postId) {
+      await sendWhatsApp(phone, 'No tinc cap article actiu per a la portada 🤔 Envia’m un tema i te’n preparo un.', phoneNumberId)
+      return
+    }
+    await sendWhatsApp(phone, '✨ Perfecte! Estic preparant la portada…', phoneNumberId)
+    const res = await generateNanoBananaCover(admin, postId, { siteId: (th?.site_id as string | null) ?? null })
+    const reply = res.ok
+      ? (res.mocked
+          ? '🖼️ Portada encarregada! (mode de proves — quan activem el generador d’imatges apareixerà a l’article). Pots publicar quan vulguis.'
+          : `🖼️ Ja tens la portada a l’article! Fes-hi un cop d’ull i publica quan vulguis.`)
+      : 'Ara mateix no he pogut preparar la portada 😕 La pots afegir des del Carma.'
+    await sendWhatsApp(phone, reply, phoneNumberId)
+    return
+  }
+  if (button.id === WA_BUTTON.coverNo) {
+    await sendWhatsApp(phone, 'Cap problema! 👍 La pots afegir més tard des del Carma.', phoneNumberId)
+    return
+  }
+
+  if (button.id === WA_BUTTON.translate) {
+    await sendWhatsApp(phone, '🌍 Les traduccions automàtiques arriben molt aviat! De moment, aprova l’article i el podràs traduir des del Carma.', phoneNumberId)
+    return
+  }
+
+  await sendWhatsApp(phone, 'Rebut! 👍', phoneNumberId)
 }
