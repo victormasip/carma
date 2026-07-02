@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import LandingPage from '@/components/marketing/LandingPage'
 
 export const metadata: Metadata = {
-  title: 'Carma — El blog que estima la teva marca',
+  title: 'Carma — El blog que s’escriu per WhatsApp',
   description:
-    'Enganxa una URL. Carma clona la identitat visual del teu lloc web i et lliura un blog amb editor d’estil Notion en 30 segons. Sense codi.',
+    'Envia una nota de veu per WhatsApp i publica un article SEO al teu blog. Carma clona la identitat de la teva web, hi posa un agent a dins i tu només aproves. Sense codi.',
 }
 
 export default function Home() {

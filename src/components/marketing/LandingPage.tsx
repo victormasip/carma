@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Wand2, PenLine, Languages, Plug, Palette, BarChart3, ArrowRight, Check,
-  Sparkles, Menu, X, Globe, Boxes,
+  Wand2, PenLine, Languages, BarChart3, ArrowRight, Check,
+  Sparkles, Menu, X, Globe, Boxes, MessageCircle, Mic,
 } from 'lucide-react'
 import Wordmark from '@/components/ui/Wordmark'
 import UrlInput from './UrlInput'
+import AgentPhoneMock from './AgentPhoneMock'
 import { WaitlistHero } from '@/components/ui/waitlist-hero'
 import { normalizeUrl } from '@/lib/onboarding/url'
 
@@ -45,9 +46,10 @@ export default function LandingPage() {
     <>
       <Nav />
       <main className="overflow-x-clip">
-        <Hero onGenerate={onGenerate} />
+        <Hero />
         <HowItWorks />
         <FeatureBento />
+        <CloneSection onGenerate={onGenerate} />
         <Pricing />
         <WaitlistHero variant="section" />
       </main>
@@ -109,43 +111,51 @@ function Nav() {
 }
 
 /* ───────────────────────────── Hero ───────────────────────────── */
-function Hero({ onGenerate }: { onGenerate: (u: string) => void }) {
+// Agent-first: the story is "your blog writes itself over WhatsApp". The clone
+// magic keeps its own stage further down (#clona) — this fold sells the agent.
+function Hero() {
   return (
-    <section className="relative px-4 pb-12 pt-32 sm:pb-16 sm:pt-40">
+    <section className="relative px-4 pb-16 pt-32 sm:pt-36 lg:pb-24">
       <div className="halo halo-drift-a -top-[10%] left-[8%] h-[420px] w-[420px] bg-accent opacity-[0.12]" />
       <div className="halo halo-drift-b top-[15%] right-[5%] h-[360px] w-[360px] bg-carma-300 opacity-[0.10]" />
 
-      <div className="relative mx-auto max-w-4xl text-center">
-        <h1 className="mx-auto max-w-3xl text-balance text-4xl font-extrabold leading-[1.05] tracking-tight text-text sm:text-6xl">
-          <span className="hero-word inline-block" style={{ animationDelay: '0ms' }}>Enganxa</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '70ms' }}>una</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '140ms' }}>URL.</span>{' '}
-          <span className="hero-word shimmer-gold inline-block" style={{ animationDelay: '230ms' }}>Tindràs&nbsp;un&nbsp;blog</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '320ms' }}>idèntic</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '390ms' }}>a</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '460ms' }}>la</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '530ms' }}>teva</span>{' '}
-          <span className="hero-word inline-block" style={{ animationDelay: '600ms' }}>web.</span>
-        </h1>
+      <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-16">
+        <div className="text-center lg:text-left">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-accent">
+            <MessageCircle className="h-3.5 w-3.5" /> El teu blog, per WhatsApp
+          </span>
 
-        <p className="mx-auto mt-6 max-w-xl text-pretty text-lg font-medium leading-relaxed text-muted" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
-          Carma clona la identitat visual del teu lloc i et lliura un blog amb editor modern en 30 segons. Sense codi.
-        </p>
+          <h1 className="mt-5 text-balance text-4xl font-extrabold leading-[1.05] tracking-tight text-text sm:text-6xl">
+            <span className="hero-word inline-block" style={{ animationDelay: '0ms' }}>Envia</span>{' '}
+            <span className="hero-word inline-block" style={{ animationDelay: '70ms' }}>un</span>{' '}
+            <span className="hero-word inline-block" style={{ animationDelay: '140ms' }}>àudio.</span>{' '}
+            <span className="hero-word shimmer-gold inline-block" style={{ animationDelay: '240ms' }}>Publica</span>{' '}
+            <span className="hero-word shimmer-gold inline-block" style={{ animationDelay: '320ms' }}>un</span>{' '}
+            <span className="hero-word shimmer-gold inline-block" style={{ animationDelay: '400ms' }}>article.</span>
+          </h1>
 
-        <div className="mt-9" data-reveal style={{ '--reveal-delay': '200ms' } as React.CSSProperties}>
-          <UrlInput onSubmit={onGenerate} />
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-medium text-subtle">
-            <Link href="/registre" className="inline-flex items-center gap-1.5 font-semibold text-muted no-underline transition-colors hover:text-accent">
-              <Boxes className="h-4 w-4" /> No tinc web · crear un blog amb plantilles
+          <p className="mx-auto mt-6 max-w-xl text-pretty text-lg font-medium leading-relaxed text-muted lg:mx-0" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
+            Carma et munta un blog amb l&apos;estil de la teva web i hi posa un agent a dins:
+            dicta-li la idea per WhatsApp, revisa l&apos;esborrany i aprova&apos;l amb un toc.
+          </p>
+
+          <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start" data-reveal style={{ '--reveal-delay': '200ms' } as React.CSSProperties}>
+            <Link href="/registre" className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-7 py-3.5 text-base font-extrabold no-underline">
+              <span className="relative z-[1] inline-flex items-center gap-2"><Sparkles className="h-4.5 w-4.5" /> Crea el meu blog</span>
             </Link>
+            <a href="#clona" className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border-strong px-7 py-3.5 text-base font-bold text-text no-underline transition-colors hover:border-accent/50 hover:bg-surface-hover">
+              <Wand2 className="h-4.5 w-4.5 text-accent" /> Clona la meva web
+            </a>
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-subtle lg:justify-start" data-reveal style={{ '--reveal-delay': '280ms' } as React.CSSProperties}>
+            {['Gratis per començar', 'Sense targeta', 'El teu estil, clonat', 'Multi-idioma'].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5"><Check className="h-4 w-4 text-accent" /> {t}</span>
+            ))}
           </div>
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-subtle" data-reveal style={{ '--reveal-delay': '280ms' } as React.CSSProperties}>
-          {['Gratis per començar', 'Sense targeta', 'Multi-idioma', 'API i embed'].map((t) => (
-            <span key={t} className="inline-flex items-center gap-1.5"><Check className="h-4 w-4 text-accent" /> {t}</span>
-          ))}
-        </div>
+        <AgentPhoneMock />
       </div>
     </section>
   )
@@ -154,14 +164,14 @@ function Hero({ onGenerate }: { onGenerate: (u: string) => void }) {
 /* ───────────────────────── How it works ───────────────────────── */
 function HowItWorks() {
   const steps = [
-    { icon: Globe, title: 'Enganxa la URL', body: 'Donem un cop d’ull a la teva web pública: capçalera, peu, colors i tipografies.' },
-    { icon: Wand2, title: 'Clonem la identitat', body: 'Reconstruïm el teu disseny de forma nativa i, si tens un blog, n’importem els articles.' },
-    { icon: PenLine, title: 'Escriu i publica', body: 'Edita amb un editor d’estil Notion i publica al teu domini. Tu controles cada paraula.' },
+    { icon: Globe, title: 'Crea o clona el teu blog', body: 'Comença d’una plantilla — o enganxa la teva URL i en clonem la capçalera, els colors i les tipografies.' },
+    { icon: MessageCircle, title: 'Connecta el teu WhatsApp', body: 'Verifica el teu número en un minut. A partir d’aquí, l’agent és un contacte més.' },
+    { icon: Mic, title: 'Dicta. Revisa. Publica.', body: 'Una nota de veu amb la idea → un esborrany SEO complet → el botó «Aprovar» i ja és al teu blog.' },
   ]
   return (
     <section id="com-funciona" className="px-4 py-24">
       <div className="mx-auto max-w-6xl">
-        <SectionHead eyebrow="Com funciona" title="De la teva web a un blog viu, en tres passos." />
+        <SectionHead eyebrow="Com funciona" title="De la idea a l’article publicat, sense obrir l’ordinador." />
         <div className="mt-14 grid gap-5 md:grid-cols-3">
           {steps.map((s, i) => (
             <div key={s.title} className="lift relative rounded-3xl border border-border bg-bg-elevated p-7 shadow-card" data-reveal style={{ '--reveal-delay': `${i * 110}ms` } as React.CSSProperties}>
@@ -184,19 +194,34 @@ function FeatureBento() {
   return (
     <section id="funcions" className="px-4 py-24">
       <div className="mx-auto max-w-6xl">
-        <SectionHead eyebrow="Tot el que necessites" title="Un CMS premium, sense la complexitat." />
+        <SectionHead eyebrow="Tot el que necessites" title="Un agent que escriu. Un CMS que ho fa tot fàcil." />
         <div className="mt-14 grid auto-rows-[minmax(0,1fr)] gap-4 md:grid-cols-3">
-          <BentoCard className="md:col-span-2 md:row-span-2" featured icon={Wand2} title="Clonació amb la vareta màgica" body="Capturem la teva capçalera i el teu peu originals, n’extraiem la paleta i les tipografies exactes, i envoltem el teu blog amb la teva identitat real. Zero col·lisions de CSS.">
-            <div className="mt-6 flex gap-1.5">
+          <BentoCard className="md:col-span-2 md:row-span-2" featured icon={MessageCircle} title="Un agent que escriu per tu" body="Nota de veu o text al WhatsApp — o al xat del panell — i l’agent et torna un article SEO complet: títol, estructura, paraula clau i metadades. Tu aproves, ell publica. Si vols canvis, li ho dius i els aplica.">
+            <div className="mt-6 flex flex-1 flex-col justify-center gap-2.5">
+              <div className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-accent-soft px-3.5 py-2 text-sm font-medium text-text">
+                🎙 «Un article sobre les novetats de la fira d’enguany…»
+              </div>
+              <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md border border-border bg-surface px-3.5 py-2 text-sm text-muted">
+                ✦ Esborrany a punt: <span className="font-bold text-text">«La fira d’enguany: 7 novetats»</span>
+              </div>
+              <div className="ml-auto w-fit rounded-2xl rounded-br-md bg-accent-soft px-3.5 py-2 text-sm font-bold text-text">
+                Aprovar ✓
+              </div>
+              <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md border border-border bg-surface px-3.5 py-2 text-sm text-muted">
+                <span className="font-bold text-success">Publicat!</span> <span className="font-semibold text-accent underline decoration-accent/40 underline-offset-2">la-teva-web.cat/fira-novetats</span>
+              </div>
+            </div>
+          </BentoCard>
+          <BentoCard icon={Wand2} title="Clonació amb la vareta màgica" body="Capturem la teva capçalera i el teu peu reals, i el blog neix amb la teva identitat. Ho retoques en directe amb l’Studio.">
+            <div className="mt-4 flex gap-1.5">
               {['#1a2138', '#f5bc00', '#f0e6c8', '#e94b4b', '#5b8a72', '#fafaf6'].map((c) => (
-                <div key={c} className="h-9 flex-1 rounded-lg border border-white/30 shadow-sm" style={{ background: c }} />
+                <div key={c} className="h-7 flex-1 rounded-lg border border-white/30 shadow-sm" style={{ background: c }} />
               ))}
             </div>
           </BentoCard>
-          <BentoCard icon={PenLine} title="Editor d’estil Notion" body="Comandes «/», blocs rics, galeries i callouts. Escriure és un plaer." />
-          <BentoCard icon={Languages} title="Multi-idioma real" body="Detectem l’idioma i gestionem traduccions amb un selector elegant." />
-          <BentoCard icon={Palette} title="Theme Studio en directe" body="Ajusta colors, radis i tipografies i mira-ho canviar a l’instant." />
-          <BentoCard icon={Plug} title="API i embed" body="Connecta el blog al teu frontend amb JSON o un embed aïllat." />
+          <BentoCard icon={PenLine} title="Editor d’estil Notion" body="Comandes «/», blocs rics, galeries i callouts. Quan vols escriure tu, és un plaer." />
+          <BentoCard icon={Boxes} title="Mòduls intel·ligents" body="Cerca instantània, newsletter, paywall, articles relacionats… actives cada peça amb un clic." />
+          <BentoCard icon={Languages} title="Multi-idioma real" body="Detectem l’idioma del teu lloc i gestionem traduccions amb un selector elegant." />
           <BentoCard icon={BarChart3} title="Estadístiques" body="Vistes, articles i creixement, sense cookies invasives." />
         </div>
       </div>
@@ -216,16 +241,41 @@ function BentoCard({ icon: Icon, title, body, children, className = '', featured
         <Icon className="h-5 w-5" />
       </span>
       <h3 className={`mt-4 font-extrabold tracking-tight text-text ${featured ? 'text-2xl' : 'text-lg'}`}>{title}</h3>
-      <p className="mt-2 flex-1 text-base leading-relaxed text-muted">{body}</p>
+      {/* In the tall featured tile the CHILDREN (chat mock) absorb the extra
+          height, centred; in small tiles the body does, as before. */}
+      <p className={`mt-2 text-base leading-relaxed text-muted ${featured ? '' : 'flex-1'}`}>{body}</p>
       {children}
     </div>
+  )
+}
+
+/* ─────────────────────── Clone (the magic wand keeps its stage) ─────────────────────── */
+function CloneSection({ onGenerate }: { onGenerate: (u: string) => void }) {
+  return (
+    <section id="clona" className="px-4 py-24">
+      <div className="mx-auto max-w-4xl text-center">
+        <SectionHead eyebrow="Ja tens web?" title="Enganxa la URL i tindràs un blog idèntic a la teva web." />
+        <p className="mx-auto mt-4 max-w-xl text-pretty text-base font-medium leading-relaxed text-muted" data-reveal>
+          La capçalera, el peu, la paleta i les tipografies — clonats en 30 segons, sense codi.
+          I amb l&apos;agent ja a dins.
+        </p>
+        <div className="mt-9" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
+          <UrlInput onSubmit={onGenerate} />
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-medium text-subtle">
+            <Link href="/registre" className="inline-flex items-center gap-1.5 font-semibold text-muted no-underline transition-colors hover:text-accent">
+              <Boxes className="h-4 w-4" /> No tinc web · crear un blog amb plantilles
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
 /* ───────────────────────────── Pricing ─────────────────────────── */
 function Pricing() {
   const free = ['1 blog clonat', 'Editor complet', 'Theme Studio', 'Subdomini Carma']
-  const premium = ['Tot el del pla Free', 'Blogs il·limitats', 'API i embed en directe', 'Domini propi', 'Múltiples editors', 'Suport prioritari']
+  const premium = ['Agent de WhatsApp il·limitat', 'Tot el del pla Free', 'Blogs il·limitats', 'API i embed en directe', 'Domini propi', 'Múltiples editors']
   return (
     <section id="preus" className="px-4 py-24">
       <div className="mx-auto max-w-5xl">
@@ -281,7 +331,6 @@ function Perk({ children, gold = false }: { children: React.ReactNode; gold?: bo
   )
 }
 
-/* ───────────────────────────── Final CTA ───────────────────────── */
 /* ───────────────────────────── Footer ──────────────────────────── */
 function Footer() {
   return (

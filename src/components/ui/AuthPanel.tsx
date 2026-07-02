@@ -201,8 +201,8 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
     )
   }
 
-  const title = mode === 'login' ? 'Benvingut de nou' : 'Crea el teu espai'
-  const subtitle = mode === 'login' ? 'Entra per continuar a Carma' : 'Gratis · Sense targeta · Cancel·la quan vulguis'
+  const title = mode === 'login' ? 'Gràcias per ser aquí' : 'Crea el teu espai'
+  const subtitle = mode === 'login' ? 'Entra per continuar a Carma' : 'Gratuït i senzill'
 
   return (
     <>

@@ -117,7 +117,7 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
             Enganxa una URL.
           </h1>
           <p className="text-lg font-medium text-white/60 text-center max-w-md">
-            Clona la identitat del teu lloc i tindràs un blog en 30 segons.
+            Un blog idèntic a la teva web en 30 segons — amb l&apos;agent de WhatsApp a dins.
           </p>
 
           {/* Form / success */}

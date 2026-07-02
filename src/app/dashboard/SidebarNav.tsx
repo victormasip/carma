@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, FileText, Globe, Wand2 } from 'lucide-react'
+import { LayoutDashboard, Settings, FileText, Globe, Wand2, MessageCircle } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 
@@ -22,6 +22,13 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
         active={isHome}
         icon={isSuperAdmin ? <LayoutDashboard className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
         label={isSuperAdmin ? t('nav.allSites') : t('nav.mySites')}
+      />
+      <NavItem
+        href="/dashboard/agent"
+        active={pathname.startsWith('/dashboard/agent')}
+        icon={<MessageCircle className="w-4 h-4" />}
+        label={t('nav.agent')}
+        badge="IA"
       />
 
       {sites.length > 0 && (
@@ -75,6 +82,7 @@ function NavItem({
   label,
   title,
   truncate,
+  badge,
 }: {
   href: string
   active: boolean
@@ -82,6 +90,7 @@ function NavItem({
   label: string
   title?: string
   truncate?: boolean
+  badge?: string
 }) {
   return (
     <Link
@@ -95,7 +104,12 @@ function NavItem({
       )}
     >
       <span className={cn('shrink-0', active ? 'text-accent' : 'text-subtle')}>{icon}</span>
-      <span className={cn(truncate && 'truncate min-w-0')}>{label}</span>
+      <span className={cn('flex-1', truncate && 'truncate min-w-0')}>{label}</span>
+      {badge && (
+        <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-0.5 text-[0.6rem] font-extrabold uppercase tracking-wider text-accent">
+          {badge}
+        </span>
+      )}
     </Link>
   )
 }
