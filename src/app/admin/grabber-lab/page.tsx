@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import GrabberLab from './GrabberLab'
 import type { LabSampleListItem } from '@/lib/grabber-lab/types'
 
@@ -9,12 +9,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function GrabberLabPage() {
   // Belt-and-suspenders: the /admin layout already gates this, but a page that
-  // touches the dataset asserts the role itself too.
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // touches the dataset asserts the role itself too (memoized — costs nothing).
+  const { user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'superadmin') redirect('/dashboard')
+  if (!isSuperAdmin) redirect('/dashboard')
 
   // Recent samples for the history rail. Tolerate the table not existing yet
   // (migration 017 not run) so the Lab still loads and can run captures.

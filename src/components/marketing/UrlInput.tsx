@@ -83,7 +83,6 @@ export default function UrlInput({
       <div className={`relative flex flex-1 items-center gap-3 pl-4 ${h}`}>
         <Globe className="h-5 w-5 shrink-0 text-subtle" />
         <input
-          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus={autoFocus}
           value={value}
           onChange={(e) => setValue(e.target.value)}

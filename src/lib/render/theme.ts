@@ -75,7 +75,9 @@ type Post = {
   id: string
   title: string
   slug: string
-  content: { html?: string } | Record<string, unknown> | null
+  // Optional: LISTING queries deliberately omit the body (cards never render it);
+  // the article route always selects it.
+  content?: { html?: string } | Record<string, unknown> | null
   excerpt: string | null
   featured_image: string | null
   categories: string[] | null
@@ -705,9 +707,27 @@ function collectFontHrefs(theme: Theme): string[] {
 }
 
 function buildFontLinks(theme: Theme): string {
-  return collectFontHrefs(theme)
+  const hrefs = collectFontHrefs(theme)
+  if (hrefs.length === 0) return ''
+  // Preconnect to each font provider before requesting its stylesheet — shaves
+  // the DNS+TLS round trips off the critical text-rendering path (FCP). Google
+  // Fonts serves the CSS from fonts.googleapis.com but the woff2 files from
+  // fonts.gstatic.com, so that pair is warmed together.
+  const origins = new Set<string>()
+  for (const href of hrefs) {
+    try {
+      const o = new URL(href).origin
+      origins.add(o)
+      if (o === 'https://fonts.googleapis.com') origins.add('https://fonts.gstatic.com')
+    } catch { /* invalid URL already filtered upstream */ }
+  }
+  const preconnect = [...origins]
+    .map(o => `<link rel="preconnect" href="${escapeAttr(o)}" crossorigin />`)
+    .join('\n')
+  const sheets = hrefs
     .map(href => `<link rel="stylesheet" href="${escapeAttr(href)}" />`)
     .join('\n')
+  return `${preconnect}\n${sheets}`
 }
 
 // ─── Injected client <head> (the 1:1 clone's styling) ───────────────────────────

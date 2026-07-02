@@ -46,7 +46,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   const siteId = site.id as string
 
-  const POST_COLS = 'id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
+  // NOTE: no `content` here — the listing renders cards (title/excerpt/media/
+  // search-text) and never the article body, so shipping up to 100 full HTML
+  // bodies from the DB per listing render was pure dead weight.
+  const POST_COLS = 'id, title, slug, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
   const fetchPosts = (cols: string) =>
     admin.from('posts')
       .select(cols)

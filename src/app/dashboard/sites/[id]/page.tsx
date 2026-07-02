@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import SiteDetailClient from './SiteDetailClient'
 import { listPosts } from '@/lib/actions/posts'
@@ -15,14 +15,9 @@ export default async function SiteDetailsPage({
   const [{ id: siteId }, { tab: qTab, clone: qClone }] = await Promise.all([params, searchParams])
   const autoCloneUrl = typeof qClone === 'string' && qClone ? qClone : undefined
 
-  const supabase = await createClient()
-  const admin = createAdminClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isSuperAdmin = profile?.role === 'superadmin'
+  const admin = createAdminClient()
 
   // Select the site, including `subdomain` (migration 021). 42703-safe: if the
   // column isn't present yet we retry without it so the page still renders.

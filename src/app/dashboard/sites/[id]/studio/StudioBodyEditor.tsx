@@ -20,8 +20,10 @@ import type { Device } from './types'
 
 export default function StudioBodyEditor({ device, onClose }: { device: Device; onClose: () => void }) {
   const { siteId, tokens, editableArticle, loadArticleBody, saveArticleBody } = useThemeStudio()
+  // Mounted fresh per editing session (parent renders it conditionally), so
+  // "loading" is simply "the HTML hasn't arrived yet" (initialHtml === null) —
+  // no separate state to keep in sync.
   const [initialHtml, setInitialHtml] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   // Live HTML kept in a ref (TipTap fires onChange per keystroke; no re-render needed).
@@ -29,13 +31,11 @@ export default function StudioBodyEditor({ device, onClose }: { device: Device; 
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
     void loadArticleBody().then((h) => {
       if (!alive) return
       liveRef.current = h
       setInitialHtml(h)
-      setLoading(false)
-    }).catch(() => { if (alive) { setInitialHtml(''); setLoading(false) } })
+    }).catch(() => { if (alive) setInitialHtml('') })
     return () => { alive = false }
   }, [loadArticleBody])
 
@@ -79,7 +79,7 @@ export default function StudioBodyEditor({ device, onClose }: { device: Device; 
 
       {/* Editing surface — styled with the live brand tokens so it reads as the article. */}
       <div className="min-h-0 flex-1 overflow-auto bg-surface-subtle py-8">
-        {loading || initialHtml === null ? (
+        {initialHtml === null ? (
           <div className="flex h-full items-center justify-center"><KnotLoader size={56} label="Carregant el contingut…" /></div>
         ) : (
           <div

@@ -78,9 +78,6 @@ export type DesignTokens = {
   buttonBorder?: string            // border shorthand (outline/ghost buttons)
   buttonShadow?: string            // box-shadow
   buttonTextTransform?: 'uppercase' | 'none' | 'capitalize' | 'lowercase'
-  // ── "Look & Feel" preset marker (dashboard picker, src/lib/render/stylePresets.ts).
-  // Purely informational for the UI; the render only reads the tokens above.
-  stylePreset?: string
 }
 
 export const DEFAULT_TOKENS: DesignTokens = {

@@ -30,6 +30,9 @@ export default function RootLayout({
     <html lang="ca" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Reveal-on-scroll needs JS; without it, below-the-fold sections must
+            never stay invisible. */}
+        <noscript><style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style></noscript>
       </head>
       <body className={`${ubuntu.className} ${ubuntu.variable} bg-bg text-text antialiased`}>
         <ThemeProvider>

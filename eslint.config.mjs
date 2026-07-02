@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not app code — vendored agent-skill scripts, design mockups and the
+    // WordPress plugin (its own toolchain). Linting them buries real findings.
+    ".agents/**",
+    ".claude/**",
+    "landing/**",
+    "wordpress-plugin/**",
   ]),
 ]);
 

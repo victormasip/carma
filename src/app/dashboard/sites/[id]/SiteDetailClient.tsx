@@ -4,9 +4,6 @@ import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
-import ApiDocsCard from './ApiDocsCard'
-import WordPressConnectCard from './WordPressConnectCard'
-import PublishGuide from './PublishGuide'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
@@ -33,6 +30,11 @@ const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
 const FeedLayoutPicker = lazy(() => import('./FeedLayoutPicker'))
 const ModulesManager = lazy(() => import('./ModulesManager'))
+// The Connexió/Publicar tab: ApiDocsCard alone drags in the (huge) static
+// IntegrationGuide, and none of it renders on the default Articles tab.
+const ApiDocsCard = lazy(() => import('./ApiDocsCard'))
+const WordPressConnectCard = lazy(() => import('./WordPressConnectCard'))
+const PublishGuide = lazy(() => import('./PublishGuide'))
 import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioContext'
 import type { PostsMeta } from './PostsManager'
 import type { PostListItem } from '@/lib/actions/posts'
@@ -308,9 +310,11 @@ export default function SiteDetailClient({
             )}
 
             {activeTab === 'connexio' && (
-              isSuperAdmin
-                ? <ConnexioTab siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
-                : <ClientPublishTab siteId={siteId} subdomain={subdomain} />
+              <Suspense fallback={<SectionSkeleton />}>
+                {isSuperAdmin
+                  ? <ConnexioTab siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
+                  : <ClientPublishTab siteId={siteId} subdomain={subdomain} />}
+              </Suspense>
             )}
 
             {activeTab === 'usuaris' && (

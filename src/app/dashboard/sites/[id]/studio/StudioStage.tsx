@@ -34,7 +34,9 @@ const EDIT_CSS = `
 .cstudio-editing{outline:2.5px solid #f5bc00!important;outline-offset:3px!important;cursor:text!important;border-radius:3px}
 `
 
-type Sel = { region: RegionId; rect: DOMRect } | null
+// The selected element travels WITH the selection state (not a parallel ref):
+// one source of truth, and scroll re-anchoring can read it from the updater.
+type Sel = { region: RegionId; rect: DOMRect; el: Element } | null
 
 export default function StudioStage({ device, interact }: { device: Device; interact: boolean }) {
   const {
@@ -51,11 +53,13 @@ export default function StudioStage({ device, interact }: { device: Device; inte
   const [sel, setSel] = useState<Sel>(null)
   const [chromeOpen, setChromeOpen] = useState(false)
   const [editingBody, setEditingBody] = useState(false)
+  // State mirror of the stage node so JSX below can pass it as a prop without
+  // reading a ref during render (react-hooks/refs).
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null)
 
   const deviceWidth = DEVICE_WIDTH[device]
   const framed = device !== 'desktop'
   const canEditBody = view === 'article' && !!editableArticle
-  const selElRef = useRef<Element | null>(null)
 
   // ── iframe src ──
   // Only structural tokens (feed layout / grid-vs-list / columns) change CSS RULES
@@ -69,7 +73,17 @@ export default function StudioStage({ device, interact }: { device: Device; inte
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedAt])
 
-  useEffect(() => { if (view !== 'article') setEditingBody(false) }, [view])
+  // Adjust state DURING render when the editing context changes (React re-renders
+  // immediately with the new state — no effect, no cascading pass): leaving the
+  // article view closes the body editor, and any context switch (view / article /
+  // device / interact toggle) drops the selection + its toolbar.
+  const resetKey = `${view}␟${editableArticle?.slug ?? ''}␟${device}␟${interact}`
+  const [prevResetKey, setPrevResetKey] = useState(resetKey)
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey)
+    setSel(null)
+    if (view !== 'article' && editingBody) setEditingBody(false)
+  }
 
   const qs = [structParams, 'preview=1', `d=${device}`, 'edit=1', `r=${reloadTick}`].join('&')
   const src = view === 'article'
@@ -138,7 +152,6 @@ export default function StudioStage({ device, interact }: { device: Device; inte
 
   const clearSelection = useCallback(() => {
     outline(null, 'cstudio-sel'); outline(null, 'cstudio-hover')
-    selElRef.current = null
     setSel(null)
   }, [outline])
 
@@ -146,18 +159,19 @@ export default function StudioStage({ device, interact }: { device: Device; inte
     if (region === 'chrome') { setChromeOpen(true); return }
     outline(null, 'cstudio-hover')
     outline(target, 'cstudio-sel')
-    selElRef.current = target
-    setSel(target ? { region, rect: rectFor(target) } : null)
+    setSel(target ? { region, rect: rectFor(target), el: target } : null)
   }, [outline, rectFor])
 
   // Keep the toolbar glued to its element as the page scrolls.
   const onScroll = useCallback(() => {
-    const el = selElRef.current
-    if (el) setSel(s => (s ? { ...s, rect: rectFor(el) } : s))
+    setSel(s => (s ? { ...s, rect: rectFor(s.el) } : s))
   }, [rectFor])
 
-  useEffect(() => { clearSelection() }, [view, editableArticle?.slug, device, clearSelection])
-  useEffect(() => { if (interact) clearSelection() }, [interact, clearSelection])
+  // Interact mode doesn't reload the iframe, so the outline classes must be
+  // scrubbed from the live document — a DOM-only sync (state is reset above).
+  useEffect(() => {
+    if (interact) { outline(null, 'cstudio-sel'); outline(null, 'cstudio-hover') }
+  }, [interact, outline])
 
   // ── inline text editing (double-click) ──────────────────────────────────────
   const beginInlineText = useCallback((el: Element) => {
@@ -177,7 +191,7 @@ export default function StudioStage({ device, interact }: { device: Device; inte
     const blockNav = (e: Event) => e.preventDefault()
     link?.addEventListener('click', blockNav)
 
-    outline(null, 'cstudio-hover'); outline(null, 'cstudio-sel'); setSel(null); selElRef.current = null
+    outline(null, 'cstudio-hover'); outline(null, 'cstudio-sel'); setSel(null)
     he.classList.add('cstudio-editing')
     he.setAttribute('contenteditable', 'plaintext-only')
     he.setAttribute('spellcheck', 'false')
@@ -220,7 +234,7 @@ export default function StudioStage({ device, interact }: { device: Device; inte
     }
     // hover highlight (no button pressed)
     const hit = elementAt(e.clientX, e.clientY)
-    if (hit) { const { target } = classify(hit); if (target && target !== selElRef.current) outline(target, 'cstudio-hover') }
+    if (hit) { const { target } = classify(hit); if (target && target !== sel?.el) outline(target, 'cstudio-hover') }
     else outline(null, 'cstudio-hover')
   }
   const onPointerUp = (e: React.PointerEvent) => {
@@ -307,7 +321,7 @@ export default function StudioStage({ device, interact }: { device: Device; inte
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
       <div
-        ref={stageRef}
+        ref={(node) => { stageRef.current = node; setStageEl(node) }}
         onScroll={onScroll}
         className={cn('absolute inset-0 overflow-y-auto overflow-x-hidden', framed ? 'bg-surface-subtle py-8' : 'bg-white')}
       >
@@ -355,7 +369,7 @@ export default function StudioStage({ device, interact }: { device: Device; inte
         <StudioToolbar
           region={sel.region}
           rect={sel.rect}
-          stage={stageRef.current}
+          stage={stageEl}
           onClose={clearSelection}
           onOpenChrome={() => setChromeOpen(true)}
         />

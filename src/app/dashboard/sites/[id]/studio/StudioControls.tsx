@@ -6,11 +6,11 @@
 // retired ThemeManager internals.
 
 import { type ReactNode, useState, useRef, useEffect, useMemo } from 'react'
-import { Search, Check, ChevronDown, Sparkles } from 'lucide-react'
+import { Search, Check, ChevronDown } from 'lucide-react'
 import { LOOK_PRESETS } from '@/lib/render/lookPresets'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 import {
-  GOOGLE_FONTS, searchFonts, fontStack, googleFontCssUrl, primaryFamily, findGoogleFont,
+  searchFonts, fontStack, googleFontCssUrl, primaryFamily, findGoogleFont,
   type GoogleFont,
 } from '@/lib/render/googleFonts'
 import { cn } from '@/lib/cn'

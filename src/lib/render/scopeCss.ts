@@ -136,12 +136,3 @@ function scopeUnder(css: string, ns: string): string {
 export function scopeChromeCss(css: string, region: ChromeRegion): string {
   return scopeUnder(css, nsSelector(region))
 }
-
-/**
- * Same deterministic scoping for the captured article-card template, under the
- * `[data-carma-card]` namespace. The wrapper is added around EACH rendered card,
- * but the scoped stylesheet is emitted ONCE for the whole listing.
- */
-export function scopeCardCss(css: string): string {
-  return scopeUnder(css, '[data-carma-card]')
-}

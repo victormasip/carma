@@ -165,7 +165,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const modules = (theme?.modules ?? null) as SiteModules | null
   let siblings: NonNullable<Extra['siblings']> = []
   if (isModuleOn(modules, 'relatedPosts') || isModuleOn(modules, 'prevNext')) {
-    const sibCols = 'id, title, slug, content, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
+    // No `content`: siblings only ever render as cards/nav links (ModulePost has
+    // no body field), so 24 full article bodies per request was dead weight.
+    const sibCols = 'id, title, slug, excerpt, featured_image, categories, tags, author_name, created_at, is_published'
     const fetchSibs = (cols: string) => admin.from('posts')
       .select(cols).eq('site_id', siteId).eq('is_published', true)
       .order('created_at', { ascending: false }).limit(24)

@@ -3,9 +3,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // Standard shadcn input. Tokens map to Carma's palette (gold focus ring via
-// --ring), so it's on-brand out of the box. Used by 21st.dev search/command bars.
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+// --ring), so it's on-brand out of the box.
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {

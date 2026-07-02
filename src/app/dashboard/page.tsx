@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import { Globe, FileText, Users, CheckCircle2, Eye, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -16,12 +16,8 @@ type SiteWithCounts = { id: string; name: string; created_at: string; logo_url?:
 type SiteRow = { id: string; name: string; created_at: string; logo_url?: string | null }
 
 export default async function DashboardHome() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isSuperAdmin = profile?.role === 'superadmin'
   const admin = createAdminClient()
 
   // ── Client dashboard ─────────────────────────────────────────────────────────

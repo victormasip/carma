@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 import { WA_AGENT_NUMBER } from '@/lib/whatsapp/config'
 import SettingsClient from './SettingsClient'
 
@@ -9,12 +9,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Configuració · Carma' }
 
 export default async function SettingsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isSuperAdmin = profile?.role === 'superadmin'
 
   // All reads are RLS-scoped to the signed-in owner (policies in migration 027).
   const [identitiesRes, membershipsRes, scopesRes] = await Promise.all([

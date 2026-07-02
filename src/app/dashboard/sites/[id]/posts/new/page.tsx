@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
 import PostEditorClient from '@/components/editor/PostEditorClient'
 import { getSiteLocaleConfig } from '@/lib/actions/locales'
@@ -10,22 +10,15 @@ export default async function NewPostPage({
 }) {
   const { id: siteId } = await params
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isSuperAdmin = profile?.role === 'superadmin'
-
-  const { data: site } = await supabase
-    .from('sites')
-    .select('id, name')
-    .eq('id', siteId)
-    .single()
+  const [{ data: site }, localeConfig] = await Promise.all([
+    supabase.from('sites').select('id, name').eq('id', siteId).single(),
+    getSiteLocaleConfig(siteId),
+  ])
 
   if (!site) redirect('/dashboard')
-
-  const localeConfig = await getSiteLocaleConfig(siteId)
 
   return (
     <PostEditorClient

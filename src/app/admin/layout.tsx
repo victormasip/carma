@@ -1,19 +1,16 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft, FlaskConical } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 
 // Segment guard for /admin — strictly superadmin. Unauthenticated users are
 // already bounced to "/" by the edge middleware; here we additionally redirect
 // any authenticated NON-superadmin to their dashboard, so these internal tools
 // are never reachable by clients even if they discover the URL.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'superadmin') redirect('/dashboard')
+  if (!isSuperAdmin) redirect('/dashboard')
 
   return (
     <div className="min-h-screen bg-bg text-text">

@@ -316,8 +316,10 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     setActiveLocale(loc)
   }, [])
 
+  // The query is reset by the toggle handler itself, so this effect only wires
+  // the external listeners (focus, outside-click, Escape) while the menu is open.
   useEffect(() => {
-    if (!addLangOpen) { setAddLangQuery(''); return }
+    if (!addLangOpen) return
     // Focus the searcher the moment the menu opens so the user can type straight away.
     addLangInputRef.current?.focus()
     const onClick = (e: MouseEvent) => {
@@ -910,7 +912,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                 <div ref={addLangRef} className="relative">
                   <button
                     type="button"
-                    onClick={() => setAddLangOpen(o => !o)}
+                    onClick={() => { setAddLangOpen(o => !o); setAddLangQuery('') }}
                     aria-label="Afegir idioma"
                     title="Afegir idioma"
                     className="cursor-pointer flex items-center justify-center w-8 h-8 rounded-md text-subtle hover:text-text hover:bg-surface-hover transition-colors"

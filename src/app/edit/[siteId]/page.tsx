@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { userCanWriteSite } from '@/lib/auth/siteAccess'
+import { getSession } from '@/lib/auth/session'
 import { isUuid } from '@/lib/sites/domain'
 import type { Theme } from '@/app/dashboard/sites/[id]/ThemeStudioContext'
 import FullscreenStudio from './FullscreenStudio'
@@ -15,14 +14,16 @@ export default async function EditSitePage({ params }: { params: Promise<{ siteI
   const { siteId } = await params
   if (!isUuid(siteId)) redirect('/dashboard')
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
 
-  if (!(await userCanWriteSite(supabase, user.id, siteId))) redirect('/dashboard')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isSuperAdmin = profile?.role === 'superadmin'
+  // Superadmins may edit any site; everyone else must be an assigned member of
+  // THIS site (same policy as userCanWriteSite, minus the duplicate role fetch).
+  if (!isSuperAdmin) {
+    const { data: member } = await supabase
+      .from('site_users').select('site_id').eq('site_id', siteId).eq('user_id', user.id).maybeSingle()
+    if (!member) redirect('/dashboard')
+  }
 
   const admin = createAdminClient()
   const { data: theme } = await admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle()

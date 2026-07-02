@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Phone, Plus, Trash2, RefreshCw, Check, Clock, ShieldCheck, Globe,
-  ChevronDown, ExternalLink, Copy, MessageCircle, AlertCircle,
+  ChevronDown, Copy, MessageCircle, AlertCircle,
   User, Mail, KeyRound, Eye, EyeOff,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
@@ -380,7 +380,10 @@ function IdentityCard({ identity, agentNumber, sites, scopeSiteIds }: {
   const router = useRouter()
   const [busy, startTransition] = useTransition()
   const isActive = identity.status === 'active'
-  const codeExpired = identity.verify_expires_at ? new Date(identity.verify_expires_at).getTime() < Date.now() : true
+  // Clock snapshot at mount keeps render pure (react-hooks/purity); expiry is
+  // minutes-coarse and re-evaluated against fresh props after every refresh.
+  const [mountedAt] = useState(() => Date.now())
+  const codeExpired = identity.verify_expires_at ? new Date(identity.verify_expires_at).getTime() < mountedAt : true
 
   const remove = () => {
     startTransition(async () => {

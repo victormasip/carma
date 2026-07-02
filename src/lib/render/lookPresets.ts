@@ -3,7 +3,7 @@
 // click sets a complete look: the structural feed layout AND the matching feel
 // tokens (radii, heading weight, reading rhythm, link/blockquote style).
 //
-// As with feedLayouts.ts / stylePresets.ts, a look NEVER touches the captured
+// As with feedLayouts.ts, a look NEVER touches the captured
 // brand — colours and font families always stay from the clone. The active look
 // is identified by `tokens.feedLayout` (each look owns a unique layout id), so we
 // need no extra marker token.
