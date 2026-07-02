@@ -2,7 +2,7 @@
 
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket } from 'lucide-react'
+import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
@@ -20,12 +20,12 @@ import { formatDate } from '@/lib/format'
 
 // Code-split the heavy, off-the-default-path surfaces so they stay OUT of the
 // site-detail route's initial JS bundle. The default tab is "Articles", so the
-// chart (OverviewPanel), the import modal and the Theme Studio are fetched on
-// demand — each is conditionally rendered already, so this changes nothing
-// visually/behaviourally beyond a brief load the first time it's opened.
-// (SiteOnboarding stays a static import: it's the critical first-run funnel and
-// must mount + auto-fire the clone with zero extra latency.)
-const CarmaStudio = lazy(() => import('./studio/CarmaStudio'))
+// chart (OverviewPanel), the import modal etc. are fetched on demand — each is
+// conditionally rendered already, so this changes nothing visually/behaviourally
+// beyond a brief load the first time it's opened. (SiteOnboarding stays a static
+// import: it's the critical first-run funnel and must mount + auto-fire the
+// clone with zero extra latency. The Studio itself now lives FULLSCREEN at
+// /edit/[siteId] — the Tema tab is a launcher, not an embed.)
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
 const FeedLayoutPicker = lazy(() => import('./FeedLayoutPicker'))
@@ -288,13 +288,7 @@ export default function SiteDetailClient({
               />
             )}
 
-            {activeTab === 'tema' && (
-              <ErrorBoundary label="El Theme Studio ha tingut un error">
-                <Suspense fallback={<SectionSkeleton />}>
-                  <CarmaStudio isSuperAdmin={isSuperAdmin} />
-                </Suspense>
-              </ErrorBoundary>
-            )}
+            {activeTab === 'tema' && <StudioLaunchPanel siteId={siteId} />}
 
             {activeTab === 'moduls' && !hideModules && (
               <ErrorBoundary label="El panell de mòduls ha tingut un error">
@@ -493,6 +487,61 @@ function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: 
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// The Tema tab is now a LAUNCHER: the Studio runs fullscreen at /edit/[siteId]
+// (editing the real page, no dashboard chrome) and the agent has its own space.
+// Both open in a new tab so this site's context never gets lost.
+function StudioLaunchPanel({ siteId }: { siteId: string }) {
+  const { hasTheme } = useThemeStudio()
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <a
+        href={`/edit/${siteId}?from=site`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="lift gold-trace gold-trace-aura [--gold-trace-w:1px] group relative flex flex-col overflow-hidden rounded-3xl border border-transparent bg-bg-elevated p-7 no-underline shadow-card"
+      >
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-on-accent">
+          <Palette className="h-6 w-6" />
+        </span>
+        <h3 className="mt-4 flex items-center gap-2 text-xl font-extrabold tracking-tight text-text">
+          Carma Studio
+          <ArrowUpRight className="h-4.5 w-4.5 text-subtle transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent" />
+        </h3>
+        <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">
+          Edita el teu blog EN DIRECTE sobre la pàgina real: clica qualsevol element, canvia colors,
+          tipografies i disposició, i {hasTheme ? 'regenera el disseny quan vulguis' : 'clona el disseny de la teva web'}.
+          S&apos;obre a pantalla completa.
+        </p>
+        <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-accent">
+          Obre l&apos;Studio <ExternalLink className="h-3.5 w-3.5" />
+        </span>
+      </a>
+
+      <a
+        href="/dashboard/agent"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="lift group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-bg-elevated p-7 no-underline shadow-card"
+      >
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+          <MessageCircle className="h-6 w-6" />
+        </span>
+        <h3 className="mt-4 flex items-center gap-2 text-xl font-extrabold tracking-tight text-text">
+          Agent
+          <ArrowUpRight className="h-4.5 w-4.5 text-subtle transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent" />
+        </h3>
+        <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">
+          Dicta-li una idea — pel xat o per WhatsApp — i et torna un article SEO a punt de publicar
+          en aquest blog. Tu aproves, ell publica.
+        </p>
+        <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-accent">
+          Parla amb l&apos;agent <ExternalLink className="h-3.5 w-3.5" />
+        </span>
+      </a>
     </div>
   )
 }

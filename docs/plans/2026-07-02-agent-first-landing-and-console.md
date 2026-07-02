@@ -116,6 +116,40 @@ surface before the landing sells it.
 3. Pricing placement of the agent: Premium perk on landing while beta-free in
    app (recommended) vs Free tier headline feature.
 
+## v2 (2026-07-03 founder feedback) — Blog-clone onboarding + module detection
+
+Founder ask: onboarding should offer (a) "copia els estils de la teva web"
+(today's magic wand) AND (b) "clona la pàgina de BLOG d'una altra web" — a
+near-identical clone of a blog listing (cards, layout, features), with its
+functionality DETECTED and imported as Carma modules, all manageable from the
+Studio afterwards.
+
+Proposed pipeline (builds on what already ships):
+1. **Module detection at capture** (`analyze/route.ts`, new `detectModules(root)`):
+   pure heuristics over the parsed page — search input (`input[type=search]`,
+   role=search, class~=search) → `search` module; newsletter form (email input
+   inside form outside chrome) → `newsletter`; category pills/filter nav →
+   `categoryFilter`; share links (twitter/facebook intents) → `share`; TOC nav →
+   `toc`; related-posts strip → `relatedPosts`; dark-mode toggle → `darkMode`.
+   Emit `detected_modules: string[]` in `AnalyzeResult` (+ SSE notice listing
+   what was found). Context applies via existing modules actions (site_themes.
+   modules JSONB — no migration).
+2. **Feed-layout matching**: reuse the card-sample finder (`findCardSample`) to
+   measure columns/gap/media-aspect of the source grid and pick the closest
+   `feedLayouts` preset + card tokens (radius, shadow, meta order) — a faithful
+   *native* clone (the deliberate lesson from the retired `extracted_card`
+   pixel-template: native cards + matched tokens beat brittle 1:1 HTML).
+3. **Onboarding UI**: SiteOnboarding's two ways become three cards — "Clona la
+   teva web" (styles) / "Clona un blog que t'agradi" (URL of any blog → steps
+   1-2 + demo posts) / "Plantilles". Copy makes clear the blog-clone imports
+   look+features, not content.
+4. Studio manages everything after: modules toggle in Mòduls tab (ships),
+   layout/tokens in Studio (ships).
+
+Estimate: detection 0.5-1d · layout matching 1-1.5d · onboarding card 0.5d.
+Risk: heuristic false positives → always show detections as PRE-CHECKED
+suggestions the user confirms, never silent enables.
+
 ## Risks
 
 - Real console output needs OPENAI_API_KEY + WA_AGENT_MODEL (WA_MOCK_AGENT

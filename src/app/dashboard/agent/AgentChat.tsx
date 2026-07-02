@@ -2,25 +2,34 @@
 
 // Agent Console — talk to the same agent that answers on WhatsApp, from the
 // dashboard. One turn = one `consoleAgentTurn` call (the agent decides
-// clarify-or-draft); a returned draft renders as a card with Publish / Edit /
-// Open-in-editor actions. "Edit" keeps the draft as the revision target: the
-// next message becomes edit instructions (same loop as the phone channel).
+// clarify-or-draft); a returned draft renders as a compact card whose primary
+// action opens the DRAFT READER (right drawer): the full article, readable,
+// with Publish / Open-in-editor / Ask-for-changes right there. Replying while a
+// draft is the edit target sends revision instructions (same loop as the phone
+// channel).
+//
+// Layout contract: the component fills whatever height its parent gives it
+// (lg), or caps itself to the visible viewport (mobile) — the composer must
+// NEVER sit below the fold; only the message list scrolls.
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
-  Send, Sparkles, Check, PenLine, ExternalLink, X, ChevronDown, Globe, MessageCircle,
+  Send, Sparkles, Check, PenLine, ExternalLink, X, ChevronDown, Globe, MessageCircle, BookOpen,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import EndlessKnot from '@/components/ui/EndlessKnot'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { consoleAgentTurn, consolePublish } from '@/lib/actions/agent-console'
+import { togglePublish } from '@/lib/actions/posts'
 import type { AgentDraft } from '@/lib/whatsapp/agent'
 
 type Site = { id: string; name: string }
 
-type PublishedInfo = { liveUrl: string; editorUrl: string; publishedNow: boolean }
+// Filled progressively: `saved` after "open in editor" (the post already
+// exists as a draft), `published` once it is live.
+type SavedInfo = { postId: string; editorUrl: string; liveUrl: string }
+type PublishedInfo = { liveUrl: string; editorUrl: string }
 
 // Body first, id stamped on push — `Omit` over a discriminated union would
 // collapse it to the common keys.
@@ -28,8 +37,9 @@ type MsgBody =
   | { role: 'user'; text: string }
   | { role: 'agent'; kind: 'text'; text: string }
   | { role: 'agent'; kind: 'error'; text: string }
-  | { role: 'agent'; kind: 'draft'; draft: AgentDraft; brief: string; published?: PublishedInfo; discarded?: boolean }
+  | { role: 'agent'; kind: 'draft'; draft: AgentDraft; brief: string; saved?: SavedInfo; published?: PublishedInfo; discarded?: boolean }
 type Msg = MsgBody & { id: number }
+type DraftMsg = Extract<Msg, { kind: 'draft' }>
 
 // The agent call is one strict-schema completion (no token stream), so the
 // waiting bubble narrates honest stages on a timer instead of freezing.
@@ -48,7 +58,6 @@ const SUGGESTIONS = [
 ]
 
 export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; initialSiteId?: string }) {
-  const router = useRouter()
   const { toast } = useToast()
 
   const [siteId, setSiteId] = useState(initialSiteId ?? sites[0]?.id ?? '')
@@ -60,12 +69,15 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
   // fresh brief). Identified by message id so the bubble can badge itself.
   const [editTarget, setEditTarget] = useState<{ msgId: number; draft: AgentDraft; brief: string } | null>(null)
   const [publishing, setPublishing] = useState<number | null>(null)
+  // Draft reader drawer — points at the draft message it is reading.
+  const [readerId, setReaderId] = useState<number | null>(null)
 
   const nextId = useRef(1)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const site = sites.find((s) => s.id === siteId) ?? sites[0]
+  const readerMsg = (msgs.find((m) => m.id === readerId && m.role === 'agent' && m.kind === 'draft') ?? null) as DraftMsg | null
 
   // Keep the newest message in view (imperative DOM sync, not state).
   useEffect(() => {
@@ -83,6 +95,12 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
     const id = nextId.current++
     setMsgs((prev) => [...prev, { ...m, id }])
     return id
+  }
+
+  const patchDraft = (msgId: number, patch: Partial<Omit<DraftMsg, 'id' | 'role' | 'kind'>>) => {
+    setMsgs((prev) => prev.map((m) =>
+      m.id === msgId && m.role === 'agent' && m.kind === 'draft' ? { ...m, ...patch } : m,
+    ))
   }
 
   const send = async (raw?: string) => {
@@ -112,29 +130,49 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
     setEditTarget({ msgId, draft: res.draft, brief })
   }
 
-  const publish = async (msgId: number, draft: AgentDraft, brief: string, publishNow: boolean) => {
+  // ── draft actions (used by both the bubble and the reader drawer) ──────────
+  const publish = async (m: DraftMsg) => {
     if (!site || publishing !== null) return
-    setPublishing(msgId)
-    const res = await consolePublish(site.id, draft, { publish: publishNow, brief })
-    setPublishing(null)
-    if (!res.ok) { toast(res.error, 'error'); return }
-
-    if (!publishNow) { router.push(res.editorUrl); return }
-
-    setMsgs((prev) => prev.map((m) =>
-      m.id === msgId && m.role === 'agent' && m.kind === 'draft'
-        ? { ...m, published: { liveUrl: res.liveUrl, editorUrl: res.editorUrl, publishedNow: true } }
-        : m,
-    ))
-    setEditTarget((t) => (t?.msgId === msgId ? null : t))
+    setPublishing(m.id)
+    if (m.saved) {
+      // Already saved from "open in editor" — just flip it live.
+      const res = await togglePublish(m.saved.postId, site.id, true)
+      setPublishing(null)
+      if (res.error) { toast(res.error, 'error'); return }
+      patchDraft(m.id, { published: { liveUrl: m.saved.liveUrl, editorUrl: m.saved.editorUrl } })
+    } else {
+      const res = await consolePublish(site.id, m.draft, { publish: true, brief: m.brief })
+      setPublishing(null)
+      if (!res.ok) { toast(res.error, 'error'); return }
+      patchDraft(m.id, { published: { liveUrl: res.liveUrl, editorUrl: res.editorUrl } })
+    }
+    setEditTarget((t) => (t?.msgId === m.id ? null : t))
     toast('Article publicat!', 'success')
   }
 
+  // Save as an editor draft and open the full editor in a NEW TAB — the chat
+  // stays alive, and a later "Publica" flips the SAME post live (no duplicate).
+  const openEditor = async (m: DraftMsg) => {
+    if (!site || publishing !== null) return
+    if (m.saved) { window.open(m.saved.editorUrl, '_blank', 'noopener'); return }
+    setPublishing(m.id)
+    const res = await consolePublish(site.id, m.draft, { publish: false, brief: m.brief })
+    setPublishing(null)
+    if (!res.ok) { toast(res.error, 'error'); return }
+    patchDraft(m.id, { saved: { postId: res.postId, editorUrl: res.editorUrl, liveUrl: res.liveUrl } })
+    window.open(res.editorUrl, '_blank', 'noopener')
+  }
+
+  const requestChanges = (m: DraftMsg) => {
+    setEditTarget({ msgId: m.id, draft: m.draft, brief: m.brief })
+    setReaderId(null)
+    inputRef.current?.focus()
+  }
+
   const discard = (msgId: number) => {
-    setMsgs((prev) => prev.map((m) =>
-      m.id === msgId && m.role === 'agent' && m.kind === 'draft' ? { ...m, discarded: true } : m,
-    ))
+    patchDraft(msgId, { discarded: true })
     setEditTarget((t) => (t?.msgId === msgId ? null : t))
+    setReaderId((r) => (r === msgId ? null : r))
   }
 
   if (sites.length === 0) {
@@ -149,9 +187,9 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
   }
 
   return (
-    <div className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div className="flex h-[calc(100dvh-12.5rem)] min-h-[440px] flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:h-full">
       {/* Header: who you're talking to + which blog it writes on */}
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-bg-elevated px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-bg-elevated px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
             <EndlessKnot size={18} glow />
@@ -164,7 +202,7 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
         <SitePicker sites={sites} value={siteId} onChange={setSiteId} disabled={busy} />
       </div>
 
-      {/* Messages */}
+      {/* Messages — the ONLY part that scrolls. */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {msgs.length === 0 && !busy && (
           <div className="flex h-full flex-col items-center justify-center gap-4 py-10 text-center">
@@ -200,13 +238,11 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
             return (
               <DraftBubble
                 key={m.id}
-                draft={m.draft}
-                published={m.published}
-                discarded={m.discarded}
+                m={m}
                 isEditTarget={editTarget?.msgId === m.id}
-                publishing={publishing === m.id}
-                onPublish={() => publish(m.id, m.draft, m.brief, true)}
-                onOpenEditor={() => publish(m.id, m.draft, m.brief, false)}
+                busy={publishing === m.id}
+                onRead={() => setReaderId(m.id)}
+                onChanges={() => requestChanges(m)}
                 onDiscard={() => discard(m.id)}
               />
             )
@@ -233,8 +269,8 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
         )}
       </div>
 
-      {/* Composer */}
-      <div className="border-t border-border bg-bg-elevated p-3">
+      {/* Composer — pinned to the card bottom, always on screen. */}
+      <div className="shrink-0 border-t border-border bg-bg-elevated p-3">
         {editTarget && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-accent-soft px-3 py-1.5">
             <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-accent">
@@ -268,21 +304,32 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
           </Button>
         </div>
       </div>
+
+      {/* Draft reader — the full article, readable, with the actions where you decide. */}
+      {readerMsg && (
+        <DraftReader
+          m={readerMsg}
+          busy={publishing === readerMsg.id}
+          onClose={() => setReaderId(null)}
+          onPublish={() => void publish(readerMsg)}
+          onOpenEditor={() => void openEditor(readerMsg)}
+          onChanges={() => requestChanges(readerMsg)}
+        />
+      )}
     </div>
   )
 }
 
-/* ───────────────────────── Draft card bubble ───────────────────────── */
-function DraftBubble({ draft, published, discarded, isEditTarget, publishing, onPublish, onOpenEditor, onDiscard }: {
-  draft: AgentDraft
-  published?: PublishedInfo
-  discarded?: boolean
+/* ───────────────────────── Draft card bubble (compact) ───────────────────────── */
+function DraftBubble({ m, isEditTarget, busy, onRead, onChanges, onDiscard }: {
+  m: DraftMsg
   isEditTarget: boolean
-  publishing: boolean
-  onPublish: () => void
-  onOpenEditor: () => void
+  busy: boolean
+  onRead: () => void
+  onChanges: () => void
   onDiscard: () => void
 }) {
+  const { draft, published, saved, discarded } = m
   return (
     <div className="flex">
       <div className={cn(
@@ -295,7 +342,11 @@ function DraftBubble({ draft, published, discarded, isEditTarget, publishing, on
             'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.65rem] font-extrabold uppercase tracking-wider',
             published ? 'bg-success-soft text-success' : 'bg-accent-soft text-accent',
           )}>
-            {published ? <><Check className="h-3 w-3" /> Publicat</> : <><Sparkles className="h-3 w-3" /> Esborrany</>}
+            {published
+              ? <><Check className="h-3 w-3" /> Publicat</>
+              : saved
+                ? <><PenLine className="h-3 w-3" /> Desat a l&apos;editor</>
+                : <><Sparkles className="h-3 w-3" /> Esborrany a punt</>}
           </span>
           {!published && !discarded && (
             <button
@@ -309,17 +360,9 @@ function DraftBubble({ draft, published, discarded, isEditTarget, publishing, on
           )}
         </div>
 
-        <div className="space-y-2 px-4 py-3.5">
+        <div className="space-y-1.5 px-4 py-3">
           <h4 className="text-base font-extrabold leading-snug tracking-tight text-text">{draft.title}</h4>
           {draft.strategy && <p className="text-xs font-medium italic text-muted">{draft.strategy}</p>}
-          {draft.excerpt && <p className="text-sm leading-relaxed text-muted">{draft.excerpt}</p>}
-          {draft.categories.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {draft.categories.map((c) => (
-                <span key={c} className="rounded-full bg-surface-subtle px-2 py-0.5 text-[0.7rem] font-semibold text-muted">{c}</span>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-3.5 py-2.5">
@@ -328,29 +371,124 @@ function DraftBubble({ draft, published, discarded, isEditTarget, publishing, on
               <Button href={published.liveUrl} target="_blank" rel="noopener noreferrer" size="sm" glow iconLeft={<ExternalLink className="h-3.5 w-3.5" />}>
                 Veure l&apos;article
               </Button>
-              <Button href={published.editorUrl} size="sm" variant="secondary" iconLeft={<PenLine className="h-3.5 w-3.5" />}>
-                Obrir a l&apos;editor
+              <Button href={published.editorUrl} target="_blank" rel="noopener noreferrer" size="sm" variant="secondary" iconLeft={<PenLine className="h-3.5 w-3.5" />}>
+                Editor
               </Button>
             </>
           ) : discarded ? (
             <span className="text-xs font-medium text-subtle">Esborrany descartat</span>
           ) : (
             <>
-              <Button onClick={onPublish} loading={publishing} size="sm" glow iconLeft={<Check className="h-3.5 w-3.5" />}>
-                Aprova i publica
+              <Button onClick={onRead} loading={busy} size="sm" glow iconLeft={<BookOpen className="h-3.5 w-3.5" />}>
+                Llegeix i publica
               </Button>
-              <Button onClick={onOpenEditor} disabled={publishing} size="sm" variant="secondary" iconLeft={<PenLine className="h-3.5 w-3.5" />}>
-                Obre a l&apos;editor
+              <Button onClick={onChanges} disabled={busy} size="sm" variant="secondary" iconLeft={<MessageCircle className="h-3.5 w-3.5" />}>
+                Canvis
               </Button>
-              {isEditTarget && (
-                <span className="ml-auto hidden items-center gap-1 text-[0.7rem] font-semibold text-accent sm:inline-flex">
-                  <MessageCircle className="h-3 w-3" /> Respon per demanar canvis
-                </span>
-              )}
             </>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ───────────────────── Draft reader (right drawer) ───────────────────── */
+// The article, full and readable, before you press anything — this is where
+// approve/publish decisions actually happen. Content is the agent's own
+// sanitized HTML (sanitizeHtml server-side), rendered with the token-driven
+// .review-prose (same reading typography as /review, dark-mode aware).
+function DraftReader({ m, busy, onClose, onPublish, onOpenEditor, onChanges }: {
+  m: DraftMsg
+  busy: boolean
+  onClose: () => void
+  onPublish: () => void
+  onOpenEditor: () => void
+  onChanges: () => void
+}) {
+  const { draft, published, saved } = m
+  const words = draft.contentHtml.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).length
+
+  // Escape closes the reader (listener while mounted).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button type="button" aria-label="Tancar" onClick={onClose} className="absolute inset-0 cursor-default bg-black/35 backdrop-blur-[2px]" />
+      <aside
+        className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-bg shadow-2xl"
+        style={{ animation: 'slidein .28s cubic-bezier(0.16,1,0.3,1)' }}
+        role="dialog"
+        aria-label="Lector de l'esborrany"
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-bg-elevated px-5 py-3">
+          <span className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.65rem] font-extrabold uppercase tracking-wider',
+            published ? 'bg-success-soft text-success' : 'bg-accent-soft text-accent',
+          )}>
+            {published ? <><Check className="h-3 w-3" /> Publicat</> : <><Sparkles className="h-3 w-3" /> Esborrany</>}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-hover hover:text-text"
+            aria-label="Tancar el lector"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Article */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-10">
+          <h1 className="text-balance text-3xl font-extrabold leading-tight tracking-tight text-text">{draft.title}</h1>
+          {draft.excerpt && <p className="mt-3 text-lg font-medium leading-relaxed text-muted">{draft.excerpt}</p>}
+          <div className="mt-4 flex flex-wrap items-center gap-1.5 text-xs">
+            {draft.categories.map((c) => (
+              <span key={c} className="rounded-full bg-surface-subtle px-2 py-0.5 font-semibold text-muted">{c}</span>
+            ))}
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-accent">{draft.focusKeyword}</span>
+            <span className="font-medium text-subtle">· ~{words} paraules</span>
+          </div>
+          <hr className="my-6 border-border" />
+          <div className="review-prose" dangerouslySetInnerHTML={{ __html: draft.contentHtml }} />
+        </div>
+
+        {/* Action bar */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-bg-elevated px-5 py-3.5">
+          {published ? (
+            <>
+              <Button href={published.liveUrl} target="_blank" rel="noopener noreferrer" glow iconLeft={<ExternalLink className="h-4 w-4" />}>
+                Veure l&apos;article
+              </Button>
+              <Button href={published.editorUrl} target="_blank" rel="noopener noreferrer" variant="secondary" iconLeft={<PenLine className="h-4 w-4" />}>
+                Obrir a l&apos;editor
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onPublish} loading={busy} glow iconLeft={<Check className="h-4 w-4" />}>
+                Publica ara
+              </Button>
+              <Button onClick={onOpenEditor} disabled={busy} variant="secondary" iconLeft={<ExternalLink className="h-4 w-4" />}>
+                {saved ? 'Torna a l’editor' : 'Obre a l’editor'}
+              </Button>
+              <button
+                type="button"
+                onClick={onChanges}
+                disabled={busy}
+                className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-muted transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-50"
+              >
+                <MessageCircle className="h-4 w-4" /> Demana canvis
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
     </div>
   )
 }

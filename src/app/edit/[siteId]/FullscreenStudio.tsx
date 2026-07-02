@@ -9,12 +9,13 @@ import { ThemeStudioProvider, type Theme } from '@/app/dashboard/sites/[id]/Them
 import ThemeCaptureModal from '@/app/dashboard/sites/[id]/ThemeCaptureModal'
 import CarmaStudio from '@/app/dashboard/sites/[id]/studio/CarmaStudio'
 
-export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, defaultLocale, regenCount }: {
+export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, defaultLocale, regenCount, exitHref }: {
   siteId: string
   isSuperAdmin: boolean
   initialTheme: Theme | null
   defaultLocale?: string
   regenCount: number
+  exitHref?: string
 }) {
   return (
     <div className="h-screen w-screen overflow-hidden bg-surface">
@@ -27,7 +28,7 @@ export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, d
         initialRegenCount={regenCount}
       >
         <ThemeCaptureModal isSuperAdmin={isSuperAdmin} />
-        <CarmaStudio isSuperAdmin={isSuperAdmin} fullscreen exitHref={`/render/${siteId}`} />
+        <CarmaStudio isSuperAdmin={isSuperAdmin} fullscreen exitHref={exitHref ?? `/render/${siteId}`} />
       </ThemeStudioProvider>
     </div>
   )

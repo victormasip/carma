@@ -38,12 +38,15 @@ export default function AgentClient({ agentNumber, identities, scopes, sites, ac
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px]">
+      {/* The chat must NEVER push its composer below the fold: the grid is capped
+          to the visible viewport (minus shell header/paddings) and each column
+          scrolls internally instead of growing the page. */}
+      <div className="grid gap-6 lg:h-[calc(100dvh-13.5rem)] lg:min-h-[480px] lg:grid-cols-[minmax(0,1fr)_390px]">
         {/* Chat console — the main stage. */}
         <AgentChat sites={sites} />
 
         {/* Side rail: phone channel + what the agent has shipped. */}
-        <div className="space-y-6 min-w-0">
+        <div className="min-w-0 space-y-6 lg:h-full lg:overflow-y-auto lg:pr-1">
           <section className="space-y-3">
             <RailLabel icon={<Smartphone className="h-4 w-4" />}>Canal de WhatsApp</RailLabel>
             <AgentConnection agentNumber={agentNumber} identities={identities} sites={sites} scopes={scopes} />

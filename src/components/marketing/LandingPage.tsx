@@ -49,8 +49,10 @@ export default function LandingPage() {
         <Hero />
         <HowItWorks />
         <FeatureBento />
+        <StudioShowcase />
         <CloneSection onGenerate={onGenerate} />
         <Pricing />
+        <Faq />
         <WaitlistHero variant="section" />
       </main>
       <Footer />
@@ -172,10 +174,14 @@ function HowItWorks() {
     <section id="com-funciona" className="px-4 py-24">
       <div className="mx-auto max-w-6xl">
         <SectionHead eyebrow="Com funciona" title="De la idea a l’article publicat, sense obrir l’ordinador." />
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
+        <div className="relative mt-14 grid gap-5 md:grid-cols-3">
+          {/* Gold thread connecting the three steps (desktop only). */}
+          <div className="pointer-events-none absolute left-[12%] right-[12%] top-[3.4rem] hidden h-px bg-gradient-to-r from-accent/0 via-accent/45 to-accent/0 md:block" aria-hidden />
           {steps.map((s, i) => (
             <div key={s.title} className="lift relative rounded-3xl border border-border bg-bg-elevated p-7 shadow-card" data-reveal style={{ '--reveal-delay': `${i * 110}ms` } as React.CSSProperties}>
-              <span className="absolute right-6 top-6 text-5xl font-extrabold text-border">{i + 1}</span>
+              <span className="absolute right-6 top-6 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd769] to-[#e6ad00] text-sm font-extrabold text-[#1a1400] shadow-[0_6px_18px_-6px_rgba(245,188,0,0.6)]">
+                {i + 1}
+              </span>
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
                 <s.icon className="h-6 w-6" />
               </span>
@@ -246,6 +252,111 @@ function BentoCard({ icon: Icon, title, body, children, className = '', featured
       <p className={`mt-2 text-base leading-relaxed text-muted ${featured ? '' : 'flex-1'}`}>{body}</p>
       {children}
     </div>
+  )
+}
+
+/* ─────────────────────── Carma Studio showcase ─────────────────────── */
+// Pure-CSS browser mock: a mini blog with a selected card + floating contextual
+// toolbar — the Studio's direct-manipulation promise, shown instead of told.
+function StudioShowcase() {
+  return (
+    <section className="px-4 py-24">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        {/* Copy */}
+        <div data-reveal>
+          <span className="eyebrow mb-4">Carma Studio</span>
+          <h2 className="text-balance text-3xl font-extrabold tracking-tight text-text sm:text-4xl">
+            Edita el blog sobre la pàgina real.
+          </h2>
+          <p className="mt-4 text-pretty text-lg font-medium leading-relaxed text-muted">
+            Res de panells infinits: cliques l&apos;element que vols canviar i apareixen els seus controls.
+            Cada ajust es veu a l&apos;instant, sobre el teu blog de veritat.
+          </p>
+          <ul className="mt-6 space-y-3">
+            {[
+              'Clica un títol, una targeta o el menú — i edita just allò',
+              'Colors, tipografies i disposició en directe, sense recarregar',
+              'Doble clic per escriure sobre la pàgina mateixa',
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-3 text-base font-medium text-text">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
+                  <Check className="h-3 w-3" strokeWidth={3} />
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
+          <Link href="/registre" className="mt-8 inline-flex items-center gap-2 rounded-2xl border border-border-strong px-6 py-3 text-base font-bold text-text no-underline transition-colors hover:border-accent/50 hover:bg-surface-hover">
+            Prova l&apos;Studio <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {/* Browser mock */}
+        <div className="relative" data-reveal style={{ '--reveal-delay': '140ms' } as React.CSSProperties}>
+          <div className="halo -inset-8 opacity-[0.12]" style={{ background: 'radial-gradient(circle, #f5bc00, transparent 65%)' }} aria-hidden />
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-2xl">
+            {/* Window chrome */}
+            <div className="flex items-center gap-2 border-b border-border bg-surface-subtle px-4 py-2.5">
+              <span className="flex gap-1.5" aria-hidden>
+                <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+              </span>
+              <span className="mx-auto rounded-md bg-bg-elevated px-3 py-0.5 text-[0.68rem] font-semibold text-subtle">
+                la-teva-web.cat/blog
+              </span>
+            </div>
+            {/* Mini blog */}
+            <div className="relative p-5">
+              {/* Site header strip */}
+              <div className="flex items-center justify-between rounded-lg bg-surface-subtle px-3 py-2">
+                <span className="h-2.5 w-14 rounded-full bg-gradient-to-r from-[#ffd769] to-[#e6ad00]" />
+                <span className="flex gap-2" aria-hidden>
+                  <span className="h-2 w-8 rounded-full bg-border" />
+                  <span className="h-2 w-8 rounded-full bg-border" />
+                  <span className="h-2 w-8 rounded-full bg-border" />
+                </span>
+              </div>
+              {/* Cards grid — middle one selected, toolbar floating next to it */}
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className={`rounded-xl border bg-surface p-2.5 ${i === 1 ? 'border-accent outline outline-2 outline-offset-2 outline-accent/60' : 'border-border'}`}
+                  >
+                    <div className={`aspect-[16/10] rounded-lg ${i === 1 ? 'bg-gradient-to-br from-[#ffe9a3] to-[#f5bc00]/60' : 'bg-surface-subtle'}`} />
+                    <span className="mt-2 block h-2 w-4/5 rounded-full bg-border-strong" />
+                    <span className="mt-1.5 block h-1.5 w-full rounded-full bg-border" />
+                    <span className="mt-1 block h-1.5 w-2/3 rounded-full bg-border" />
+                  </div>
+                ))}
+              </div>
+              {/* Floating contextual toolbar — anchored beside the SELECTED card */}
+              <div className="absolute right-[27%] top-[4.4rem] flex items-center gap-1 rounded-xl border border-border bg-bg-elevated px-1.5 py-1 shadow-pop">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-on-accent"><Palette2 /></span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-md text-muted"><TypeGlyph /></span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-md text-muted"><GridGlyph /></span>
+              </div>
+              {/* Floating gold edit button (the live-site entry point) */}
+              <div className="absolute bottom-4 right-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd769] to-[#e6ad00] px-3.5 py-1.5 text-[0.7rem] font-extrabold text-[#1a1400] shadow-[0_10px_24px_-8px_rgba(245,188,0,0.7)]">
+                <PenLine className="h-3 w-3" /> Edita aquest lloc
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// Tiny inline glyphs for the mock toolbar (lucide at 12px reads muddy here).
+function Palette2() { return <span className="block h-3 w-3 rounded-full border-2 border-current" /> }
+function TypeGlyph() { return <span className="text-[0.7rem] font-extrabold leading-none">Aa</span> }
+function GridGlyph() {
+  return (
+    <span className="grid grid-cols-2 gap-[2px]" aria-hidden>
+      {[0, 1, 2, 3].map((i) => <span key={i} className="h-[4.5px] w-[4.5px] rounded-[1.5px] bg-current" />)}
+    </span>
   )
 }
 
@@ -328,6 +439,61 @@ function Perk({ children, gold = false }: { children: React.ReactNode; gold?: bo
       </span>
       {children}
     </li>
+  )
+}
+
+/* ───────────────────────────── FAQ ─────────────────────────── */
+function Faq() {
+  const items = [
+    {
+      q: 'Què fa exactament l’agent de WhatsApp?',
+      a: 'Li envies una nota de veu o un text amb la idea i et torna un article complet: títol, estructura, SEO i metadades. El revises amb un enllaç i el publiques amb un botó. Si vols canvis, li ho dius amb un missatge i els aplica.',
+    },
+    {
+      q: 'El blog es veurà com la meva web?',
+      a: 'Sí. La vareta màgica clona la teva capçalera i el teu peu reals i n’extreu la paleta i les tipografies. El blog neix amb la teva identitat, i el pots afinar en directe amb el Carma Studio.',
+    },
+    {
+      q: 'Necessito targeta per començar?',
+      a: 'No. El pla Free és gratuït per sempre: un blog, l’editor complet i el Studio. Premium s’activa només quan tu vulguis.',
+    },
+    {
+      q: 'Puc importar els articles del meu WordPress?',
+      a: 'Sí — detectem el teu WordPress automàticament i n’importem els articles amb títols, imatges, categories i SEO. També funciona amb altres blogs via RSS o lectura directa.',
+    },
+  ]
+  return (
+    <section className="px-4 pb-24">
+      <div className="mx-auto max-w-3xl">
+        <SectionHead eyebrow="Preguntes" title="El que tothom ens pregunta." />
+        <div className="mt-10 space-y-3">
+          {items.map((it, i) => (
+            <details
+              key={it.q}
+              className="group rounded-2xl border border-border bg-bg-elevated px-5 shadow-card open:pb-5"
+              data-reveal
+              style={{ '--reveal-delay': `${i * 70}ms` } as React.CSSProperties}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-base font-bold text-text [&::-webkit-details-marker]:hidden">
+                {it.q}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-muted transition-transform group-open:rotate-45">
+                  <PlusGlyph />
+                </span>
+              </summary>
+              <p className="text-base leading-relaxed text-muted">{it.a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PlusGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
   )
 }
 

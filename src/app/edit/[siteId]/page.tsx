@@ -10,9 +10,21 @@ import FullscreenStudio from './FullscreenStudio'
 // loads.
 export const dynamic = 'force-dynamic'
 
-export default async function EditSitePage({ params }: { params: Promise<{ siteId: string }> }) {
-  const { siteId } = await params
+export default async function EditSitePage({ params, searchParams }: {
+  params: Promise<{ siteId: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const [{ siteId }, { from }] = await Promise.all([params, searchParams])
   if (!isUuid(siteId)) redirect('/dashboard')
+
+  // Where "Sortir" returns to depends on how the Studio was entered: the
+  // sidebar hub, a site's launcher card, or (default) the live render's
+  // owner button.
+  const exitHref = from === 'studio'
+    ? '/dashboard/studio'
+    : from === 'site'
+      ? `/dashboard/sites/${siteId}`
+      : `/render/${siteId}`
 
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
@@ -37,6 +49,7 @@ export default async function EditSitePage({ params }: { params: Promise<{ siteI
       initialTheme={(theme ?? null) as Theme | null}
       defaultLocale={defaultLocale}
       regenCount={regenCount}
+      exitHref={exitHref}
     />
   )
 }
