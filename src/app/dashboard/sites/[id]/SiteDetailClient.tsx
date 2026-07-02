@@ -2,10 +2,11 @@
 
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle } from 'lucide-react'
+import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import ApiDocsCard from './ApiDocsCard'
 import WordPressConnectCard from './WordPressConnectCard'
+import PublishGuide from './PublishGuide'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
@@ -309,11 +310,7 @@ export default function SiteDetailClient({
             {activeTab === 'connexio' && (
               isSuperAdmin
                 ? <ConnexioTab siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
-                : <PremiumPanel
-                    feature="Connexió i API"
-                    description="Connecta el teu blog al teu lloc web amb la nostra API i els embeds en directe. Disponible al pla Premium."
-                    perks={['Clau d’API privada', 'Embed en directe (Shadow DOM)', 'Endpoints JSON per al teu frontend', 'Domini propi']}
-                  />
+                : <ClientPublishTab siteId={siteId} subdomain={subdomain} />
             )}
 
             {activeTab === 'usuaris' && (
@@ -428,8 +425,13 @@ function SectionSkeleton() {
 // they stay reachable (each shows its upsell) without competing for attention.
 function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) => void }) {
   // Smart Modules is hidden from clients for the MVP (CLIENT_MODULES_ENABLED).
-  const core = SECTION_DEFS.filter(s => !s.premium && (CLIENT_MODULES_ENABLED || s.key !== 'moduls'))
-  const premium = SECTION_DEFS.filter(s => s.premium)
+  // Clients publish via their Carma subdomain (no API/plugin needed), so
+  // "Connexió" is a reachable "Publica" step for them — surfaced as core, not a
+  // locked wall. Only "Usuaris" (team) remains a Premium upsell in the nav.
+  const core = SECTION_DEFS
+    .filter(s => s.key !== 'usuaris' && (CLIENT_MODULES_ENABLED || s.key !== 'moduls'))
+    .map(s => (s.key === 'connexio' ? { ...s, label: 'Publica', desc: 'Posa el blog en línia', icon: Rocket } : s))
+  const premium = SECTION_DEFS.filter(s => s.key === 'usuaris')
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -495,7 +497,7 @@ function ConnexioTab({ siteId, apiKey, subdomain }: { siteId: string; apiKey: st
   const { hasTheme, detectedFramework, detectedHosting } = useThemeStudio()
   return (
     <div className="space-y-4">
-      <WordPressConnectCard siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
+      <WordPressConnectCard siteId={siteId} apiKey={apiKey} subdomain={subdomain} detectedFramework={detectedFramework} />
       <LiveEmbedCard />
       <ApiDocsCard
         apiKey={apiKey}
@@ -506,4 +508,12 @@ function ConnexioTab({ siteId, apiKey, subdomain }: { siteId: string; apiKey: st
       />
     </div>
   )
+}
+
+// Free-user publishing surface: subdomain-first guide + adaptive Premium upsell.
+// Reads the detected CMS from the studio so the WordPress upsell is only shown
+// when relevant. (Premium users get the full ConnexioTab above instead.)
+function ClientPublishTab({ siteId, subdomain }: { siteId: string; subdomain?: string }) {
+  const { detectedFramework } = useThemeStudio()
+  return <PublishGuide siteId={siteId} subdomain={subdomain} detectedFramework={detectedFramework} />
 }

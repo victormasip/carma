@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildArticlePage, buildArticleFragment, buildErrorPage } from '@/lib/render/theme'
+import { adminEditBarScript } from '@/lib/render/adminBar'
 import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { LOCALES, normalizeLocale, isLocale, type Locale } from '@/lib/i18n/config'
 import { tr } from '@/lib/i18n/messages'
-import { isUuid } from '@/lib/sites/domain'
+import { isUuid, appOrigin } from '@/lib/sites/domain'
 import { isModuleOn, type SiteModules } from '@/lib/modules/registry'
 import { buildSampleArticle, buildSamplePosts } from '@/lib/render/samplePosts'
 
@@ -185,7 +186,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const html = buildArticlePage(themeForRender, site.name, siteId, resolution.post, locale, extra)
-  return new Response(html, {
+  // Owner-only "Edit this site" button (self-checking script; keeps HTML cacheable).
+  const withBar = !isPreview && !request.nextUrl.searchParams.has('edit')
+    ? html.replace('</body>', `${adminEditBarScript(siteId, appOrigin(request.headers.get('host')))}\n</body>`)
+    : html
+  return new Response(withBar, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

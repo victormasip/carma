@@ -89,15 +89,19 @@ for (const file of files) {
 }
 
 const centralBuf = Buffer.concat(central)
+// End Of Central Directory record — the map every unzipper reads FIRST to locate
+// the central directory. The field offsets are fixed by the ZIP spec (APPNOTE
+// 4.3.16); getting one wrong yields a file that opens to ZERO entries, which is
+// exactly how WordPress reported "Incompatible Archive / no valid plugins found".
 const eocd = Buffer.alloc(22)
-eocd.writeUInt32LE(0x06054b50, 0)
-eocd.writeUInt16LE(0, 4)
-eocd.writeUInt16LE(0, 6)
-eocd.writeUInt16LE(files.length, 8)
-eocd.writeUInt16LE(files.length, 10)
-eocd.writeUInt32LE(centralBuf.length, 12)
-eocd.writeUInt32LE(offset, 14)
-eocd.writeUInt16LE(0, 20)
+eocd.writeUInt32LE(0x06054b50, 0) // signature
+eocd.writeUInt16LE(0, 4)          // number of this disk
+eocd.writeUInt16LE(0, 6)          // disk with the start of the central directory
+eocd.writeUInt16LE(files.length, 8)  // central-dir records on this disk
+eocd.writeUInt16LE(files.length, 10) // total central-dir records
+eocd.writeUInt32LE(centralBuf.length, 12) // size of central directory (bytes 12–15)
+eocd.writeUInt32LE(offset, 16)    // OFFSET of central directory — MUST be byte 16, not 14
+eocd.writeUInt16LE(0, 20)         // .ZIP comment length
 
 const zip = Buffer.concat([...local, centralBuf, eocd])
 mkdirSync('public', { recursive: true })

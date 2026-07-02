@@ -140,6 +140,10 @@ type ThemeStudio = {
   // Persist an inline edit of the previewed article's headline or lede. No-op when
   // there's no real article (sample preview). Bumps savedAt so the canvas refreshes.
   saveArticleField: (field: 'title' | 'excerpt', value: string) => Promise<void>
+  // Persist an inline edit of ANY feed card's post (title/excerpt), keyed by post
+  // id (the render tags each real card with `data-carma-post`). The card already
+  // shows the edit live, so this is a silent persist — no preview reload.
+  saveCardField: (postId: string, field: 'title' | 'excerpt', value: string) => Promise<void>
   // Body editing (TipTap): load the article's content HTML on entering edit mode,
   // and persist the serialized+sanitized HTML on save (bumps savedAt → preview reload).
   loadArticleBody: () => Promise<string>
@@ -243,6 +247,11 @@ export function ThemeStudioProvider({
       setSavedAt(Date.now()) // refresh the canvas to show the persisted state
     }
   }, [editableArticle, siteId])
+  const saveCardField = useCallback(async (postId: string, field: 'title' | 'excerpt', value: string) => {
+    if (!postId) return
+    const fields = field === 'title' ? { title: value } : { excerpt: value }
+    await updatePostFields(postId, siteId, fields)
+  }, [siteId])
   const loadArticleBody = useCallback(async (): Promise<string> => {
     const art = editableArticle
     if (!art) return ''
@@ -737,7 +746,7 @@ export function ThemeStudioProvider({
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,
     capture, closeCapture, cancelCapture, proceedFromCapture,
-    view, setView, editableArticle, saveArticleField, loadArticleBody, saveArticleBody,
+    view, setView, editableArticle, saveArticleField, saveCardField, loadArticleBody, saveArticleBody,
     tokens, setToken,
     sectionTitle: sectionForLocale, setSectionTitle: setSectionForLocale,
     extractedHeader: headerForLocale, setExtractedHeader: setHeaderForLocale,

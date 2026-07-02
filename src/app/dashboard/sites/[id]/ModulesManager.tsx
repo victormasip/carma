@@ -434,17 +434,21 @@ function ConfigSlideOver({
 
   return (
     <>
+      {/* Transparent click-catcher — keeps the live mobile preview fully visible on
+          the right while you configure on the left (no dim). */}
       <motion.div
-        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 z-[60]"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
         aria-hidden
       />
+      {/* Slides in from the LEFT (over the module grid), so it never covers the
+          right-hand mobile preview — you watch the module change as you tune it. */}
       <motion.aside
         role="dialog"
         aria-label={`Configurar ${def.name}`}
-        className="fixed right-0 top-0 z-[61] h-full w-full max-w-md bg-bg-elevated border-l border-border shadow-premium flex flex-col"
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        className="fixed left-0 top-0 z-[61] h-full w-full max-w-md bg-bg-elevated border-r border-border shadow-premium flex flex-col"
+        initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38, mass: 0.9 }}
       >
         {/* Header */}

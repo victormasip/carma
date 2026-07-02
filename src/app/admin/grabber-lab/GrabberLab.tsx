@@ -37,6 +37,7 @@ import {
 } from '@/lib/grabber-lab/types'
 import { diagnoseCapture, type DiagSeverity } from '@/lib/grabber-lab/diagnose'
 import LabPreview from './LabPreview'
+import LabDomPanel from './LabDomPanel'
 
 // Auto-diagnostics severity → dot colour + score-ring tint.
 const SEV_DOT: Record<DiagSeverity, string> = { pass: 'bg-success', warn: 'bg-warning', fail: 'bg-danger' }
@@ -475,6 +476,16 @@ export default function GrabberLab({ recent }: { recent: LabSampleListItem[] }) 
                 </div>
               )}
             </Card>
+          )}
+
+          {/* DOM pattern analysis — structural fingerprint of the captured chrome */}
+          {capture && (
+            <LabDomPanel
+              header={capture.rawHeader}
+              footer={capture.rawFooter}
+              head={capture.rawHead}
+              perfectHtml={perfectHtml}
+            />
           )}
 
           {/* Ground-truth overrides (editable) */}

@@ -16,7 +16,7 @@ import TipTapEditor from '@/components/editor/TipTapEditor'
 import Button from '@/components/ui/Button'
 import KnotLoader from '@/components/ui/KnotLoader'
 import { useThemeStudio } from '../ThemeStudioContext'
-import type { Device } from './StudioCanvas'
+import type { Device } from './types'
 
 export default function StudioBodyEditor({ device, onClose }: { device: Device; onClose: () => void }) {
   const { siteId, tokens, editableArticle, loadArticleBody, saveArticleBody } = useThemeStudio()

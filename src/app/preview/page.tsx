@@ -10,7 +10,9 @@ import { createClient } from '@/lib/supabase/client'
 import { normalizeUrl, displayUrl as toDisplay } from '@/lib/onboarding/url'
 
 // Auto-advance to the wall after this long (a calm 30s — long enough to look,
-// short enough to keep the funnel moving).
+// short enough to keep the funnel moving). The countdown starts when the clone
+// FINISHES loading, not on mount, so a slower capture never robs the visitor of
+// their look at the result.
 const AUTO_ADVANCE_MS = 30_000
 
 function PreviewInner() {
@@ -46,10 +48,19 @@ function PreviewInner() {
     return () => { cancelled = true }
   }, [url, router])
 
-  // 30s auto-advance to the wall.
+  // 30s to look — but the countdown only starts once the clone is on screen, so a
+  // slow capture never pushes the visitor to signup before they've seen the result.
+  useEffect(() => {
+    if (!url || !loaded) return
+    const t = setTimeout(() => router.push(unlockRef.current), AUTO_ADVANCE_MS)
+    return () => clearTimeout(t)
+  }, [url, loaded, router])
+
+  // Independent hard cap: if the iframe never signals load (a hang or a blocked
+  // site), the funnel must still move rather than sit forever on the preview.
   useEffect(() => {
     if (!url) return
-    const t = setTimeout(() => router.push(unlockRef.current), AUTO_ADVANCE_MS)
+    const t = setTimeout(() => router.push(unlockRef.current), 60_000)
     return () => clearTimeout(t)
   }, [url, router])
 

@@ -4,8 +4,11 @@ import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText, decodeEntities } f
 import { buildExtractedHead } from '@/lib/scrape/headerFooter'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { extractTokens } from '@/lib/scrape/tokens'
+import { detectBlogSignature, findBlogIndexUrl } from '@/lib/scrape/blogDetect'
 import { absolutiseCssUrls, extractFontFaceCss, proxyFontsInCss, proxyUseHref } from '@/lib/scrape/clientCss'
 import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
+import { buildSamplePosts } from '@/lib/render/samplePosts'
+import { isLocale, type Locale } from '@/lib/i18n/config'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -57,14 +60,21 @@ function normalize(raw: string): string {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`
 }
 
-const DUMMY = [
-  { cat: 'Editorial', title: 'La història que volem explicar', excerpt: 'Un primer article d’exemple, amb la teva veu i el teu estil, llest per editar.' },
-  { cat: 'Notícies', title: 'Novetats d’aquesta temporada', excerpt: 'Comparteix les últimes novetats amb el teu públic, sense fricció.' },
-  { cat: 'Guia', title: 'Com en treiem el màxim partit', excerpt: 'Consells pràctics, ben escrits i fàcils de llegir de dalt a baix.' },
-  { cat: 'Reportatge', title: 'Una mirada de prop', excerpt: 'Històries que connecten amb la teva audiència i reforcen la teva marca.' },
-  { cat: 'Opinió', title: 'El que de debò importa', excerpt: 'La teva perspectiva, publicada amb un disseny a la seva alçada.' },
-  { cat: 'Cultura', title: 'Idees que inspiren', excerpt: 'Contingut que la gent vol llegir fins al final i tornar a visitar.' },
-]
+// The site's primary language from <html lang> / og:locale, mapped to a supported
+// locale — so the preview's sample articles, section heading and date formatting
+// speak the visitor's language instead of always defaulting to Catalan.
+function detectPreviewLocale(root: ReturnType<typeof parse>): Locale {
+  const candidates = [
+    root.querySelector('html')?.getAttribute('lang'),
+    root.querySelector('meta[property="og:locale"]')?.getAttribute('content'),
+  ]
+  for (const c of candidates) {
+    if (!c) continue
+    const base = c.toLowerCase().replace('_', '-').split('-')[0]
+    if (isLocale(base)) return base
+  }
+  return 'ca'
+}
 
 // Gather inline + (capped) external CSS for token extraction, plus the font-sheet
 // links to re-emit. Keeps the document's cascade order roughly intact.
@@ -118,9 +128,39 @@ export async function GET(request: NextRequest) {
   const res = await safeFetch(url, { accept: 'text/html,*/*', timeout: 14_000 }).catch(() => null)
   if (!res?.body) return fail('No hem pogut accedir a aquesta web. Comprova l’adreça i torna-ho a provar.', 502)
 
-  const base = new URL(url)
-  const html = res.body
-  const root = parse(html, { blockTextElements: { script: false, style: true, pre: true } })
+  const PARSE_OPTS = { blockTextElements: { script: false, style: true, pre: true } }
+  let base = new URL(url)
+  let html = res.body
+  let root = parse(html, PARSE_OPTS)
+
+  // Brand name from the HOMEPAGE — captured BEFORE any switch to the blog index,
+  // whose <title> is often just "Blog". og:site_name is the reliable source.
+  const rawName = root.querySelector('meta[property="og:site_name"]')?.getAttribute('content')
+    ?? root.querySelector('title')?.text
+    ?? ''
+  const siteName = decodeEntities(rawName.replace(/\s+/g, ' ').trim()).split(/[·|–—-]/)[0].trim().slice(0, 60)
+    || base.hostname.replace(/^www\./, '')
+
+  // "Clone the news page, not the home": when handed a site ROOT, prefer the
+  // site's blog/news index for the clone. Its chrome (a clean header + a short
+  // footer) is what the blog should mirror — not the entire homepage flattened
+  // into a giant "footer" with the feed wedged near the top. This matches the
+  // post-signup capture (/api/theme/analyze), so the preview looks like the blog
+  // the user will actually get. Best-effort — any failure keeps the homepage.
+  const isRootUrl = base.pathname === '/' || base.pathname === ''
+  if (isRootUrl) {
+    const blogIndex = findBlogIndexUrl(root, base)
+    if (blogIndex && blogIndex !== url && isSafeUrl(blogIndex)) {
+      const blogRes = await safeFetch(blogIndex, { accept: 'text/html,*/*', timeout: 10_000 }).catch(() => null)
+      if (blogRes?.body) {
+        try {
+          root = parse(blogRes.body, PARSE_OPTS)
+          html = blogRes.body
+          base = new URL(blogIndex)
+        } catch { /* keep the homepage capture */ }
+      }
+    }
+  }
 
   // 1. The client's real <head> assets (their CSS + fonts), absolutised, with the
   //    client's own stylesheets routed through the asset proxy so icon fonts load.
@@ -143,11 +183,14 @@ export async function GET(request: NextRequest) {
     extractedHead = `${extractedHead}\n<style data-carma-fontfix>${fontFaceCss.replace(/<\/style/gi, '<\\/style')}</style>`
   }
 
-  const rawTitle = root.querySelector('meta[property="og:site_name"]')?.getAttribute('content')
-    ?? root.querySelector('title')?.text
-    ?? ''
-  const siteName = decodeEntities(rawTitle.replace(/\s+/g, ' ').trim()).split(/[·|–—-]/)[0].trim().slice(0, 60)
-    || base.hostname.replace(/^www\./, '')
+  // The site's real language, so the preview speaks the visitor's tongue.
+  const locale = detectPreviewLocale(root)
+
+  // Smart card detection (task 4): `root` is the blog index when we found one, so
+  // we detect the repeating article-card pattern directly on it. The feed then
+  // mirrors THEIR cards (columns, radius, shadow, image aspect, title) via
+  // buildNativeCardCss instead of a generic grid.
+  const blogSignature = detectBlogSignature({ root, cssTexts, base, blogUrlOverride: null })
 
   const theme = {
     extracted_head: extractedHead,
@@ -156,32 +199,23 @@ export async function GET(request: NextRequest) {
     extracted_body_attrs: split.bodyAttrs || null,
     design_tokens: tokens,
     font_links: fontLinks,
-    section_title: 'El blog',
-    default_locale: 'ca',
+    // null → buildListingPage uses the locale-correct "Articles" label.
+    section_title: null,
+    default_locale: locale,
+    blog_signature: blogSignature,
   }
 
-  const now = Date.now()
-  const posts = DUMMY.map((d, i) => ({
-    id: `preview-${i}`,
-    title: d.title,
-    slug: `preview-${i}`,
-    content: { html: `<p>${d.excerpt}</p>` },
-    excerpt: d.excerpt,
-    featured_image: null,
-    categories: [d.cat],
-    tags: [],
-    author_name: 'Equip',
-    created_at: new Date(now - i * 86_400_000 * 3).toISOString(),
-    is_published: true,
-    default_locale: 'ca',
-  }))
+  // Rich, clearly-labelled DEMO articles: real cover images + the `demo` flag that
+  // drives the "sample articles" banner and per-card badges, localized to the
+  // detected language. Stamp default_locale so the whole feed aligns to it.
+  const posts = buildSamplePosts(locale, siteName).map(p => ({ ...p, default_locale: locale }))
 
   const page = buildListingPage(
     theme as Parameters<typeof buildListingPage>[0],
     siteName,
     'preview',
     posts as Parameters<typeof buildListingPage>[3],
-    'ca',
+    locale,
   )
 
   // Make every link/form inert so the visitor can't navigate inside the preview

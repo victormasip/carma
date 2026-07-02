@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildListingPage, buildListingFragment, buildErrorPage } from '@/lib/render/theme'
+import { adminEditBarScript } from '@/lib/render/adminBar'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import { normalizeLocale } from '@/lib/i18n/config'
 import { tr } from '@/lib/i18n/messages'
-import { isUuid } from '@/lib/sites/domain'
+import { isUuid, appOrigin } from '@/lib/sites/domain'
 
 // Reading the query string opts this handler out of static prerender (live
 // embeds carry token overrides per request). The CDN still caches per full URL
@@ -97,7 +98,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const html = buildListingPage(themeForRender, site.name, siteId, renderPosts, locale)
-  return new Response(html, {
+  // Owner-only "Edit this site" button — injected as a self-checking script (keeps
+  // the HTML cacheable). Never inside the Studio's own iframe (edit/preview).
+  const withBar = !isPreview && !request.nextUrl.searchParams.has('edit')
+    ? html.replace('</body>', `${adminEditBarScript(siteId, appOrigin(request.headers.get('host')))}\n</body>`)
+    : html
+  return new Response(withBar, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

@@ -11,8 +11,9 @@
 // embed itself is public, so this panel is purely about handing over credentials.
 
 import { useState, type ReactNode } from 'react'
-import { Plug, Download, KeyRound, Globe, Copy, Check } from 'lucide-react'
+import { Plug, Download, KeyRound, Globe, Copy, Check, Sparkles, Layers } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { isWordPress } from '@/lib/render/publishing'
 
 function CopyField({ label, value, icon: Icon, mono = true }: { label: string; value: string; icon: typeof KeyRound; mono?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -57,13 +58,24 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   )
 }
 
-export default function WordPressConnectCard({ siteId, apiKey, subdomain }: { siteId: string; apiKey: string; subdomain?: string }) {
+export default function WordPressConnectCard({ siteId, apiKey, subdomain, detectedFramework }: { siteId: string; apiKey: string; subdomain?: string; detectedFramework?: string | null }) {
   const siteIdValue = subdomain || siteId
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const selfHosted = !!origin && origin !== 'https://carma.cat'
+  const wp = isWordPress(detectedFramework)
 
   return (
-    <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+    <div className={cn('bg-surface border rounded-2xl overflow-hidden', wp ? 'border-accent/40 ring-1 ring-accent/15' : 'border-border')}>
+      {/* When we detected WordPress on the client's site, this IS the recommended
+          publishing method — surface it prominently over the API/proxy options. */}
+      {wp && (
+        <div className="flex items-center gap-2 px-6 py-2.5 bg-accent-soft border-b border-accent/20">
+          <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
+          <p className="text-xs font-bold text-accent">
+            Recomanat per al teu lloc · hem detectat <span className="uppercase tracking-wide">WordPress</span>
+          </p>
+        </div>
+      )}
       <div className="p-6 pb-4 border-b border-border flex items-start gap-3.5">
         <span className="w-11 h-11 rounded-xl bg-[#21759b]/10 text-[#21759b] flex items-center justify-center shrink-0">
           <Plug className="w-5 h-5" />
@@ -77,6 +89,15 @@ export default function WordPressConnectCard({ siteId, apiKey, subdomain }: { si
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Header/footer behaviour — made explicit so there's zero uncertainty about
+            how the final site looks with the plugin (vs. the cloned-chrome subdomain). */}
+        <div className="flex items-start gap-2.5 rounded-xl bg-surface-subtle border border-border px-3.5 py-3">
+          <Layers className="w-4 h-4 text-[#21759b] shrink-0 mt-0.5" />
+          <p className="text-xs text-muted leading-relaxed">
+            <span className="font-semibold text-text">Sobre la capçalera i el peu:</span> amb el plugin, el blog s&apos;insereix dins una pàgina de WordPress i <span className="font-semibold text-text">no porta capçalera ni peu clonats</span>. El teu propi tema de WordPress ja hi posa la navegació, la capçalera i el peu — així el blog s&apos;integra net dins el teu web.
+          </p>
+        </div>
+
         {/* Credentials to copy */}
         <div className="grid sm:grid-cols-2 gap-3">
           <CopyField label="Clau API" value={apiKey} icon={KeyRound} />

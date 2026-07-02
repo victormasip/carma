@@ -684,19 +684,30 @@ export function modulesRuntimeScript(modules: SiteModules | null | undefined, si
   function init(){
     var R=root(); if(!R) return;
     var host=document.querySelector('.carma-embed-host');
+    // Cards/announce carry \`display:...!important\` in the template CSS, so a plain
+    // inline \`display=none\` is IGNORED. Toggle with an inline !important instead
+    // (highest priority) and revert by REMOVING the property (back to the sheet).
+    function showEl(el,show){if(!el)return;if(show){el.style.removeProperty('display');}else{el.style.setProperty('display','none','important');}}
     // ── dark mode (respects the saved pref, else the module's default) ──
     try{var pref=localStorage.getItem('carma-theme');var dbtn=R.querySelector('[data-carma-darktoggle]');var def=dbtn?dbtn.getAttribute('data-carma-dark-default'):null;var sysDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var wantDark=pref?(pref==='dark'):(def==='dark'||(def==='system'&&sysDark));if(wantDark&&host)host.setAttribute('data-carma-theme','dark');}catch(e){}
     R.querySelectorAll('[data-carma-darktoggle]').forEach(function(b){b.addEventListener('click',function(){var sr=b.getRootNode();var h=sr&&sr.host?sr.host:host;if(!h)return;var on=h.getAttribute('data-carma-theme')==='dark';if(on){h.removeAttribute('data-carma-theme');}else{h.setAttribute('data-carma-theme','dark');}try{localStorage.setItem('carma-theme',on?'light':'dark');}catch(e){}});});
-    // ── feed filtering (search + categories), real-time on every keystroke ──
-    var cards=[].slice.call(R.querySelectorAll('.carma-card'));
-    var term='',cat='';
+    // ── feed filtering (search + categories): instant, accent-insensitive, multi-term ──
+    // Diacritics are folded on BOTH the query and the indexed card text (Catalan/
+    // Spanish content is full of them), and every whitespace-separated token must
+    // match (AND), so "barca lliga" finds "Barça · Lliga". The searchable text is
+    // pre-folded once per card so each keystroke is a cheap substring scan.
+    function fold(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');}
+    var cards=[].slice.call(R.querySelectorAll('.carma-card')).map(function(c){return {el:c,txt:fold(c.getAttribute('data-carma-search')||''),cats:(c.getAttribute('data-carma-cats')||'')};});
+    var hero=R.querySelector('.carma-mod-hero');
+    var terms=[],cat='';
     var counts=R.querySelectorAll('[data-carma-search-count]');
     // Live "no results" state: a filtered-to-empty feed used to be a blank void that
     // read as broken. Inject a message after the grid and toggle it as the user types.
     var grid=R.querySelector('.carma-grid');var noRes=null;
     if(grid&&grid.parentNode){noRes=document.createElement('p');noRes.className='carma-mod-noresults';noRes.setAttribute('data-carma-noresults','');noRes.hidden=true;noRes.textContent='No s\\u2019ha trobat cap article.';grid.parentNode.insertBefore(noRes,grid.nextSibling);}
-    function apply(){var vis=0;cards.forEach(function(c){var t=(c.getAttribute('data-carma-search')||'').toLowerCase();var cs=(c.getAttribute('data-carma-cats')||'');var okT=!term||t.indexOf(term)>=0;var okC=!cat||cs.split(',').indexOf(cat)>=0;var show=okT&&okC;c.style.display=show?'':'none';if(show)vis++;});counts.forEach(function(el){if(term||cat){el.hidden=false;el.textContent=vis+' '+(vis===1?'resultat':'resultats');}else{el.hidden=true;}});if(noRes)noRes.hidden=!((term||cat)&&vis===0);}
-    R.querySelectorAll('[data-carma-search-input]').forEach(function(i){i.addEventListener('input',function(){term=(i.value||'').toLowerCase().trim();apply();});i.addEventListener('search',function(){term=(i.value||'').toLowerCase().trim();apply();});});
+    function apply(){var q=terms.length>0;var vis=0;for(var k=0;k<cards.length;k++){var c=cards[k],okT=true;for(var j=0;j<terms.length;j++){if(c.txt.indexOf(terms[j])<0){okT=false;break;}}var okC=!cat||(','+c.cats+',').indexOf(','+cat+',')>=0;var show=okT&&okC;showEl(c.el,show);if(show)vis++;}if(hero)showEl(hero,!(q||cat));counts.forEach(function(el){if(q||cat){el.hidden=false;el.textContent=vis+' '+(vis===1?'resultat':'resultats');}else{el.hidden=true;el.textContent='';}});if(noRes)noRes.hidden=!((q||cat)&&vis===0);}
+    function setTerm(v){terms=fold(v).split(/\\s+/).filter(Boolean);apply();}
+    R.querySelectorAll('[data-carma-search-input]').forEach(function(i){i.addEventListener('input',function(){setTerm(i.value);});i.addEventListener('search',function(){setTerm(i.value);});});
     R.querySelectorAll('[data-carma-cat]').forEach(function(b){b.addEventListener('click',function(){cat=b.getAttribute('data-carma-cat')||'';R.querySelectorAll('[data-carma-cat]').forEach(function(x){x.classList.toggle('is-active',x===b);});apply();});});
     R.querySelectorAll('[data-carma-cat-select]').forEach(function(sel){sel.addEventListener('change',function(){cat=sel.value||'';apply();});});
     // expandable search
@@ -708,7 +719,7 @@ export function modulesRuntimeScript(modules: SiteModules | null | undefined, si
     if(cmd){cmd.addEventListener('click',function(e){if(e.target===cmd)openCmd(false);});}
     document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();openCmd(true);}if(e.key==='Escape')openCmd(false);});
     // ── announcement dismiss ──
-    R.querySelectorAll('[data-carma-announce-close]').forEach(function(b){b.addEventListener('click',function(){var a=b.closest('[data-carma-announce]');if(a)a.style.display='none';});});
+    R.querySelectorAll('[data-carma-announce-close]').forEach(function(b){b.addEventListener('click',function(){var a=b.closest('[data-carma-announce]');if(a)showEl(a,false);});});
     // ── reading progress + back-to-top ──
     var bars=[].slice.call(R.querySelectorAll('[data-carma-progress] span'));
     var circs=[].slice.call(R.querySelectorAll('[data-carma-progress-circle] .carma-mod-progc-fg'));

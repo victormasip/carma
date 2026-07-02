@@ -14,7 +14,10 @@ export async function userCanWriteSite(
   userId: string,
   siteId: string,
 ): Promise<boolean> {
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single()
+  // maybeSingle (not single) so a missing/RLS-blocked profile row returns null
+  // instead of throwing — a superadmin was silently failing the role check on some
+  // sites when this errored before the membership fallback could run.
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
   if (profile?.role === 'superadmin') return true
 
   const { data } = await supabase

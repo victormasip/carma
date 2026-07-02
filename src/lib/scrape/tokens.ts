@@ -66,6 +66,18 @@ export type DesignTokens = {
   headingLineHeight?: string       // e.g. '1.2'
   blockquoteBorderColor?: string   // border-left color, defaults to accent
   blockquoteStyle?: 'italic' | 'normal'
+  // ── Buttons — the brand's primary CTA styling, so the blog's buttons
+  // (article CTAs, "read more") feel like they were drawn by the same designer.
+  // All optional; the renderer falls back to accent-on-white when absent.
+  buttonBg?: string                // primary button background
+  buttonText?: string              // primary button text color
+  buttonRadius?: string            // button border-radius, e.g. '9999px'
+  buttonPaddingY?: string          // vertical padding, e.g. '0.75rem'
+  buttonPaddingX?: string          // horizontal padding, e.g. '1.5rem'
+  buttonWeight?: string            // font-weight, '400'..'900'
+  buttonBorder?: string            // border shorthand (outline/ghost buttons)
+  buttonShadow?: string            // box-shadow
+  buttonTextTransform?: 'uppercase' | 'none' | 'capitalize' | 'lowercase'
   // ── "Look & Feel" preset marker (dashboard picker, src/lib/render/stylePresets.ts).
   // Purely informational for the UI; the render only reads the tokens above.
   stylePreset?: string
@@ -432,6 +444,65 @@ export function extractTokens(opts: {
   if (bqBorder && isColor(bqBorder)) tokens.blockquoteBorderColor = bqBorder.trim()
   const bqStyle = ruleFor(s => has(s, ['blockquote', '.quote']), 'font-style')
   if (bqStyle && /italic|normal/i.test(bqStyle)) tokens.blockquoteStyle = bqStyle.toLowerCase().includes('italic') ? 'italic' : 'normal'
+
+  // ── Buttons ──
+  // Find the site's PRIMARY button and mirror its look on the blog's CTAs. We
+  // prefer a "primary/cta/solid" variant (the filled brand button) and fall back
+  // to any generic button/.btn rule. Heuristic + solid: we read only clean,
+  // self-contained values (a colour, a length, a keyword) — anything ambiguous is
+  // skipped so the renderer keeps its on-brand accent default.
+  const BTN_PRIMARY = /(\.(btn|button)[-_](primary|cta|main|solid|accent|brand|fill|filled))|(\.(cta|btn-primary|button-primary))/
+  const BTN_ANY = /(^|[\s,>+~])(button|\.btn|\.button)(?![\w-])|input\[type=["']?(submit|button)/
+  const btnDecl = (prop: string): string | null =>
+    ruleFor(s => BTN_PRIMARY.test(s), prop) ?? ruleFor(s => BTN_ANY.test(s), prop)
+
+  const btnBg = btnDecl('background-color') ?? btnDecl('background')
+  if (btnBg) {
+    const raw = btnBg.trim()
+    // A gradient is a legitimate brand button fill; keep it whole. A bare colour
+    // (incl. rgb()/hsl() with internal spaces) is used as-is. For the `background`
+    // shorthand (colour + image + position) pull just the first colour token —
+    // splitting on whitespace would shred an rgb(…) value, so match it directly.
+    if (/gradient\(/i.test(raw)) tokens.buttonBg = raw
+    else if (isColor(raw)) tokens.buttonBg = raw
+    else {
+      const m = raw.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i)
+      if (m) tokens.buttonBg = m[0]
+    }
+  }
+  const btnColor = btnDecl('color')
+  if (btnColor && isColor(btnColor)) tokens.buttonText = btnColor.trim()
+  const btnRadius = btnDecl('border-radius')
+  if (btnRadius) {
+    const r = btnRadius.trim().split(/\s+/)[0]
+    if (/^[\d.]+(px|rem|em)$/.test(r) || r === '9999px' || /^\d+%$/.test(r)) tokens.buttonRadius = r
+  }
+  const btnPadding = btnDecl('padding')
+  if (btnPadding) {
+    const parts = btnPadding.trim().split(/\s+/).filter(Boolean)
+    const okLen = (v: string) => /^[\d.]+(px|rem|em)$/.test(v)
+    // padding shorthand: 1 → all; 2 → y x; 3 → t x b; 4 → t r b l.
+    const y = parts[0]
+    const x = parts.length >= 2 ? parts[1] : parts[0]
+    if (y && okLen(y)) tokens.buttonPaddingY = y
+    if (x && okLen(x)) tokens.buttonPaddingX = x
+  }
+  const btnWeight = btnDecl('font-weight')
+  if (btnWeight) {
+    const w = btnWeight.trim().toLowerCase()
+    if (/^[1-9]00$/.test(w)) tokens.buttonWeight = w
+    else if (w === 'bold') tokens.buttonWeight = '700'
+    else if (w === 'normal') tokens.buttonWeight = '400'
+  }
+  const btnBorder = btnDecl('border')
+  if (btnBorder && /\d/.test(btnBorder) && /solid|dashed|dotted/i.test(btnBorder) && btnBorder.length < 80) tokens.buttonBorder = btnBorder.trim()
+  const btnShadow = btnDecl('box-shadow')
+  if (btnShadow && btnShadow.toLowerCase() !== 'none' && btnShadow.length < 140) tokens.buttonShadow = btnShadow.trim()
+  const btnTransform = btnDecl('text-transform')
+  if (btnTransform) {
+    const tt = btnTransform.trim().toLowerCase()
+    if (tt === 'uppercase' || tt === 'capitalize' || tt === 'lowercase' || tt === 'none') tokens.buttonTextTransform = tt
+  }
 
   return tokens
 }

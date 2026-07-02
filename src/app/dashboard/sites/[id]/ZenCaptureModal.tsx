@@ -15,6 +15,7 @@ import { Wand2, Check, AlertCircle, ArrowRight, RefreshCw, Download } from 'luci
 import type { CaptureStepId } from '@/lib/render/captureProgress'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import { captureChromeNote } from '@/lib/render/publishing'
 import { useThemeStudio } from './ThemeStudioContext'
 
 // Soft, human one-liners — one per pipeline step. Deliberately NOT the technical
@@ -29,7 +30,7 @@ const RUNNING_COPY: Record<CaptureStepId, string> = {
 }
 
 export default function ZenCaptureModal() {
-  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework } = useThemeStudio()
+  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework, isPremium } = useThemeStudio()
   const { open, phase, pct, activeStep } = capture
 
   // When the captured site is WordPress, its articles can be imported next — so
@@ -48,11 +49,14 @@ export default function ZenCaptureModal() {
     : phase === 'error' ? 'No ha anat bé'
     : RUNNING_COPY[activeStep ?? 'fetch']
 
+  // On success, the subline answers "…and how does this go live?" — plan- and
+  // CMS-aware (subdomain inherits the cloned chrome; the WP plugin defers to the
+  // theme). WordPress captures also invite the article import that follows.
   const subline =
     phase === 'success'
       ? (isWordPress
-          ? 'El teu blog ja llueix com el teu lloc. Hem detectat WordPress: pots importar els teus articles ara.'
-          : 'El teu blog ja llueix com el teu lloc.')
+          ? `Hem detectat WordPress: pots importar els teus articles ara. ${captureChromeNote(detectedFramework, isPremium)}`
+          : `El teu blog ja llueix com el teu lloc. ${captureChromeNote(detectedFramework, isPremium)}`)
     : phase === 'error' ? (capture.error ?? 'Torna-ho a provar d’aquí a un moment.')
     : host ? `des de ${host}` : 'Hi treballem ara mateix…'
 

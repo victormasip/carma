@@ -14,6 +14,7 @@ import { CAPTURE_STEPS, type CaptureStepStatus } from '@/lib/render/captureProgr
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import ZenCaptureModal from './ZenCaptureModal'
+import { captureChromeNote } from '@/lib/render/publishing'
 import { useThemeStudio, type CaptureNotice } from './ThemeStudioContext'
 
 /**
@@ -23,7 +24,7 @@ import { useThemeStudio, type CaptureNotice } from './ThemeStudioContext'
  * state, no overwhelm.
  */
 export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: boolean }) {
-  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework } = useThemeStudio()
+  const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework, isPremium } = useThemeStudio()
   const { open, phase, pct, steps, stepDetail, notices } = capture
 
   if (!isSuperAdmin) return <ZenCaptureModal />
@@ -63,7 +64,7 @@ export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: bool
               </h2>
               <p className="text-xs text-muted mt-0.5 truncate">
                 {phase === 'success'
-                  ? 'El header i el footer ja són components natius i aïllats.'
+                  ? captureChromeNote(detectedFramework, isPremium)
                   : phase === 'error'
                     ? (capture.error ?? 'Hi ha hagut un error durant la captura.')
                     : host || 'Reconstruint la identitat visual amb IA…'}

@@ -90,6 +90,38 @@ export function blogHost(subdomain: string, currentHost?: string): string | null
   return null
 }
 
+/**
+ * Origin of the MAIN app (where the dashboard + auth cookie live), as seen from a
+ * render request. Used by the "Edit this site" button so a blog served on a tenant
+ * subdomain talks to the app (cookie + /edit) cross-origin instead of to itself.
+ * Returns '' when the render is already same-origin with the app (dev on the app
+ * host), so the button can safely use relative URLs.
+ */
+export function appOrigin(host?: string | null): string {
+  const explicit = (process.env.NEXT_PUBLIC_APP_URL || '').trim()
+  if (explicit) return explicit.replace(/\/+$/, '')
+  const root = rootDomain()
+  if (root) return `https://${root}`
+  // Dev: derive http://localhost:<port> from a *.localhost render host.
+  if (host) {
+    const [h, port] = host.split(':')
+    if (h === 'localhost' || h.endsWith('.localhost')) return `http://localhost${port ? `:${port}` : ''}`
+  }
+  return ''
+}
+
+/** True when `origin` (a request Origin header) is the app apex/www or a tenant
+ *  subdomain of the configured root — the set allowed to call owner-only endpoints
+ *  cross-origin. In dev (no root) allows localhost + *.localhost. */
+export function isAllowedAppOrigin(origin: string | null | undefined): boolean {
+  if (!origin) return false
+  let host: string
+  try { host = new URL(origin).hostname.toLowerCase() } catch { return false }
+  const root = rootDomain()
+  if (!root) return host === 'localhost' || host.endsWith('.localhost')
+  return host === root || host === `www.${root}` || host.endsWith(`.${root}`)
+}
+
 /** Full public blog URL, or null if the host can't be derived. */
 export function publicBlogUrl(
   subdomain: string,

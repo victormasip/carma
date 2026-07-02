@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
+    "build:wp": "node scripts/build-wp-zip.mjs",
+    "prebuild": "node scripts/build-wp-zip.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

@@ -271,6 +271,12 @@ a[role="button"]:active {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
+/* Right-side drawer (Carma Studio chrome editor). */
+@keyframes slidein {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* ── TipTap / ProseMirror editor styles — premium, distraction-free surface ──
    Honest WYSIWYG: measure (70ch), line-height (1.75), paragraph rhythm and the
    heading ladder all MATCH the public render's prose CSS (theme.ts), so what a

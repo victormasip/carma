@@ -1,32 +1,40 @@
 'use client'
 
-// Carma Studio — the premium, real-time, inline theme editor. Canvas-first: a
-// live device-framed preview you edit by clicking regions; a contextual inspector
-// on the right; undo/redo + autosave. Replaces the old ThemeManager panel. Mounts
-// inside the existing <ThemeStudioProvider> (so state, autosave and capture are
-// unchanged); the capture progress modal still lives in SiteDetailClient.
+// Carma Studio — the premium, pure-inline theme editor.
+//
+// A Framer-style infinite canvas (StudioStage) you edit by clicking directly on
+// the live blog: every element pops a floating contextual toolbar, text edits in
+// place, header/footer open a dedicated drawer. The only non-element surface is
+// the site-wide "Global" panel (brand, typography, layout), opened from the top
+// bar. Mounts inside the existing <ThemeStudioProvider> so state, autosave and
+// capture are unchanged; the capture progress modal still lives in SiteDetailClient.
 
 import { useEffect, useState } from 'react'
-import { Wand2, Globe, Newspaper, AlertCircle, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { Wand2, Globe, Newspaper, AlertCircle, X, Paintbrush } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Modal, ModalClose } from '@/components/ui/Modal'
 import { PremiumPanel } from '../PremiumGate'
 import { useThemeStudio } from '../ThemeStudioContext'
 import StudioTopBar from './StudioTopBar'
-import StudioCanvas, { type Device } from './StudioCanvas'
-import StudioInspector from './StudioInspector'
-import type { RegionId } from './regions'
+import StudioStage from './StudioStage'
+import { RegionControls } from './StudioToolbar'
+import type { Device } from './types'
+import { cn } from '@/lib/cn'
 
-export default function CarmaStudio({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+export default function CarmaStudio({ isSuperAdmin, fullscreen = false, exitHref }: {
+  isSuperAdmin: boolean
+  /** Fill the viewport (the /edit/<id> "edit on your live site" experience). */
+  fullscreen?: boolean
+  /** When set, the top bar shows an exit link back to the live site. */
+  exitHref?: string
+}) {
   const s = useThemeStudio()
   const [device, setDevice] = useState<Device>('desktop')
-  const [region, setRegion] = useState<RegionId>('global')
-  // The inspector collapses so the live canvas can use the full width — fixes the
-  // cramped, "narrow embedded iframe" feel when both panels fight for space.
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [globalOpen, setGlobalOpen] = useState(false)
+  const [interact, setInteract] = useState(false)
 
-  // Cmd/Ctrl+Z undo · Cmd/Ctrl+Shift+Z redo — but never hijack native undo while
-  // the user is typing in an inspector field.
+  // Cmd/Ctrl+Z undo · Cmd/Ctrl+Shift+Z redo — never hijack native undo while
+  // typing in a field or a contenteditable.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return
@@ -40,34 +48,27 @@ export default function CarmaStudio({ isSuperAdmin }: { isSuperAdmin: boolean })
     return () => window.removeEventListener('keydown', onKey)
   }, [s])
 
-  if (!s.hasTheme) return <EmptyStudio />
+  if (!s.hasTheme) return <EmptyStudio fullscreen={fullscreen} />
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] min-h-[620px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
-      <StudioTopBar device={device} setDevice={setDevice} isSuperAdmin={isSuperAdmin} />
+    <div className={cn(
+      'flex flex-col overflow-hidden',
+      fullscreen ? 'h-full' : 'h-[calc(100vh-6.5rem)] min-h-[620px] rounded-2xl border border-border bg-surface shadow-card',
+    )}>
+      <StudioTopBar
+        device={device}
+        setDevice={setDevice}
+        isSuperAdmin={isSuperAdmin}
+        globalOpen={globalOpen}
+        onToggleGlobal={() => setGlobalOpen((o) => !o)}
+        interact={interact}
+        onToggleInteract={() => setInteract((i) => !i)}
+        exitHref={exitHref}
+      />
 
       <div className="relative flex min-h-0 flex-1">
-        <StudioCanvas region={region} onRegion={setRegion} device={device} />
-
-        {/* Seam rail carrying the collapse toggle — always reachable, sits just left
-            of the inspector (or at the far edge when the inspector is hidden). */}
-        <div className="relative hidden md:block">
-          <button
-            type="button"
-            onClick={() => setInspectorOpen((o) => !o)}
-            aria-label={inspectorOpen ? 'Amagar el panell' : 'Mostrar el panell'}
-            title={inspectorOpen ? 'Amagar el panell' : 'Mostrar el panell'}
-            className="absolute -left-10 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/95 text-muted shadow-card backdrop-blur transition-colors hover:text-text hover:bg-surface-hover"
-          >
-            {inspectorOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-          </button>
-        </div>
-
-        {inspectorOpen && (
-          <div className="hidden w-[380px] shrink-0 md:block xl:w-[420px]">
-            <StudioInspector region={region} onRegion={setRegion} />
-          </div>
-        )}
+        <StudioStage device={device} interact={interact} />
+        {globalOpen && !interact && <GlobalPanel onClose={() => setGlobalOpen(false)} />}
       </div>
 
       {/* Freemium upsell when a free user exhausts their regeneration. */}
@@ -92,11 +93,32 @@ export default function CarmaStudio({ isSuperAdmin }: { isSuperAdmin: boolean })
   )
 }
 
-// No theme yet → the capture prompt (Magic Wand). The progress modal that opens on
-// `grab()` is rendered globally by SiteDetailClient.
-function EmptyStudio() {
-  const { url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab } = useThemeStudio()
+// Site-wide settings that aren't tied to a single element — brand, typography,
+// layout look. A light left-docked panel opened from the top bar.
+function GlobalPanel({ onClose }: { onClose: () => void }) {
   return (
+    <div className="absolute left-4 top-4 z-40 w-[300px] overflow-hidden rounded-2xl border border-border bg-bg-elevated/95 shadow-pop backdrop-blur">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-soft text-accent"><Paintbrush className="h-3.5 w-3.5" /></span>
+          <span className="text-xs font-bold text-text">Tema global</span>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Tancar" className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-subtle transition-colors hover:bg-surface-hover hover:text-text">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="max-h-[calc(100vh-13rem)] overflow-y-auto p-3">
+        <RegionControls region="global" />
+      </div>
+    </div>
+  )
+}
+
+// No theme yet → the capture prompt (Magic Wand). The progress modal that opens on
+// `grab()` is rendered globally by SiteDetailClient (or FullscreenStudio).
+function EmptyStudio({ fullscreen = false }: { fullscreen?: boolean }) {
+  const { url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab } = useThemeStudio()
+  const card = (
     <div className="rounded-2xl border border-border bg-surface p-10 text-center">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent">
         <Wand2 className="h-6 w-6" />
@@ -143,4 +165,7 @@ function EmptyStudio() {
       )}
     </div>
   )
+  return fullscreen
+    ? <div className="flex h-full items-center justify-center p-6">{card}</div>
+    : card
 }

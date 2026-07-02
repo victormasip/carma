@@ -375,6 +375,32 @@ function clampLineHeight(raw: string | undefined, fallback: number, min: number,
   return String(Math.min(max, Math.max(min, n)))
 }
 
+// Strip anything that could break out of a CSS declaration/rule. Scraped token
+// values flow into a <style> block, so every interpolated value passes through
+// this first (the values are also regex-validated at extraction time).
+function cssValueSafe(v: string | undefined | null, fallback: string): string {
+  const s = (v ?? '').trim()
+  if (!s) return fallback
+  return /[{}<>;]/.test(s) ? fallback : s
+}
+
+// The brand's primary-button styling (detected in tokens.ts) applied to the
+// article CTA, so a "read more" / call-to-action on the blog looks like the
+// buttons on the source site. Falls back to the on-brand accent pill.
+function buildButtonCss(t: DesignTokens): string {
+  const bg = cssValueSafe(t.buttonBg, 'var(--ct-accent)')
+  const color = cssValueSafe(t.buttonText, '#fff')
+  const weight = cssValueSafe(t.buttonWeight, '700')
+  const py = cssValueSafe(t.buttonPaddingY, '.7rem')
+  const px = cssValueSafe(t.buttonPaddingX, '1.5rem')
+  const radius = cssValueSafe(t.buttonRadius, 'var(--ct-radius)')
+  const border = t.buttonBorder ? `border:${cssValueSafe(t.buttonBorder, 'none')}!important;` : ''
+  const shadow = t.buttonShadow ? `box-shadow:${cssValueSafe(t.buttonShadow, 'none')}!important;` : ''
+  const transform = t.buttonTextTransform ? `text-transform:${cssValueSafe(t.buttonTextTransform, 'none')}!important;` : ''
+  return `.carma-article-content a.carma-button{display:inline-block!important;background:${bg}!important;color:${color}!important;font-weight:${weight}!important;padding:${py} ${px}!important;border-radius:${radius}!important;${border}${shadow}${transform}text-decoration:none!important;transition:opacity .2s ease,transform .2s ease!important}
+.carma-article-content a.carma-button:hover{opacity:.9!important;transform:translateY(-1px)!important}`
+}
+
 function buildTemplateCss(t: DesignTokens): string {
   return `
 :root{
@@ -478,6 +504,15 @@ html,body{margin:0;padding:0;background:var(--ct-bg)}
 .carma-card-link:hover .carma-card-title{color:var(--ct-accent)!important}
 .carma-card{position:relative!important}
 .carma-card-demo{position:absolute!important;top:.7rem!important;left:.7rem!important;z-index:3!important;display:inline-flex!important;align-items:center!important;background:rgba(17,24,39,.9)!important;color:#fff!important;font-size:.62rem!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important;padding:.3rem .6rem!important;border-radius:999px!important;box-shadow:0 2px 10px rgba(0,0,0,.28)!important;pointer-events:none!important}
+/* Preview-only "these are sample articles" banner — elegant + on-brand (never a
+   warning box), shown ONLY when the whole feed is demo content, so a real,
+   empty blog never shows it and visitors never see it (demo posts are preview-only). */
+.carma-demo-banner{display:flex!important;align-items:center!important;gap:.85rem!important;margin:0 0 1.6rem!important;padding:.85rem 1.1rem!important;border:1px solid color-mix(in srgb,var(--ct-accent) 32%,transparent)!important;background:color-mix(in srgb,var(--ct-accent) 8%,var(--ct-surface))!important;border-radius:var(--ct-radius-lg)!important}
+.carma-demo-banner-chip{display:inline-flex!important;align-items:center!important;gap:.35rem!important;flex-shrink:0!important;font-size:.68rem!important;font-weight:800!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:var(--ct-accent)!important;background:color-mix(in srgb,var(--ct-accent) 16%,transparent)!important;padding:.3rem .6rem!important;border-radius:999px!important;line-height:1!important}
+.carma-demo-banner-text{min-width:0!important}
+.carma-demo-banner-title{font-family:var(--ct-font-heading)!important;font-weight:800!important;font-size:.95rem!important;color:var(--ct-text)!important;margin:0!important;line-height:1.3!important}
+.carma-demo-banner-desc{color:var(--ct-muted)!important;font-size:.85rem!important;margin:.12rem 0 0!important;line-height:1.5!important}
+@media (max-width:560px){.carma-demo-banner{align-items:flex-start!important;flex-direction:column!important;gap:.55rem!important}}
 
 /* Article — magazine-grade typography with a centered prose column and
    media that "bleeds" out for breathing room. Fluid type via clamp() scales
@@ -598,7 +633,7 @@ ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!i
 .carma-article-content .carma-button-wrap[data-align=center]{text-align:center!important}
 .carma-article-content .carma-button-wrap[data-align=right]{text-align:right!important}
 .carma-article-content a.carma-button{display:inline-block!important;background:var(--ct-accent)!important;color:#fff!important;font-weight:700!important;padding:.7rem 1.5rem!important;border-radius:var(--ct-radius)!important;text-decoration:none!important;transition:opacity .2s ease!important}
-.carma-article-content a.carma-button:hover{opacity:.88!important}
+${buildButtonCss(t)}
 
 /* Empty state */
 .carma-empty{text-align:center!important;padding:4.5rem 2rem!important;background:var(--ct-surface)!important;border:2px dashed var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;max-width:560px!important;margin:0 auto!important}
@@ -959,6 +994,39 @@ const DEMO_BADGE: Record<UiLocale, string> = {
   en: 'Sample article',
 }
 
+// The preview-only banner shown above a fully-demo feed, so a user in onboarding /
+// theme-selection instantly understands these are examples of how THEIR blog will
+// look — never mistaking them for imported content. Kept warm + confident (not a
+// "placeholder" apology) so the preview still inspires.
+const DEMO_BANNER: Record<UiLocale, { chip: string; title: string; desc: string }> = {
+  ca: {
+    chip: 'Vista prèvia',
+    title: 'Articles de mostra',
+    desc: 'Aquests exemples ensenyen com quedarà el teu blog amb aquest disseny. Publica els teus articles i substituiran la mostra a l’instant.',
+  },
+  es: {
+    chip: 'Vista previa',
+    title: 'Artículos de muestra',
+    desc: 'Estos ejemplos muestran cómo quedará tu blog con este diseño. Publica tus artículos y sustituirán la muestra al instante.',
+  },
+  en: {
+    chip: 'Preview',
+    title: 'Sample articles',
+    desc: 'These examples show how your blog will look with this design. Publish your own and they’ll replace the samples instantly.',
+  },
+}
+
+function buildDemoBanner(locale: Locale): string {
+  const b = DEMO_BANNER[uiLocale(locale)] ?? DEMO_BANNER.ca
+  return `<div class="carma-demo-banner" role="note">
+  <span class="carma-demo-banner-chip">✦ ${escapeHtml(b.chip)}</span>
+  <span class="carma-demo-banner-text">
+    <p class="carma-demo-banner-title">${escapeHtml(b.title)}</p>
+    <p class="carma-demo-banner-desc">${escapeHtml(b.desc)}</p>
+  </span>
+</div>`
+}
+
 function buildCard(post: Post, siteId: string, locale: Locale): string {
   const loc = localizePost(post, locale)
   // Each card links to THIS post's slug in the listing's current language. The
@@ -981,7 +1049,11 @@ function buildCard(post: Post, siteId: string, locale: Locale): string {
   const demoBadge = post.demo
     ? `<span class="carma-card-demo">${escapeHtml(DEMO_BADGE[uiLocale(locale)] ?? DEMO_BADGE.ca)}</span>`
     : ''
-  return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}">${demoBadge}<a class="carma-card-link" href="${escapeAttr(href)}">
+  // Real posts carry their id so the Theme Studio can map a clicked card back to
+  // the post and inline-edit its title/excerpt. Demo/sample cards get no id (not
+  // editable — there's nothing to persist).
+  const postIdAttr = post.demo ? '' : ` data-carma-post="${escapeAttr(post.id)}"`
+  return `<article class="carma-card" data-carma-cats="${escapeAttr(cats)}" data-carma-search="${escapeAttr(searchText)}"${postIdAttr}>${demoBadge}<a class="carma-card-link" href="${escapeAttr(href)}">
   ${media}
   <div class="carma-card-body">
     <div class="carma-meta">${cat}<time datetime="${escapeAttr(loc.created_at)}">${escapeHtml(formatDate(loc.created_at, locale))}</time></div>
@@ -1112,6 +1184,11 @@ function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts:
   const bodySwitcher = buildLangSwitcher(available, feedLocale, urlForLocale)
 
   const sectionTitle = localizedSectionTitle(theme, locale)
+  // Preview-only: when EVERY visible card is demo content, surface a clear banner
+  // so sample articles are never mistaken for imported/real posts. Demo posts are
+  // injected only under ?preview, so this never shows on the public render.
+  const isDemoFeed = visiblePosts.length > 0 && visiblePosts.every(p => p.demo)
+  const demoBanner = isDemoFeed ? buildDemoBanner(locale) : ''
   const feed = visiblePosts.length === 0
     ? buildEmptyState(siteName, locale)
     : `<div class="carma-grid">\n${visiblePosts.map(p => buildCard(p, siteId, feedLocale)).join('\n')}\n</div>`
@@ -1127,6 +1204,7 @@ function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts:
 <main class="carma-root carma-main">
 ${bodySwitcher}
 ${head}
+${demoBanner}
 ${parts.beforeFeed}
 ${feed}
 ${parts.afterFeed}
