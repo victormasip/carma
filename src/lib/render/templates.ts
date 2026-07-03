@@ -28,6 +28,9 @@ export type BlogTemplate = {
   swatch: { bg: string; surface: string; text: string; accent: string; border: string }
   header: (siteName: string) => TemplateChrome
   footer: (siteName: string) => TemplateChrome
+  /** Smart Modules this look ships with ON (registry ids) — applied via the
+   *  merge-only enableModules action, so the user can flip any off in Mòduls. */
+  modules?: string[]
 }
 
 function esc(s: string): string {
@@ -48,6 +51,7 @@ const aperture: BlogTemplate = {
   id: 'aperture',
   name: 'Aperture',
   tagline: 'Estudi minimalista: molt aire, tipografia precisa i un sol accent. Modern i atemporal.',
+  modules: ['search', 'readingProgress'],
   sectionTitle: 'Journal',
   fontLinks: [GF('Inter+Tight:wght@400;500;600;700;800'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -55,7 +59,7 @@ const aperture: BlogTemplate = {
     colorText: '#0a0a0a', colorMuted: '#6b7280', colorBorder: '#ececec',
     fontHeading: "'Inter Tight', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif",
     baseFontSize: '17px', radius: '12px', radiusLg: '20px', maxWidth: '1180px',
-    layout: 'grid', columns: '3',
+    layout: 'grid', columns: '3', feedLayout: 'minimal',
     sectionTitleColor: '#0a0a0a', sectionTitleSize: '2.6rem', sectionTitleWeight: '800', sectionTitleAlign: 'left',
     headingWeight: '700', linkColor: '#4f46e5', linkUnderline: 'hover',
   },
@@ -101,6 +105,7 @@ const editorial: BlogTemplate = {
   id: 'editorial',
   name: 'Editorial',
   tagline: 'Revista de luxe: serif de display, paper càlid i un masthead elegant. Per a publicacions amb veu.',
+  modules: ['newsletter', 'relatedPosts'],
   sectionTitle: 'Actualitat',
   fontLinks: [GF('Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700'), GF('Inter:wght@400;500;600;700')],
   tokens: {
@@ -108,7 +113,7 @@ const editorial: BlogTemplate = {
     colorText: '#1c1714', colorMuted: '#7c6f64', colorBorder: '#e7ddcf',
     fontHeading: "'Fraunces', Georgia, 'Times New Roman', serif", fontBody: "'Inter', system-ui, sans-serif",
     baseFontSize: '18px', radius: '6px', radiusLg: '12px', maxWidth: '1160px',
-    layout: 'grid', columns: '2',
+    layout: 'grid', columns: '2', feedLayout: 'editorial',
     sectionTitleColor: '#1c1714', sectionTitleSize: '2.9rem', sectionTitleWeight: '600', sectionTitleAlign: 'center',
     headingWeight: '600', blockquoteStyle: 'italic', blockquoteBorderColor: '#b5451f', linkColor: '#b5451f', linkUnderline: 'always',
   },
@@ -150,6 +155,7 @@ const beacon: BlogTemplate = {
   id: 'beacon',
   name: 'Beacon',
   tagline: 'Magazine atrevit: tipografia potent, una barra d’accent vibrant i graella de 3 columnes. Energètic.',
+  modules: ['search', 'categoryFilters'],
   sectionTitle: 'El blog',
   fontLinks: [GF('Archivo:wght@500;600;700;800;900'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -157,7 +163,7 @@ const beacon: BlogTemplate = {
     colorText: '#0b1020', colorMuted: '#64748b', colorBorder: '#e6e8ee',
     fontHeading: "'Archivo', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif",
     baseFontSize: '16px', radius: '14px', radiusLg: '22px', maxWidth: '1280px',
-    layout: 'grid', columns: '3',
+    layout: 'grid', columns: '3', feedLayout: 'magazine',
     sectionTitleColor: '#0b1020', sectionTitleSize: '2.8rem', sectionTitleWeight: '900', sectionTitleAlign: 'left',
     headingWeight: '800', linkColor: '#e11d48', linkUnderline: 'hover',
   },
@@ -207,6 +213,7 @@ const noir: BlogTemplate = {
   id: 'noir',
   name: 'Noir',
   tagline: 'Mode fosc premium: negre profund, accent neó i tipografia geomètrica. Atrevit i tecnològic.',
+  modules: ['search', 'socialShare'],
   sectionTitle: 'Latest',
   fontLinks: [GF('Space+Grotesk:wght@500;600;700'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -214,7 +221,7 @@ const noir: BlogTemplate = {
     colorText: '#eef2f6', colorMuted: '#8b94a3', colorBorder: '#20242c',
     fontHeading: "'Space Grotesk', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif",
     baseFontSize: '16px', radius: '14px', radiusLg: '20px', maxWidth: '1220px',
-    layout: 'grid', columns: '3',
+    layout: 'grid', columns: '3', feedLayout: 'overlay',
     sectionTitleColor: '#ffffff', sectionTitleSize: '2.5rem', sectionTitleWeight: '700', sectionTitleAlign: 'left',
     headingWeight: '600', linkColor: '#5eead4', linkUnderline: 'hover',
   },
@@ -260,6 +267,7 @@ const terra: BlogTemplate = {
   id: 'terra',
   name: 'Terra',
   tagline: 'Editorial càlid per a lifestyle i benestar: tons sorra, serif suau i molta calma. Acollidor.',
+  modules: ['newsletter', 'socialShare'],
   sectionTitle: 'Stories',
   fontLinks: [GF('Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -267,7 +275,7 @@ const terra: BlogTemplate = {
     colorText: '#2c2622', colorMuted: '#857a6d', colorBorder: '#e6dccb',
     fontHeading: "'Newsreader', Georgia, serif", fontBody: "'Inter', system-ui, sans-serif",
     baseFontSize: '18px', radius: '16px', radiusLg: '26px', maxWidth: '1120px',
-    layout: 'grid', columns: '2',
+    layout: 'grid', columns: '2', feedLayout: 'gridxl',
     sectionTitleColor: '#2c2622', sectionTitleSize: '2.6rem', sectionTitleWeight: '500', sectionTitleAlign: 'center',
     headingWeight: '500', blockquoteStyle: 'italic', blockquoteBorderColor: '#a3672f', linkColor: '#a3672f', linkUnderline: 'always',
   },
@@ -312,6 +320,7 @@ const carma: BlogTemplate = {
   id: 'carma',
   name: 'Carma',
   tagline: 'La nostra identitat de casa: paper càlid, daurat i Plus Jakarta Sans. Premium, net i acollidor.',
+  modules: ['search', 'relatedPosts'],
   sectionTitle: 'El blog',
   fontLinks: [GF('Plus+Jakarta+Sans:wght@400;500;600;700;800')],
   tokens: {
@@ -319,7 +328,7 @@ const carma: BlogTemplate = {
     colorText: '#1c1917', colorMuted: '#78716c', colorBorder: '#ece8e1',
     fontHeading: "'Plus Jakarta Sans', system-ui, sans-serif", fontBody: "'Plus Jakarta Sans', system-ui, sans-serif",
     baseFontSize: '18px', radius: '14px', radiusLg: '24px', maxWidth: '1180px',
-    layout: 'grid', columns: '3',
+    layout: 'grid', columns: '3', feedLayout: 'gridxl',
     sectionTitleColor: '#1c1917', sectionTitleSize: '2.7rem', sectionTitleWeight: '800', sectionTitleAlign: 'left',
     headingWeight: '800', linkColor: '#a87f00', linkUnderline: 'hover', blockquoteBorderColor: '#f5bc00',
   },
@@ -365,7 +374,121 @@ const carma: BlogTemplate = {
   }),
 }
 
-export const BLOG_TEMPLATES: readonly BlogTemplate[] = [carma, aperture, editorial, beacon, noir, terra]
+// ─── 7. Pulse — SaaS/tech: geometric type, violet gradient, crisp UI ──────────
+const pulse: BlogTemplate = {
+  id: 'pulse',
+  name: 'Pulse',
+  tagline: 'Tech i SaaS: tipografia geomètrica, degradat violeta i una interfície nítida. Ràpid i modern.',
+  modules: ['search', 'darkModeToggle'],
+  sectionTitle: 'Changelog & blog',
+  fontLinks: [GF('Space+Grotesk:wght@500;600;700'), GF('Inter:wght@400;500;600')],
+  tokens: {
+    colorPrimary: '#101322', colorAccent: '#7c3aed', colorBg: '#fbfbfe', colorSurface: '#ffffff',
+    colorText: '#101322', colorMuted: '#5b6172', colorBorder: '#e7e7f2',
+    fontHeading: "'Space Grotesk', system-ui, sans-serif", fontBody: "'Inter', system-ui, sans-serif",
+    baseFontSize: '16px', radius: '12px', radiusLg: '18px', maxWidth: '1240px',
+    layout: 'grid', columns: '3', feedLayout: 'compact',
+    sectionTitleColor: '#101322', sectionTitleSize: '2.4rem', sectionTitleWeight: '700', sectionTitleAlign: 'left',
+    headingWeight: '700', linkColor: '#7c3aed', linkUnderline: 'hover',
+    buttonBg: 'linear-gradient(135deg,#7c3aed,#5b21b6)', buttonText: '#ffffff', buttonRadius: '10px', buttonWeight: '600',
+  },
+  swatch: { bg: '#fbfbfe', surface: '#ffffff', text: '#101322', accent: '#7c3aed', border: '#e7e7f2' },
+  header: (s) => ({
+    html: `<header class="cx-pu-h"><div class="cx-pu-in">
+  <a class="cx-pu-brand" href="#"><span class="cx-pu-logo">▲</span>${esc(s)}</a>
+  <nav class="cx-pu-nav">${['Producte', 'Blog', 'Docs', 'Preus'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+  <div class="cx-pu-actions"><a class="cx-pu-ghost" href="#">Entra</a><a class="cx-pu-cta" href="#">Prova-ho gratis</a></div>
+</div></header>`,
+    css: `
+.cx-pu-h{position:sticky;top:0;z-index:20;background:rgba(251,251,254,.85);backdrop-filter:saturate(160%) blur(12px);-webkit-backdrop-filter:saturate(160%) blur(12px);border-bottom:1px solid #e7e7f2}
+.cx-pu-in{display:flex;align-items:center;gap:1.75rem;max-width:1240px;margin:0 auto;padding:.85rem 1.5rem}
+.cx-pu-brand{display:inline-flex;align-items:center;gap:.55rem;font-family:'Space Grotesk',system-ui,sans-serif;font-size:1.15rem;font-weight:700;letter-spacing:-.02em;color:#101322;text-decoration:none}
+.cx-pu-logo{display:inline-flex;align-items:center;justify-content:center;width:1.7rem;height:1.7rem;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;font-size:.7rem}
+.cx-pu-nav{display:flex;align-items:center;gap:1.5rem;margin-left:.75rem}
+.cx-pu-nav a{font-family:'Inter',system-ui,sans-serif;font-size:.88rem;font-weight:500;color:#5b6172;text-decoration:none;transition:color .15s ease}
+.cx-pu-nav a:hover{color:#101322}
+.cx-pu-actions{display:flex;align-items:center;gap:.65rem;margin-left:auto}
+.cx-pu-ghost{font-family:'Inter',system-ui,sans-serif;font-size:.86rem;font-weight:600;color:#101322;text-decoration:none;padding:.5rem .8rem;border-radius:9px}
+.cx-pu-ghost:hover{background:#f0eefb}
+.cx-pu-cta{font-family:'Inter',system-ui,sans-serif;font-size:.86rem;font-weight:600;color:#fff;background:linear-gradient(135deg,#7c3aed,#5b21b6);padding:.55rem 1rem;border-radius:10px;text-decoration:none;box-shadow:0 8px 20px -10px rgba(124,58,237,.55);transition:transform .15s ease,box-shadow .15s ease}
+.cx-pu-cta:hover{transform:translateY(-1px);box-shadow:0 12px 26px -10px rgba(124,58,237,.65)}
+@media (max-width:760px){.cx-pu-nav,.cx-pu-ghost{display:none}.cx-pu-in{padding:.75rem 1.1rem}}`,
+  }),
+  footer: (s) => ({
+    html: `<footer class="cx-pu-f"><div class="cx-pu-fin">
+  <div class="cx-pu-fbrand"><a class="cx-pu-fb" href="#"><span class="cx-pu-logo">▲</span>${esc(s)}</a><p>Construïm en públic. Novetats, guies i canvis, cada setmana.</p></div>
+  <nav class="cx-pu-fnav"><span class="cx-pu-fh">Recursos</span>${['Blog', 'Docs', 'Changelog', 'Estat'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+  <nav class="cx-pu-fnav"><span class="cx-pu-fh">Empresa</span>${['Sobre', 'Contacte', 'Privacitat'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+</div><div class="cx-pu-fbar"><span>© ${YEAR} ${esc(s)}</span><span>Sistema operatiu ✓</span></div></footer>`,
+    css: `
+.cx-pu-f{background:#0d1020;color:#c9cbdd}
+.cx-pu-fin{display:flex;flex-wrap:wrap;gap:2.75rem;justify-content:space-between;max-width:1240px;margin:0 auto;padding:3.25rem 1.5rem 2.25rem}
+.cx-pu-fb{display:inline-flex;align-items:center;gap:.55rem;font-family:'Space Grotesk',system-ui,sans-serif;font-size:1.1rem;font-weight:700;color:#fff;text-decoration:none}
+.cx-pu-fbrand p{margin:.8rem 0 0;font-family:'Inter',system-ui,sans-serif;font-size:.9rem;color:#8f93ab;max-width:23rem;line-height:1.65}
+.cx-pu-fnav{display:flex;flex-direction:column;gap:.55rem}
+.cx-pu-fh{font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#6d7190;margin-bottom:.35rem}
+.cx-pu-fnav a{font-family:'Inter',system-ui,sans-serif;font-size:.9rem;font-weight:500;color:#c9cbdd;text-decoration:none}
+.cx-pu-fnav a:hover{color:#a78bfa}
+.cx-pu-fbar{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:space-between;max-width:1240px;margin:0 auto;padding:1.25rem 1.5rem;border-top:1px solid #1d2136;font-family:'Inter',system-ui,sans-serif;font-size:.8rem;color:#6d7190}`,
+  }),
+}
+
+// ─── 8. Atelier — high-fashion luxe: huge serif, ivory & ink, hairline rules ──
+const atelier: BlogTemplate = {
+  id: 'atelier',
+  name: 'Atelier',
+  tagline: 'Luxe fred: serif enorme, marfil i tinta, filets fins i majúscules espaiades. Per a marques amb aura.',
+  modules: ['newsletter', 'socialShare'],
+  sectionTitle: 'Le Journal',
+  fontLinks: [GF('Cormorant+Garamond:wght@400;500;600'), GF('Jost:wght@300;400;500;600')],
+  tokens: {
+    colorPrimary: '#141210', colorAccent: '#8a6d3b', colorBg: '#f8f6f1', colorSurface: '#fdfcf9',
+    colorText: '#141210', colorMuted: '#7d7668', colorBorder: '#e4dfd3',
+    fontHeading: "'Cormorant Garamond', Georgia, serif", fontBody: "'Jost', system-ui, sans-serif",
+    baseFontSize: '17px', radius: '0px', radiusLg: '0px', maxWidth: '1200px',
+    layout: 'grid', columns: '3', feedLayout: 'overlay',
+    sectionTitleColor: '#141210', sectionTitleSize: '3.2rem', sectionTitleWeight: '500', sectionTitleAlign: 'center',
+    headingWeight: '500', linkColor: '#8a6d3b', linkUnderline: 'always',
+    buttonBg: '#141210', buttonText: '#f8f6f1', buttonRadius: '0px', buttonWeight: '500', buttonTextTransform: 'uppercase',
+  },
+  swatch: { bg: '#f8f6f1', surface: '#fdfcf9', text: '#141210', accent: '#8a6d3b', border: '#e4dfd3' },
+  header: (s) => ({
+    html: `<header class="cx-at-h">
+  <div class="cx-at-top"><span>Nova col·lecció</span><a href="#">Descobreix-la</a></div>
+  <div class="cx-at-mast"><a class="cx-at-brand" href="#">${esc(s)}</a></div>
+  <nav class="cx-at-nav">${['Journal', 'Col·leccions', 'Atelier', 'Contacte'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+</header>`,
+    css: `
+.cx-at-h{background:#f8f6f1;border-bottom:1px solid #141210}
+.cx-at-top{display:flex;align-items:center;justify-content:center;gap:.8rem;background:#141210;color:#f8f6f1;font-family:'Jost',system-ui,sans-serif;font-size:.72rem;font-weight:400;letter-spacing:.22em;text-transform:uppercase;padding:.5rem 1rem}
+.cx-at-top a{color:#d8c49a;text-decoration:underline;text-underline-offset:3px}
+.cx-at-mast{text-align:center;padding:1.6rem 1rem 1.1rem}
+.cx-at-brand{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(2.2rem,6vw,3.6rem);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:#141210;text-decoration:none;line-height:1}
+.cx-at-brand:hover{color:#8a6d3b}
+.cx-at-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2.4rem;border-top:1px solid #e4dfd3;max-width:1200px;margin:0 auto;padding:.9rem 1rem}
+.cx-at-nav a{font-family:'Jost',system-ui,sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:#3d382f;text-decoration:none;transition:color .15s ease}
+.cx-at-nav a:hover{color:#8a6d3b}
+@media (max-width:640px){.cx-at-nav{gap:1.3rem}.cx-at-top span{display:none}}`,
+  }),
+  footer: (s) => ({
+    html: `<footer class="cx-at-f"><div class="cx-at-fin">
+  <a class="cx-at-fbrand" href="#">${esc(s)}</a>
+  <p class="cx-at-fm">Peces úniques, històries lentes. Escrit des de l'atelier.</p>
+  <nav class="cx-at-fnav">${['Journal', 'Col·leccions', 'Atelier', 'Contacte'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
+</div><div class="cx-at-fbar"><span>© ${YEAR} ${esc(s)}</span><span>Fet a mà</span></div></footer>`,
+    css: `
+.cx-at-f{background:#141210;color:#cfc9bb;text-align:center}
+.cx-at-fin{max-width:1200px;margin:0 auto;padding:3.5rem 1.5rem 2rem}
+.cx-at-fbrand{font-family:'Cormorant Garamond',Georgia,serif;font-size:2rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:#f8f6f1;text-decoration:none}
+.cx-at-fm{margin:1rem auto 0;font-family:'Jost',system-ui,sans-serif;font-size:.92rem;font-weight:300;color:#a49d8d;max-width:26rem;line-height:1.7}
+.cx-at-fnav{display:flex;flex-wrap:wrap;justify-content:center;gap:2rem;margin-top:1.9rem}
+.cx-at-fnav a{font-family:'Jost',system-ui,sans-serif;font-size:.74rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:#cfc9bb;text-decoration:none}
+.cx-at-fnav a:hover{color:#d8c49a}
+.cx-at-fbar{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:space-between;max-width:1200px;margin:0 auto;padding:1.25rem 1.5rem;border-top:1px solid #2a261f;font-family:'Jost',system-ui,sans-serif;font-size:.76rem;letter-spacing:.08em;color:#7d7668}`,
+  }),
+}
+
+export const BLOG_TEMPLATES: readonly BlogTemplate[] = [carma, aperture, editorial, pulse, beacon, atelier, noir, terra]
 
 export function getTemplate(id: string): BlogTemplate | undefined {
   return BLOG_TEMPLATES.find(t => t.id === id)

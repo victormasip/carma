@@ -139,8 +139,12 @@ export default function SiteDetailClient({
   }
 
   // ── Onboarding coordination ──
-  const handleMagicWandStarted = () => {
-    wpImportIntent.current = true
+  // `importArticles` comes from the onboarding chooser: a FULL blog clone wants
+  // the source's articles imported after the capture; a styles-only clone (or
+  // cloning someone ELSE's blog — never their content) does not. Default true
+  // preserves the self-serve funnel's historic behaviour.
+  const handleMagicWandStarted = (opts?: { importArticles?: boolean }) => {
+    wpImportIntent.current = opts?.importArticles ?? true
     onboardingFlow.current = true
     setOnboardingDone(true)
     // Self-serve (arrived with a clone URL): drop the user straight onto Articles —
@@ -174,14 +178,16 @@ export default function SiteDetailClient({
   // "Comencem" / "Editar el tema"). THIS is the moment we advance the onboarding.
   const handleCaptureProceed = ({ framework }: { framework: string | null }) => {
     const url = captureInfo.current.url
-    if (wpImportIntent.current && framework === 'wordpress') {
-      // WordPress: open the article import; the layout picker follows once the
-      // import modal closes (see ImportModal onClose below).
+    void framework // import is no longer WP-only — discover handles WP API, RSS and HTML
+    if (wpImportIntent.current) {
+      // Full-clone intent: open the article import (auto-discover runs against
+      // the source — WordPress API, RSS or HTML scraping, whichever it has).
+      // The layout picker follows once the import modal closes (onClose below).
       wpImportIntent.current = false
       setImportUrl(url)
       setShowImport(true)
     } else if (onboardingFlow.current) {
-      // Non-WordPress onboarding capture → the layout picker.
+      // Styles-only onboarding capture → straight to the layout picker.
       setShowLayoutPicker(true)
     }
   }

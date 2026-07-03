@@ -678,7 +678,10 @@ export function ThemeStudioProvider({
     setChromeI18n({})
     setEditLocale(chromeDefaultLocale)
     setActive(true)
-  }, [chromeDefaultLocale])
+    // Each look ships with its matching Smart Modules ON (search, newsletter…)
+    // — merge-only + best-effort, adjustable from the Mòduls tab.
+    if (tpl.modules?.length) void enableModules(siteId, tpl.modules).catch(() => {})
+  }, [chromeDefaultLocale, siteId])
 
   const removeTheme = useCallback(async () => {
     const result = await deleteTheme(siteId)
