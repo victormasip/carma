@@ -21,7 +21,9 @@ export default async function StudioHubPage() {
   const sites = (data ?? []) as { id: string; name: string; subdomain?: string | null }[]
 
   if (sites.length === 0) redirect('/benvinguda')
-  if (sites.length === 1) redirect(`/edit/${sites[0].id}?from=studio`)
+  // from=home, NOT from=studio: exiting back to this hub would just redirect
+  // into the Studio again — a single-site user could never leave.
+  if (sites.length === 1) redirect(`/edit/${sites[0].id}?from=home`)
 
   return (
     <div className="space-y-8">

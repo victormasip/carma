@@ -56,6 +56,13 @@ export default function StudioStage({ device, interact }: { device: Device; inte
   // State mirror of the stage node so JSX below can pass it as a prop without
   // reading a ref during render (react-hooks/refs).
   const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null)
+  // The "click an element" hint auto-retires after a few seconds so it never
+  // squats over the canvas (async timeout callback — lint-safe).
+  const [hintDismissed, setHintDismissed] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setHintDismissed(true), 7000)
+    return () => clearTimeout(t)
+  }, [])
 
   const deviceWidth = DEVICE_WIDTH[device]
   const framed = device !== 'desktop'
@@ -375,8 +382,9 @@ export default function StudioStage({ device, interact }: { device: Device; inte
         />
       )}
 
-      {/* Empty-state hint (edit mode only). */}
-      {!sel && !loading && !editingBody && !interact && (
+      {/* One-time onboarding hint — it must never squat on the canvas: it
+          fades out by itself after a few seconds (or at the first selection). */}
+      {!hintDismissed && !sel && !loading && !editingBody && !interact && (
         <div className="pointer-events-none absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-bg-elevated/90 px-3.5 py-1.5 text-xs font-semibold text-muted shadow-card backdrop-blur">
           <MousePointerClick className="h-3.5 w-3.5 text-accent" />
           Clica un element per editar-ne l&apos;estil · doble clic a un títol, text o targeta per escriure-hi

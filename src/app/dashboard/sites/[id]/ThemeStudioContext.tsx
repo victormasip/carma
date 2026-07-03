@@ -105,6 +105,8 @@ type ThemeStudio = {
   // unsure (BUG 2 fallback). Sent with the capture; seeded from the saved signature.
   blogUrl: string
   setBlogUrl: (v: string) => void
+  /** The captured source origin ('' for template themes — no URL to regenerate from). */
+  baseUrl: string
   analyzing: boolean
   error: string | null
   grab: (overrideUrl?: string) => Promise<void>
@@ -754,7 +756,7 @@ export function ThemeStudioProvider({
     saveStatus,
     savedAt,
     undo, redo, canUndo, canRedo,
-    url, setUrl, blogUrl, setBlogUrl, analyzing, error, grab, removeTheme,
+    url, setUrl, blogUrl, setBlogUrl, baseUrl, analyzing, error, grab, removeTheme,
     isPremium, regenCount, freeRegens: FREE_REGENS, canRegenerate,
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,

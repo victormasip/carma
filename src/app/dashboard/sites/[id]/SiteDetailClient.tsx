@@ -79,7 +79,7 @@ const SECTION_DEFS: SectionDef[] = [
   { key: 'articles', label: 'Articles', desc: 'Contingut',     icon: FileText },
   // Key stays 'tema' (deep links / ?tab=tema keep working); the LABEL follows
   // the product — this section now launches the fullscreen Studio + Agent.
-  { key: 'tema',     label: 'Studio',   desc: 'Disseny i agent', icon: Palette },
+  { key: 'tema',     label: 'Aura',   desc: 'Disseny i agent', icon: Palette },
   { key: 'moduls',   label: 'Mòduls',   desc: 'Funcionalitats', icon: Puzzle },
   { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'connexio', label: 'Connexió', desc: 'API i embed',   icon: Plug,  premium: true },
@@ -349,9 +349,9 @@ export default function SiteDetailClient({
   )
 }
 
-// Section switcher — ONE line, always (founder directive): a compact pill bar
-// instead of the old two-row card bento. The description survives as a tooltip;
-// on narrow screens the bar scrolls horizontally rather than wrapping.
+// Section switcher — proper CARDS (icon block + label + description), but on
+// ONE line always: a non-wrapping row that scrolls horizontally when it must
+// (founder directive: keep the card feel, never a second row).
 function SiteSectionCards({
   active, onSelect, isLocked, isSuperAdmin,
 }: {
@@ -361,7 +361,7 @@ function SiteSectionCards({
   isSuperAdmin: boolean
 }) {
   // Clients see a trimmed, renamed set (Connexió → "Publica"; Mòduls behind its
-  // MVP flag; Usuaris stays reachable as the Premium upsell pill).
+  // MVP flag; Usuaris stays reachable as the Premium upsell card).
   const defs = isSuperAdmin
     ? SECTION_DEFS
     : SECTION_DEFS
@@ -371,7 +371,7 @@ function SiteSectionCards({
   return (
     <nav
       aria-label="Seccions del lloc"
-      className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex items-stretch gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {defs.map(s => {
         const Icon = s.icon
@@ -383,17 +383,31 @@ function SiteSectionCards({
             type="button"
             onClick={() => onSelect(s.key)}
             aria-current={activeS ? 'page' : undefined}
-            title={s.desc}
             className={cn(
-              'flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors',
+              'group flex min-w-[10.5rem] flex-1 shrink-0 cursor-pointer items-center gap-3 rounded-2xl border p-3.5 text-left transition-all duration-200',
               activeS
-                ? 'bg-accent-soft text-accent shadow-sm ring-1 ring-accent/25'
-                : 'text-muted hover:bg-surface-hover hover:text-text',
+                ? 'border-accent bg-accent-soft ring-2 ring-accent/20 shadow-sm'
+                : 'border-border bg-surface hover:border-border-strong hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-16px_rgba(0,0,0,0.25)]',
             )}
           >
-            <Icon className={cn('h-4 w-4 shrink-0', activeS ? 'text-accent' : 'text-subtle')} />
-            {s.label}
-            {locked && <LockBadge />}
+            <span className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+              activeS ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
+            )}>
+              <Icon className="h-4.5 w-4.5" />
+            </span>
+            <span className="min-w-0">
+              <span className={cn(
+                'flex items-center gap-1.5 whitespace-nowrap text-sm font-bold leading-tight',
+                activeS ? 'text-accent' : 'text-text',
+              )}>
+                {s.label}
+                {locked && <LockBadge />}
+              </span>
+              <span className={cn('mt-0.5 block whitespace-nowrap text-xs leading-tight', activeS ? 'text-accent/70' : 'text-subtle')}>
+                {s.desc}
+              </span>
+            </span>
           </button>
         )
       })}

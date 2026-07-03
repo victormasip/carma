@@ -131,17 +131,21 @@ export default function StudioTopBar({ device, setDevice, isSuperAdmin, globalOp
         <ExternalLink className="h-4 w-4" /> <span className="max-md:hidden">En viu</span>
       </button>
 
-      <Button
-        onClick={() => s.grab()}
-        disabled={s.analyzing}
-        size="sm"
-        glow={s.canRegenerate}
-        variant={s.canRegenerate ? 'primary' : 'secondary'}
-        iconLeft={s.canRegenerate ? <Wand2 className="h-3.5 w-3.5" /> : <Crown className="h-3.5 w-3.5" />}
-        title="Tornar a capturar i regenerar el tema des de la URL d'origen"
-      >
-        Regenerar
-      </Button>
+      {/* Re-capture only makes sense when the theme CAME from a URL — a
+          template blog has no source to regenerate from. */}
+      {!!(s.url.trim() || s.baseUrl) && (
+        <Button
+          onClick={() => s.grab()}
+          disabled={s.analyzing}
+          size="sm"
+          glow={s.canRegenerate}
+          variant={s.canRegenerate ? 'primary' : 'secondary'}
+          iconLeft={s.canRegenerate ? <Wand2 className="h-3.5 w-3.5" /> : <Crown className="h-3.5 w-3.5" />}
+          title="Tornar a capturar i regenerar el tema des de la URL d'origen"
+        >
+          Regenerar
+        </Button>
+      )}
 
       {isSuperAdmin && (
         <button

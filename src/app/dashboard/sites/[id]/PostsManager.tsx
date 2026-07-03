@@ -9,7 +9,7 @@ import {
 import KnotSpinner from '@/components/ui/KnotSpinner'
 import {
   deletePost, togglePublish, togglePublishBulk, deletePostsBulk, updatePostFields,
-  listPosts, generateAndCreateArticle, type PostListItem, type PostListResult,
+  listPosts, generateAndCreateArticle, deleteSamplePosts, type PostListItem, type PostListResult,
 } from '@/lib/actions/posts'
 import { uploadImage } from '@/lib/upload'
 import { useToast } from '@/components/ui/Toast'
@@ -29,11 +29,14 @@ export type PostsMeta = {
   total: number
   published: number
   drafts: number
+  /** Template starter posts still present (meta.sample) — shows the one-click
+   *  "remove all sample articles" banner. */
+  samples?: number
 }
 
 const metaFrom = (r: PostListResult): PostsMeta => ({
   page: r.page, pageCount: r.pageCount, filteredCount: r.filteredCount,
-  total: r.total, published: r.published, drafts: r.drafts,
+  total: r.total, published: r.published, drafts: r.drafts, samples: r.samples,
 })
 
 export default function PostsManager({
@@ -53,15 +56,6 @@ export default function PostsManager({
 }) {
   const [posts, setPosts] = useState<PostListItem[]>(initialPosts)
   const [meta, setMeta] = useState<PostsMeta>(initialMeta)
-  // Render-time prop resync: a router.refresh() from the host (e.g. after the
-  // template onboarding seeds the starter articles) must show up here even
-  // though this component keeps its own working copy for optimistic edits.
-  const [syncedInitial, setSyncedInitial] = useState(initialPosts)
-  if (initialPosts !== syncedInitial) {
-    setSyncedInitial(initialPosts)
-    setPosts(initialPosts)
-    setMeta(initialMeta)
-  }
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -146,6 +140,27 @@ export default function PostsManager({
       reloadRef.current()
     }
   }, [initialPosts, initialMeta])
+
+  // One-click cleanup of the template's starter articles (meta.sample only).
+  const [removingSamples, setRemovingSamples] = useState(false)
+  const removeSamples = async () => {
+    if (removingSamples) return
+    const n = meta.samples ?? 0
+    const ok = await confirm({
+      title: 'Eliminar els articles de mostra?',
+      message: `S'eliminaran els ${n} articles de mostra de la plantilla. Els que hagis escrit o importat tu no es toquen.`,
+      confirmLabel: 'Eliminar-los',
+      cancelLabel: 'Cancel·lar',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setRemovingSamples(true)
+    const res = await deleteSamplePosts(siteId)
+    setRemovingSamples(false)
+    if (res.error) { toast(res.error, 'error'); return }
+    toast(`${res.deleted ?? 0} article${(res.deleted ?? 0) !== 1 ? 's' : ''} de mostra eliminat${(res.deleted ?? 0) !== 1 ? 's' : ''}`, 'success')
+    reload()
+  }
 
   const hasSelection = selected.size > 0
   const selectedPosts = useMemo(() => posts.filter(p => selected.has(p.id)), [posts, selected])
@@ -344,6 +359,28 @@ export default function PostsManager({
           </Button>
         </div>
       </header>
+
+      {/* Template starter articles: one click and they're gone (only the
+          meta.sample rows — anything the owner wrote is untouchable). */}
+      {(meta.samples ?? 0) > 0 && (
+        <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-accent/25 bg-accent-soft/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-center gap-2 text-sm font-medium text-text">
+            <Sparkles className="h-4 w-4 shrink-0 text-accent" />
+            El teu blog té {meta.samples} article{(meta.samples ?? 0) !== 1 ? 's' : ''} de mostra de la plantilla.
+            <span className="hidden text-muted sm:inline">Edita&apos;ls, o esborra&apos;ls tots quan tinguis contingut propi.</span>
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={removeSamples}
+            loading={removingSamples}
+            iconLeft={<Trash2 className="h-3.5 w-3.5" />}
+            className="shrink-0"
+          >
+            Eliminar els de mostra
+          </Button>
+        </div>
+      )}
 
       {meta.total === 0 && !search.trim() ? (
         <div className="flex flex-col items-center justify-center py-20 bg-surface border border-dashed border-border-strong rounded-[2rem] text-center">

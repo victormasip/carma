@@ -18,13 +18,16 @@ export default async function EditSitePage({ params, searchParams }: {
   if (!isUuid(siteId)) redirect('/dashboard')
 
   // Where "Sortir" returns to depends on how the Studio was entered: the
-  // sidebar hub, a site's launcher card, or (default) the live render's
-  // owner button.
-  const exitHref = from === 'studio'
-    ? '/dashboard/studio'
-    : from === 'site'
-      ? `/dashboard/sites/${siteId}`
-      : `/render/${siteId}`
+  // dashboard (single-site direct link — never the hub, which would redirect
+  // straight back here), the multi-site hub, a site's launcher card, or
+  // (default) the live render's owner button.
+  const exitHref = from === 'home'
+    ? '/dashboard'
+    : from === 'studio'
+      ? '/dashboard/studio'
+      : from === 'site'
+        ? `/dashboard/sites/${siteId}`
+        : `/render/${siteId}`
 
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')

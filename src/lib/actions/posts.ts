@@ -181,10 +181,13 @@ export type PostListResult = {
   total: number
   published: number
   drafts: number
+  /** How many are template STARTER posts (meta.sample) — drives the one-click
+   *  "remove all sample articles" affordance after onboarding. */
+  samples: number
   error?: string
 }
 
-const EMPTY_LIST: PostListResult = { posts: [], page: 1, pageCount: 1, filteredCount: 0, total: 0, published: 0, drafts: 0 }
+const EMPTY_LIST: PostListResult = { posts: [], page: 1, pageCount: 1, filteredCount: 0, total: 0, published: 0, drafts: 0, samples: 0 }
 
 /**
  * Paginated, server-side post listing. Never returns more than
@@ -212,10 +215,11 @@ export async function listPosts(
     const term = opts.q?.trim().replace(/[,%()\\*]/g, '')
     if (term) query = query.or(`title.ilike.%${term}%,slug.ilike.%${term}%`)
 
-    const [{ data, count, error }, totalRes, publishedRes] = await Promise.all([
+    const [{ data, count, error }, totalRes, publishedRes, samplesRes] = await Promise.all([
       query.order('created_at', { ascending: false }).range(from, to),
       admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId),
       admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId).eq('is_published', true),
+      admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId).contains('meta', { sample: true }),
     ])
 
     if (error) return { ...EMPTY_LIST, page, error: error.message }
@@ -231,6 +235,7 @@ export async function listPosts(
       total,
       published,
       drafts: total - published,
+      samples: samplesRes.count ?? 0,
     }
   } catch (err) {
     return { ...EMPTY_LIST, error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -732,7 +737,9 @@ export async function seedSamplePosts(
       featured_image: s.featured_image,
       categories: s.categories,
       tags: [] as string[],
-      meta: {},
+      // The sample flag powers the one-click "remove all starter articles"
+      // affordance in the Articles list.
+      meta: { sample: true },
       is_published: true,
       created_at: s.created_at,
     }))
@@ -748,6 +755,31 @@ export async function seedSamplePosts(
     revalidateRender(siteId)
     revalidatePath(`/dashboard/sites/${siteId}`)
     return { seeded: rows.length }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
+/**
+ * One-click cleanup of the template STARTER articles (meta.sample) once the
+ * owner has real content. Deletes only the flagged rows — anything they wrote
+ * themselves is untouchable by construction.
+ */
+export async function deleteSamplePosts(
+  siteId: string,
+): Promise<ActionResult & { deleted?: number }> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+    const { data, error } = await admin
+      .from('posts')
+      .delete()
+      .eq('site_id', siteId)
+      .contains('meta', { sample: true })
+      .select('id')
+    if (error) return { error: error.message }
+    revalidateRender(siteId)
+    revalidatePath(`/dashboard/sites/${siteId}`)
+    return { deleted: data?.length ?? 0 }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
   }

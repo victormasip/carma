@@ -99,6 +99,7 @@ export default async function SiteDetailsPage({
         total: postsResult.total,
         published: postsResult.published,
         drafts: postsResult.drafts,
+        samples: postsResult.samples,
       }}
       assignedUsers={assignedUsers}
       availableClients={availableClients}
