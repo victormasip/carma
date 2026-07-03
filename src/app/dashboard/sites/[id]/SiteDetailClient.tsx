@@ -77,7 +77,9 @@ type SectionDef = { key: TabKey; label: string; desc: string; icon: typeof FileT
 // IA, "Resum" deliberately sits AFTER "Tema".
 const SECTION_DEFS: SectionDef[] = [
   { key: 'articles', label: 'Articles', desc: 'Contingut',     icon: FileText },
-  { key: 'tema',     label: 'Tema',     desc: 'Disseny',       icon: Palette },
+  // Key stays 'tema' (deep links / ?tab=tema keep working); the LABEL follows
+  // the product — this section now launches the fullscreen Studio + Agent.
+  { key: 'tema',     label: 'Studio',   desc: 'Disseny i agent', icon: Palette },
   { key: 'moduls',   label: 'Mòduls',   desc: 'Funcionalitats', icon: Puzzle },
   { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'connexio', label: 'Connexió', desc: 'API i embed',   icon: Plug,  premium: true },

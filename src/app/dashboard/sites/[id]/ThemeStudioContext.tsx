@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
+import { enableModules } from '@/lib/actions/modules'
 import { getStudioArticle, getPostContent, updatePostFields } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
@@ -489,6 +490,11 @@ export function ThemeStudioProvider({
     // setSiteDefaultLocale also adds the locale to the site's available set, so
     // this replaces the previous addSiteLocale-only call.
     if (detected) void setSiteDefaultLocale(siteId, detected).catch(() => {})
+    // Feature parity with the source: enable the modules the capture detected
+    // (searcher, newsletter, share…). Merge-only + best-effort — it never
+    // blocks the apply, and the owner can flip any of them off in Mòduls.
+    const mods = data.detected_modules ?? []
+    if (mods.length > 0) void enableModules(siteId, mods.map((m) => m.id)).catch(() => {})
   }, [siteId, chromeDefaultLocale])
 
   // Stream the capture pipeline over SSE, surfacing every step to the modal.

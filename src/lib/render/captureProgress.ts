@@ -126,7 +126,13 @@ export type AnalyzeResult = {
   logo_url?: string | null
   /** Detected blog/news index + native article-card style to replicate. */
   blog_signature?: BlogSignature | null
+  /** Source-site features mapped to Carma Smart Modules (search box → search,
+   *  newsletter form → newsletter, …), auto-enabled after apply. */
+  detected_modules?: DetectedModule[]
 }
+
+/** One source feature → registry module mapping (id MUST exist in the registry). */
+export type DetectedModule = { id: string; label: string; reason: string }
 
 export type CaptureProgressEvent = {
   type: 'progress'

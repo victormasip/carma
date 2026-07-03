@@ -43,34 +43,35 @@ export default async function AgentPage() {
   const siteNames = new Map(sites.map((s) => [s.id, s.name]))
 
   // Recent agent activity across the user's sites (both channels: thread_id
-  // null = console). Best-effort — the outcomes table ships with the WhatsApp
+  // null = console). The post title rides along via the FK embed — ONE round
+  // trip, not two. Best-effort — the outcomes table ships with the WhatsApp
   // migrations and its absence must not break the page.
   let activity: AgentActivityRow[] = []
   if (sites.length > 0) {
     const { data: outcomes } = await admin
       .from('wa_article_outcomes')
-      .select('post_id, site_id, thread_id, published_url, published_at, created_at')
+      .select('post_id, site_id, thread_id, published_url, published_at, created_at, posts(title)')
       .in('site_id', sites.map((s) => s.id))
       .order('created_at', { ascending: false })
       .limit(8)
-    if (outcomes && outcomes.length > 0) {
-      const { data: posts } = await admin
-        .from('posts')
-        .select('id, title')
-        .in('id', outcomes.map((o) => o.post_id as string))
-      const titles = new Map((posts ?? []).map((p) => [p.id as string, p.title as string]))
-      activity = outcomes
-        .filter((o) => titles.has(o.post_id as string))
-        .map((o) => ({
-          postId: o.post_id as string,
-          title: titles.get(o.post_id as string)!,
-          siteName: siteNames.get(o.site_id as string) ?? '—',
-          liveUrl: (o.published_url as string | null) ?? null,
-          publishedAt: (o.published_at as string | null) ?? null,
-          createdAt: o.created_at as string,
-          channel: o.thread_id ? 'whatsapp' : 'console',
-        }))
-    }
+    activity = (outcomes ?? [])
+      .map((o) => {
+        // supabase-js types FK embeds as arrays; at runtime it's the single row.
+        const p = o.posts as unknown as { title: string } | { title: string }[] | null
+        const title = Array.isArray(p) ? p[0]?.title : p?.title
+        return title
+          ? {
+              postId: o.post_id as string,
+              title,
+              siteName: siteNames.get(o.site_id as string) ?? '—',
+              liveUrl: (o.published_url as string | null) ?? null,
+              publishedAt: (o.published_at as string | null) ?? null,
+              createdAt: o.created_at as string,
+              channel: (o.thread_id ? 'whatsapp' : 'console') as AgentActivityRow['channel'],
+            }
+          : null
+      })
+      .filter((a): a is AgentActivityRow => a !== null)
   }
 
   return (

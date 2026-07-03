@@ -7,6 +7,7 @@ import { absolutiseCssUrls as cssAbsUrls, splitImports, extractFontFaceCss, prox
 import { absolutise, buildExtractedHead } from '@/lib/scrape/headerFooter'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { detectBlogSignature, findBlogIndexUrl } from '@/lib/scrape/blogDetect'
+import { detectSourceModules } from '@/lib/scrape/detectModules'
 import { isLocale } from '@/lib/i18n/config'
 import {
   sseFrame, stepFloor, stepWeight,
@@ -539,6 +540,21 @@ export async function POST(request: NextRequest) {
         }
         done('reconstruct', cloned.length ? cloned.join(' + ') : 'cap regió')
 
+        // Feature → module detection: read the source page for the reader-facing
+        // features it already ships (searcher, newsletter, share, TOC…) so the
+        // clone can BEHAVE like the source, not just look like it. Pure DOM
+        // heuristics — a failure must never sink the capture.
+        let detectedModules: AnalyzeResult['detected_modules'] = []
+        try {
+          detectedModules = detectSourceModules(root)
+          if (detectedModules.length > 0) {
+            send({
+              type: 'notice', severity: 'info', code: 'modules_detected',
+              message: `Hem detectat funcionalitats del lloc i les activarem al teu blog: ${detectedModules.map(d => d.label).join(', ')}. Les pots ajustar a la pestanya Mòduls.`,
+            })
+          }
+        } catch { /* best-effort */ }
+
         // ── 6. FINALIZE (packaging) ────────────────────────────────────────────
         running('finalize')
         const data: AnalyzeResult = {
@@ -563,6 +579,7 @@ export async function POST(request: NextRequest) {
           site_name: siteName,
           logo_url: logoUrl,
           blog_signature: blogSignature,
+          detected_modules: detectedModules,
         }
         done('finalize')
         send({ type: 'result', data })

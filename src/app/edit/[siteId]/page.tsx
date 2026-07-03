@@ -29,16 +29,19 @@ export default async function EditSitePage({ params, searchParams }: {
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
 
+  // Membership check and theme fetch are independent — one round trip, not two.
+  // (The theme row is discarded if the membership check bounces; that beats
+  // adding ~100ms of Supabase RTT to EVERY legitimate Studio open.)
+  const admin = createAdminClient()
+  const [memberRes, { data: theme }] = await Promise.all([
+    isSuperAdmin
+      ? Promise.resolve({ data: { site_id: siteId } })
+      : supabase.from('site_users').select('site_id').eq('site_id', siteId).eq('user_id', user.id).maybeSingle(),
+    admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle(),
+  ])
   // Superadmins may edit any site; everyone else must be an assigned member of
   // THIS site (same policy as userCanWriteSite, minus the duplicate role fetch).
-  if (!isSuperAdmin) {
-    const { data: member } = await supabase
-      .from('site_users').select('site_id').eq('site_id', siteId).eq('user_id', user.id).maybeSingle()
-    if (!member) redirect('/dashboard')
-  }
-
-  const admin = createAdminClient()
-  const { data: theme } = await admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle()
+  if (!memberRes.data) redirect('/dashboard')
   const regenCount = (theme as { regen_count?: number } | null)?.regen_count ?? 0
   const defaultLocale = (theme as { default_locale?: string } | null)?.default_locale ?? undefined
 

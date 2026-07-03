@@ -106,6 +106,52 @@ function sanitizeModules(raw: unknown, isPremium: boolean): SiteModules {
   return out
 }
 
+/**
+ * MERGE-enable a set of modules (capture-time feature detection). Unlike
+ * saveSiteModules this never clobbers existing config: already-configured
+ * modules keep their variant/options, unknown ids are dropped, premium modules
+ * are skipped for non-premium callers, and everything passes the same
+ * registry sanitizer before persisting.
+ */
+export async function enableModules(siteId: string, ids: string[]): Promise<ActionResult & { enabled?: string[] }> {
+  try {
+    if (!Array.isArray(ids) || ids.length === 0) return { enabled: [] }
+    const { admin, isPremium } = await assertModuleAccess(siteId)
+
+    const { data, error: readErr } = await admin
+      .from('site_themes').select('modules').eq('site_id', siteId).maybeSingle()
+    if (readErr?.code === UNDEFINED_COLUMN) return {} // pre-024 schema — best-effort no-op
+    if (readErr) return { error: readErr.message }
+
+    const current = ((data?.modules ?? {}) as SiteModules)
+    const next: SiteModules = { ...current }
+    const enabled: string[] = []
+    for (const id of ids) {
+      const def = getModuleDef(id)
+      if (!def) continue
+      if (def.premium && !isPremium) continue
+      if (next[id]?.enabled) continue
+      next[id] = { ...(next[id] ?? {}), enabled: true, variant: next[id]?.variant ?? def.defaultVariant }
+      enabled.push(id)
+    }
+    if (enabled.length === 0) return { enabled: [] }
+
+    const clean = sanitizeModules(next, isPremium)
+    const { error } = await admin.from('site_themes').upsert(
+      { site_id: siteId, modules: clean },
+      { onConflict: 'site_id' },
+    )
+    if (error?.code === UNDEFINED_COLUMN) return {}
+    if (error) return { error: error.message }
+
+    revalidatePath(`/dashboard/sites/${siteId}`)
+    revalidatePath(`/render/${siteId}`)
+    return { enabled }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
 export async function saveSiteModules(siteId: string, modules: unknown): Promise<ActionResult> {
   try {
     const { admin, isPremium } = await assertModuleAccess(siteId)

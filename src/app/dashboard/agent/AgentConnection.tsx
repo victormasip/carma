@@ -52,12 +52,17 @@ export default function AgentConnection({ agentNumber, identities, sites, scopes
 
   // While a number is awaiting its code, poll for activation so the card flips to
   // "Verificat" moments after the owner texts the code (no manual refresh needed).
-  // Paused while the tab is hidden.
+  // Paused while the tab is hidden, and it GIVES UP after ~4 minutes: each tick
+  // re-renders the whole route server-side (several Supabase queries), so an
+  // abandoned pending number must not keep the page churning forever.
   const hasPending = identities.some((i) => i.status === 'pending')
   useEffect(() => {
     if (!hasPending) return
-    const tick = () => { if (document.visibilityState === 'visible') router.refresh() }
-    const t = setInterval(tick, 6000)
+    let ticks = 0
+    const t = setInterval(() => {
+      if (++ticks > 24) { clearInterval(t); return }
+      if (document.visibilityState === 'visible') router.refresh()
+    }, 10_000)
     return () => clearInterval(t)
   }, [hasPending, router])
 

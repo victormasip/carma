@@ -1,17 +1,19 @@
 'use client'
 
 // Full-page onboarding shown on a brand-new site (no theme, no posts). It offers
-// the two ways to build a blog:
-//   1. Magic Wand — replicate an existing site from its URL (then, if WordPress,
-//      the host offers a one-click article import).
-//   2. Template — apply one of several hand-designed modern looks, from scratch.
+// the three ways to build a blog:
+//   1. Magic Wand — replicate YOUR existing site from its URL (then, if
+//      WordPress, the host offers a one-click article import).
+//   2. Blog clone — point it at any blog you admire: same pipeline, framed as
+//      "steal this look" (chrome + tokens + its reader features as modules).
+//   3. Template — apply one of several hand-designed modern looks, from scratch.
 //
 // It lives INSIDE the ThemeStudioProvider so it can drive grab()/applyTemplate()
 // directly; the host (SiteDetailClient) coordinates dismissal, tab switching and
 // the post-capture import via callbacks.
 
 import { useState, useRef, useEffect } from 'react'
-import { Wand2, Palette, Globe, ArrowRight, ArrowLeft, Sparkles, Check, X } from 'lucide-react'
+import { Wand2, Palette, Globe, ArrowRight, ArrowLeft, Sparkles, Check, X, Newspaper } from 'lucide-react'
 import { BLOG_TEMPLATES, type BlogTemplate } from '@/lib/render/templates'
 import { useThemeStudio } from './ThemeStudioContext'
 import Button from '@/components/ui/Button'
@@ -38,9 +40,20 @@ export default function SiteOnboarding({
   const { grab, applyTemplate } = useThemeStudio()
   const [view, setView] = useState<'choose' | 'templates'>('choose')
   const [url, setUrl] = useState(initialUrl ?? '')
+  const [blogUrl, setBlogUrl] = useState('')
 
   const startMagicWand = () => {
     const target = normalizeUrl(url)
+    if (!target) return
+    onMagicWandStarted()
+    void grab(target)
+  }
+
+  // Same capture pipeline, different intent: the URL is a blog the user ADMIRES
+  // (not necessarily theirs). The grabber prefers the blog index, clones its
+  // chrome + tokens, and imports its reader features as Smart Modules.
+  const startBlogClone = () => {
+    const target = normalizeUrl(blogUrl)
     if (!target) return
     onMagicWandStarted()
     void grab(target)
@@ -106,19 +119,19 @@ export default function SiteOnboarding({
                   Com vols començar amb <span className="text-accent">{siteName}</span>?
                 </h1>
                 <p className="text-sm text-muted mt-3 max-w-xl mx-auto leading-relaxed">
-                  Replica el disseny d’una web que ja existeix amb la nostra eina màgica, o arrenca des d’una plantilla moderna. Sempre podràs personalitzar-ho després.
+                  Replica la teva web, clona el disseny d’un blog que admires, o arrenca des d’una plantilla moderna. Sempre podràs personalitzar-ho després.
                 </p>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-5">
-                {/* Magic Wand */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong flex flex-col">
+              <div className="grid md:grid-cols-3 gap-5">
+                {/* Magic Wand — YOUR site */}
+                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
                     <Wand2 className="w-5 h-5" />
                   </div>
                   <h2 className="text-base font-semibold text-text mt-4">Replica la teva web</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    Enganxa la teva adreça i la copiem: capçalera, peu, colors i tipografies. En un instant.
+                    Enganxa la teva adreça i la copiem: capçalera, peu, colors i tipografies.
                   </p>
                   <div className="mt-5 space-y-2.5">
                     <div className="relative">
@@ -128,7 +141,7 @@ export default function SiteOnboarding({
                         value={url}
                         onChange={e => setUrl(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && startMagicWand()}
-                        placeholder="https://www.elmeuclient.com"
+                        placeholder="la-meva-web.com"
                         className="w-full h-10 pl-9 pr-3 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors"
                       />
                     </div>
@@ -139,19 +152,52 @@ export default function SiteOnboarding({
                       fullWidth
                       iconLeft={<Wand2 className="w-4 h-4" />}
                     >
-                      Capturar amb la vareta màgica
+                      Capturar
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Blog clone — a blog you ADMIRE */}
+                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
+                  <div className="w-11 h-11 rounded-xl bg-accent-soft text-accent flex items-center justify-center">
+                    <Newspaper className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-base font-semibold text-text mt-4">Clona un blog que t&apos;agradi</h2>
+                  <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
+                    El disseny, les targetes i les funcionalitats (cercador, newsletter…) d&apos;aquell blog — al teu. El contingut serà teu.
+                  </p>
+                  <div className="mt-5 space-y-2.5">
+                    <div className="relative">
+                      <Newspaper className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
+                      <input
+                        type="url"
+                        value={blogUrl}
+                        onChange={e => setBlogUrl(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && startBlogClone()}
+                        placeholder="blog-que-admiro.com"
+                        className="w-full h-10 pl-9 pr-3 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors"
+                      />
+                    </div>
+                    <Button
+                      onClick={startBlogClone}
+                      disabled={!blogUrl.trim()}
+                      variant="secondary"
+                      fullWidth
+                      iconLeft={<Sparkles className="w-4 h-4" />}
+                    >
+                      Clonar aquest blog
                     </Button>
                   </div>
                 </div>
 
                 {/* Template */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-8 shadow-card hover:border-border-strong flex flex-col">
+                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-text text-bg-elevated flex items-center justify-center">
                     <Palette className="w-5 h-5" />
                   </div>
                   <h2 className="text-base font-semibold text-text mt-4">Comença amb una plantilla</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    Tria un disseny modern —editorial, magazine, minimal o fosc— i tindràs un blog espectacular a l’instant.
+                    Tria un disseny modern —editorial, magazine, minimal o fosc— i llest a l&apos;instant.
                   </p>
                   <div className="mt-5 flex -space-x-2">
                     {BLOG_TEMPLATES.map(t => (

@@ -31,7 +31,9 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
         badge="IA"
       />
       <NavItem
-        href="/dashboard/studio"
+        // With a single site the hub would just redirect — link STRAIGHT to the
+        // fullscreen Studio and save the extra server hop.
+        href={sites.length === 1 ? `/edit/${sites[0].id}?from=studio` : '/dashboard/studio'}
         active={pathname.startsWith('/dashboard/studio')}
         icon={<Palette className="w-4 h-4" />}
         label={t('nav.studio')}
