@@ -3,7 +3,7 @@
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
+import { ArrowLeft, FileText, Plug, Users, Sparkles, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
@@ -79,7 +79,7 @@ const SECTION_DEFS: SectionDef[] = [
   { key: 'articles', label: 'Articles', desc: 'Contingut',     icon: FileText },
   // Key stays 'tema' (deep links / ?tab=tema keep working); the LABEL follows
   // the product — this section now launches the fullscreen Studio + Agent.
-  { key: 'tema',     label: 'Aura',   desc: 'Disseny i agent', icon: Palette },
+  { key: 'tema',     label: 'Aura',   desc: 'Disseny i agent', icon: Sparkles },
   { key: 'moduls',   label: 'Mòduls',   desc: 'Funcionalitats', icon: Puzzle },
   { key: 'resum',    label: 'Resum',    desc: 'Estadístiques', icon: LayoutDashboard },
   { key: 'connexio', label: 'Connexió', desc: 'API i embed',   icon: Plug,  premium: true },
