@@ -704,3 +704,51 @@ export async function generateAndCreateArticle(
   if (created.error || !created.id) return { error: created.error ?? "No s'ha pogut crear l'article" }
   return { id: created.id, niche: a.niche, strategy: a.strategy }
 }
+
+/**
+ * Seed the 4 starter posts a TEMPLATE blog is born with — real, published,
+ * localized articles (full bodies) the user edits or deletes. Guarded: only
+ * ever runs on an EMPTY blog, so it can never pollute existing content.
+ */
+export async function seedSamplePosts(
+  siteId: string,
+  locale?: string,
+): Promise<ActionResult & { seeded?: number }> {
+  try {
+    const admin = await assertSiteAccess(siteId)
+
+    const { count } = await admin
+      .from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId)
+    if ((count ?? 0) > 0) return { seeded: 0 }
+
+    const loc = normalizeLocale(locale, DEFAULT_LOCALE)
+    const { buildSeedPosts } = await import('@/lib/render/samplePosts')
+    const rows = buildSeedPosts(loc).map((s) => ({
+      site_id: siteId,
+      title: s.title,
+      slug: s.slug,
+      content: { html: s.contentHtml },
+      excerpt: s.excerpt,
+      featured_image: s.featured_image,
+      categories: s.categories,
+      tags: [] as string[],
+      meta: {},
+      is_published: true,
+      created_at: s.created_at,
+    }))
+
+    // Prefer stamping the locale (post-008 schema); retry bare if the i18n
+    // columns aren't there yet.
+    let { error } = await admin.from('posts').insert(rows.map((r) => ({ ...r, default_locale: loc })))
+    if (error?.code === UNDEFINED_COLUMN) {
+      ;({ error } = await admin.from('posts').insert(rows))
+    }
+    if (error) return { error: error.message }
+
+    revalidateRender(siteId)
+    revalidatePath(`/dashboard/sites/${siteId}`)
+    return { seeded: rows.length }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}

@@ -2,16 +2,16 @@
 
 // Full-page onboarding shown on a brand-new site (no theme, no posts).
 //
-// Three entry paths, with AUTO-DETECTION in the middle of the first one:
+// Two entry paths, with AUTO-DETECTION in the middle of the first one:
 //   1. "La meva web" — one quick fetch (/api/onboarding/detect) answers whether
 //      the site HAS a blog. With a blog → choose "clone my ENTIRE blog"
-//      (design + features + article import) or "new blog with my web's styles".
-//      Without one → a single clear path (styles clone), plus a manual
-//      "my blog lives elsewhere" escape hatch.
-//   2. "Un blog que admiro" — clone ANOTHER site's blog design + features
-//      (never its content — the articles will be the user's own).
-//   3. Templates — hand-designed premium looks, each shipping with its matching
-//      feed layout and Smart Modules already on.
+//      (design + cards + features + article import — no layout questions, the
+//      clone IS the answer) or "new blog with my web's styles". Without one →
+//      a single clear path (styles clone), plus a manual "my blog lives
+//      elsewhere" escape hatch.
+//   2. Templates — hand-designed premium identities, each shipping with its
+//      matching feed layout, Smart Modules AND starter articles, so a from-
+//      scratch blog is born alive, never empty.
 //
 // It lives INSIDE the ThemeStudioProvider so it can drive grab()/applyTemplate()
 // directly; the host (SiteDetailClient) coordinates dismissal, tab switching and
@@ -59,8 +59,8 @@ export default function SiteOnboarding({
   const { grab, applyTemplate, setBlogUrl } = useThemeStudio()
   const [view, setView] = useState<'choose' | 'options' | 'templates'>('choose')
   const [url, setUrl] = useState(initialUrl ?? '')
-  const [admiredUrl, setAdmiredUrl] = useState('')
   const [manualBlogUrl, setManualBlogUrl] = useState('')
+  const [applyingId, setApplyingId] = useState<string | null>(null)
   const [detecting, setDetecting] = useState(false)
   const [detectError, setDetectError] = useState('')
   const [detected, setDetected] = useState<Detected | null>(null)
@@ -107,15 +107,6 @@ export default function SiteOnboarding({
     void grab(detected.url)
   }
 
-  // Path 2 — clone a blog the user ADMIRES: design + features, NEVER its content.
-  const startAdmiredClone = () => {
-    const target = normalizeUrl(admiredUrl)
-    if (!target) return
-    setBlogUrl('')
-    onMagicWandStarted({ importArticles: false })
-    void grab(target)
-  }
-
   // Seamless funnel: when arriving from registration with a target URL, kick the
   // Magic Wand automatically so the user watches their site assemble itself.
   const fired = useRef(false)
@@ -128,9 +119,17 @@ export default function SiteOnboarding({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, initialUrl])
 
-  const pickTemplate = (tpl: BlogTemplate) => {
-    applyTemplate(tpl, siteName)
-    onTemplateApplied(tpl.name)
+  // Applying a template also SEEDS the starter articles (awaited inside
+  // applyTemplate), so the button shows progress until the blog is truly alive.
+  const pickTemplate = async (tpl: BlogTemplate) => {
+    if (applyingId) return
+    setApplyingId(tpl.id)
+    try {
+      await applyTemplate(tpl, siteName)
+      onTemplateApplied(tpl.name)
+    } finally {
+      setApplyingId(null)
+    }
   }
 
   // Seamless funnel: the user arrived from signup with a target URL, so the
@@ -176,19 +175,19 @@ export default function SiteOnboarding({
                   Com vols començar amb <span className="text-accent">{siteName}</span>?
                 </h1>
                 <p className="text-sm text-muted mt-3 max-w-xl mx-auto leading-relaxed">
-                  Analitzem la teva web i et proposem el millor camí, clonem el disseny d’un blog que admires, o arrenca des d’una plantilla premium.
+                  Analitzem la teva web i te la clonem — blog inclòs, si en tens — o arrenca des d’una identitat premium amb articles de mostra ja dins.
                 </p>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-5">
+              <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
                 {/* 1 · My web → detect first */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
+                <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] lift relative bg-surface border border-transparent rounded-2xl p-7 shadow-card flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
                     <Wand2 className="w-5 h-5" />
                   </div>
-                  <h2 className="text-base font-semibold text-text mt-4">La meva web</h2>
+                  <h2 className="text-base font-semibold text-text mt-4">Clona la teva web</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    L&apos;analitzem: si ja tens blog, te&apos;l clonem sencer (articles inclosos); si no, creem el blog amb els teus estils.
+                    L&apos;analitzem: si ja tens blog, te&apos;l clonem sencer — targetes, categories, estructura i articles. Si no, el creem amb els teus estils.
                   </p>
                   <div className="mt-5 space-y-2.5">
                     <div className="relative">
@@ -216,47 +215,14 @@ export default function SiteOnboarding({
                   </div>
                 </div>
 
-                {/* 2 · A blog I admire */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
-                  <div className="w-11 h-11 rounded-xl bg-accent-soft text-accent flex items-center justify-center">
-                    <Newspaper className="w-5 h-5" />
-                  </div>
-                  <h2 className="text-base font-semibold text-text mt-4">Un blog que admiro</h2>
-                  <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    El disseny, les targetes i les funcionalitats (cercador, newsletter…) d&apos;aquell blog — al teu. El contingut serà teu.
-                  </p>
-                  <div className="mt-5 space-y-2.5">
-                    <div className="relative">
-                      <Newspaper className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
-                      <input
-                        type="url"
-                        value={admiredUrl}
-                        onChange={e => setAdmiredUrl(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && startAdmiredClone()}
-                        placeholder="blog-que-admiro.com"
-                        className="w-full h-10 pl-9 pr-3 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors"
-                      />
-                    </div>
-                    <Button
-                      onClick={startAdmiredClone}
-                      disabled={!admiredUrl.trim()}
-                      variant="secondary"
-                      fullWidth
-                      iconLeft={<Sparkles className="w-4 h-4" />}
-                    >
-                      Clonar aquest blog
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 3 · Templates */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-6 shadow-card hover:border-border-strong flex flex-col">
+                {/* 2 · Templates */}
+                <div className="lift relative bg-surface border border-border rounded-2xl p-7 shadow-card hover:border-border-strong flex flex-col">
                   <div className="w-11 h-11 rounded-xl bg-text text-bg-elevated flex items-center justify-center">
                     <Palette className="w-5 h-5" />
                   </div>
                   <h2 className="text-base font-semibold text-text mt-4">Comença amb una plantilla</h2>
                   <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    {BLOG_TEMPLATES.length} identitats completes — cadascuna amb la seva disposició i mòduls ja activats.
+                    {BLOG_TEMPLATES.length} identitats completes: disposició pròpia, mòduls activats i articles de mostra ja publicats. Un blog viu des del primer segon.
                   </p>
                   <div className="mt-5 flex -space-x-2">
                     {BLOG_TEMPLATES.map(t => (
@@ -413,7 +379,14 @@ export default function SiteOnboarding({
 
               <div className="grid sm:grid-cols-2 gap-5">
                 {BLOG_TEMPLATES.map(tpl => (
-                  <TemplateCard key={tpl.id} tpl={tpl} siteName={siteName} onPick={() => pickTemplate(tpl)} />
+                  <TemplateCard
+                    key={tpl.id}
+                    tpl={tpl}
+                    siteName={siteName}
+                    applying={applyingId === tpl.id}
+                    disabled={applyingId !== null}
+                    onPick={() => void pickTemplate(tpl)}
+                  />
                 ))}
               </div>
             </>
@@ -471,7 +444,13 @@ function TemplatePreview({ tpl, siteName }: { tpl: BlogTemplate; siteName: strin
   )
 }
 
-function TemplateCard({ tpl, siteName, onPick }: { tpl: BlogTemplate; siteName: string; onPick: () => void }) {
+function TemplateCard({ tpl, siteName, applying, disabled, onPick }: {
+  tpl: BlogTemplate
+  siteName: string
+  applying: boolean
+  disabled: boolean
+  onPick: () => void
+}) {
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden shadow-card hover:border-border-strong hover:shadow-pop transition-all flex flex-col">
       <TemplatePreview tpl={tpl} siteName={siteName} />
@@ -484,11 +463,13 @@ function TemplateCard({ tpl, siteName, onPick }: { tpl: BlogTemplate; siteName: 
         <p className="text-xs text-muted mt-1.5 flex-1 leading-relaxed">{tpl.tagline}</p>
         <Button
           onClick={onPick}
+          loading={applying}
+          disabled={disabled && !applying}
           fullWidth
           iconLeft={<Check className="w-4 h-4" />}
           className="mt-4"
         >
-          Usar «{tpl.name}»
+          {applying ? 'Preparant el teu blog…' : `Usar «${tpl.name}»`}
         </Button>
       </div>
     </div>

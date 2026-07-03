@@ -12,7 +12,7 @@ import {
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
 import { enableModules } from '@/lib/actions/modules'
-import { getStudioArticle, getPostContent, updatePostFields } from '@/lib/actions/posts'
+import { getStudioArticle, getPostContent, updatePostFields, seedSamplePosts } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
@@ -121,7 +121,7 @@ type ThemeStudio = {
   premiumBlocked: boolean
   clearPremiumBlock: () => void
   // apply a from-scratch starter template (onboarding "template" path)
-  applyTemplate: (tpl: BlogTemplate, siteName: string) => void
+  applyTemplate: (tpl: BlogTemplate, siteName: string) => Promise<void>
   // live capture progress (progressive modal)
   capture: CaptureState
   closeCapture: () => void
@@ -652,7 +652,7 @@ export function ThemeStudioProvider({
   // Apply a from-scratch starter template: write its tokens + native chrome into
   // the live state (base/default locale) and activate. The debounced autosave
   // persists it, exactly like a capture — no LLM, no server round-trip here.
-  const applyTemplate = useCallback((tpl: BlogTemplate, name: string) => {
+  const applyTemplate = useCallback(async (tpl: BlogTemplate, name: string) => {
     const { header, footer } = templateChromeJson(tpl, name)
     setExtractedHead('')
     setExtractedHeader(header)
@@ -681,6 +681,10 @@ export function ThemeStudioProvider({
     // Each look ships with its matching Smart Modules ON (search, newsletter…)
     // — merge-only + best-effort, adjustable from the Mòduls tab.
     if (tpl.modules?.length) void enableModules(siteId, tpl.modules).catch(() => {})
+    // Born ALIVE: seed the starter articles (real, published, localized) so the
+    // feed and the article pages are full from the very first second. Awaited —
+    // the host refreshes the route right after, and the posts must be there.
+    try { await seedSamplePosts(siteId, chromeDefaultLocale) } catch { /* best-effort */ }
   }, [chromeDefaultLocale, siteId])
 
   const removeTheme = useCallback(async () => {

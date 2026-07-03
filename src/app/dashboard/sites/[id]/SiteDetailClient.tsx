@@ -2,6 +2,7 @@
 
 import { useState, useRef, lazy, Suspense } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, FileText, Plug, Users, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import PostsManager from './PostsManager'
@@ -28,7 +29,6 @@ import { formatDate } from '@/lib/format'
 // /edit/[siteId] — the Tema tab is a launcher, not an embed.)
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
-const FeedLayoutPicker = lazy(() => import('./FeedLayoutPicker'))
 const ModulesManager = lazy(() => import('./ModulesManager'))
 // The Connexió/Publicar tab: ApiDocsCard alone drags in the (huge) static
 // IntegrationGuide, and none of it renders on the default Articles tab.
@@ -98,6 +98,7 @@ export default function SiteDetailClient({
   initialModules = null, previewPostSlug,
 }: Props) {
   const { toast } = useToast()
+  const router = useRouter()
   // Hide the Smart Modules tab from clients for the MVP (see CLIENT_MODULES_ENABLED).
   const hideModules = !isSuperAdmin && !CLIENT_MODULES_ENABLED
   const coerceTab = (t: TabKey): TabKey => (hideModules && t === 'moduls' ? 'articles' : t)
@@ -105,14 +106,14 @@ export default function SiteDetailClient({
   const [showImport, setShowImport] = useState(false)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
-  const [showLayoutPicker, setShowLayoutPicker] = useState(false)
   // Onboarding is for any pristine site — superadmins provisioning a client site
   // AND self-serve users landing on their freshly-created first blog.
   const showOnboarding = isNewSite && !onboardingDone
   const wpImportIntent = useRef(false)
   // True while the post-clone onboarding sequence is running (capture → optional
-  // WP import → layout picker), so the picker only appears during onboarding and
-  // not after a later manual re-capture.
+  // article import → done). NO layout step: the clone replicates the source's
+  // cards/grid natively (blog_signature), so asking "how should it look?" would
+  // contradict the promise.
   const onboardingFlow = useRef(false)
   // The just-captured site's url + framework, stashed on success so the user's
   // later "proceed" click (NOT a timer) can open the right next step.
@@ -154,14 +155,11 @@ export default function SiteDetailClient({
   }
   const handleTemplateApplied = (templateName: string) => {
     setOnboardingDone(true)
-    switchTab('tema')
-    toast(`Plantilla «${templateName}» aplicada`, 'success')
-  }
-  const finishLayoutPicker = () => {
-    setShowLayoutPicker(false)
-    onboardingFlow.current = false
-    switchTab('tema')
-    toast('El teu blog està llest ✨', 'success')
+    switchTab('articles')
+    // The template seeding just created the starter posts server-side — refresh
+    // so the Articles list (and everything else) shows the blog already alive.
+    router.refresh()
+    toast(`Plantilla «${templateName}» aplicada — el teu blog ja és viu ✨`, 'success')
   }
   const handleCaptureSuccess = ({ framework, url, logoUrl }: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => {
     // IMPORTANT: we deliberately do NOT rename the site from scraped metadata.
@@ -182,13 +180,14 @@ export default function SiteDetailClient({
     if (wpImportIntent.current) {
       // Full-clone intent: open the article import (auto-discover runs against
       // the source — WordPress API, RSS or HTML scraping, whichever it has).
-      // The layout picker follows once the import modal closes (onClose below).
       wpImportIntent.current = false
       setImportUrl(url)
       setShowImport(true)
     } else if (onboardingFlow.current) {
-      // Styles-only onboarding capture → straight to the layout picker.
-      setShowLayoutPicker(true)
+      // Styles-only clone: the captured design (cards included) IS the look —
+      // nothing to choose. Done.
+      onboardingFlow.current = false
+      toast('El teu blog està llest ✨', 'success')
     }
   }
 
@@ -264,12 +263,6 @@ export default function SiteDetailClient({
           />
         )}
 
-        {showLayoutPicker && (
-          <Suspense fallback={null}>
-            <FeedLayoutPicker onDone={finishLayoutPicker} />
-          </Suspense>
-        )}
-
         <div className="space-y-6">
           <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} isSuperAdmin={isSuperAdmin} />
 
@@ -341,8 +334,13 @@ export default function SiteDetailClient({
             onClose={() => {
               setShowImport(false)
               setImportUrl(null)
-              // WordPress onboarding: after the import, continue to the layout picker.
-              if (onboardingFlow.current) setShowLayoutPicker(true)
+              // Full-clone onboarding ends here — the imported articles render
+              // inside the CLONED design (cards included); nothing to choose.
+              if (onboardingFlow.current) {
+                onboardingFlow.current = false
+                router.refresh()
+                toast('El teu blog està llest ✨', 'success')
+              }
             }}
           />
         </Suspense>
@@ -351,9 +349,9 @@ export default function SiteDetailClient({
   )
 }
 
-// Section switcher. Clients get a calm, focused bento (4 core surfaces + a
-// subordinate Premium affordance) to keep cognitive load low; superadmins keep
-// the full 6-card control grid below, untouched.
+// Section switcher — ONE line, always (founder directive): a compact pill bar
+// instead of the old two-row card bento. The description survives as a tooltip;
+// on narrow screens the bar scrolls horizontally rather than wrapping.
 function SiteSectionCards({
   active, onSelect, isLocked, isSuperAdmin,
 }: {
@@ -362,11 +360,20 @@ function SiteSectionCards({
   isLocked: (s: SectionDef) => boolean
   isSuperAdmin: boolean
 }) {
-  if (!isSuperAdmin) return <ClientSectionNav active={active} onSelect={onSelect} />
+  // Clients see a trimmed, renamed set (Connexió → "Publica"; Mòduls behind its
+  // MVP flag; Usuaris stays reachable as the Premium upsell pill).
+  const defs = isSuperAdmin
+    ? SECTION_DEFS
+    : SECTION_DEFS
+        .filter(s => CLIENT_MODULES_ENABLED || s.key !== 'moduls')
+        .map(s => (s.key === 'connexio' ? { ...s, label: 'Publica', desc: 'Posa el blog en línia', icon: Rocket } : s))
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      {SECTION_DEFS.map(s => {
+    <nav
+      aria-label="Seccions del lloc"
+      className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {defs.map(s => {
         const Icon = s.icon
         const activeS = s.key === active
         const locked = isLocked(s)
@@ -376,35 +383,21 @@ function SiteSectionCards({
             type="button"
             onClick={() => onSelect(s.key)}
             aria-current={activeS ? 'page' : undefined}
+            title={s.desc}
             className={cn(
-              'group cursor-pointer relative flex flex-col items-start gap-2.5 p-4 rounded-2xl border text-left transition-all duration-200',
+              'flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors',
               activeS
-                ? 'border-accent bg-accent-soft ring-2 ring-accent/20 shadow-sm'
-                : 'border-border bg-surface hover:border-border-strong hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-16px_rgba(0,0,0,0.25)]',
+                ? 'bg-accent-soft text-accent shadow-sm ring-1 ring-accent/25'
+                : 'text-muted hover:bg-surface-hover hover:text-text',
             )}
           >
-            <span className={cn(
-              'flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-colors',
-              activeS ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
-            )}>
-              <Icon className="w-5 h-5" />
-            </span>
-            <span className="min-w-0">
-              <span className={cn(
-                'flex items-center gap-1.5 text-sm font-bold leading-tight',
-                activeS ? 'text-accent' : 'text-text',
-              )}>
-                {s.label}
-                {locked && <LockBadge />}
-              </span>
-              <span className={cn('block text-xs leading-tight mt-0.5', activeS ? 'text-accent/70' : 'text-subtle')}>
-                {s.desc}
-              </span>
-            </span>
+            <Icon className={cn('h-4 w-4 shrink-0', activeS ? 'text-accent' : 'text-subtle')} />
+            {s.label}
+            {locked && <LockBadge />}
           </button>
         )
       })}
-    </div>
+    </nav>
   )
 }
 
@@ -422,79 +415,6 @@ function SectionSkeleton() {
         {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
       </div>
       <Skeleton className="h-72 rounded-2xl" />
-    </div>
-  )
-}
-
-// Client section nav — 4 core surfaces as a calm bento (soft shadows, no hard
-// borders), with the Premium-only surfaces tucked into a quiet secondary row so
-// they stay reachable (each shows its upsell) without competing for attention.
-function ClientSectionNav({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) => void }) {
-  // Smart Modules is hidden from clients for the MVP (CLIENT_MODULES_ENABLED).
-  // Clients publish via their Carma subdomain (no API/plugin needed), so
-  // "Connexió" is a reachable "Publica" step for them — surfaced as core, not a
-  // locked wall. Only "Usuaris" (team) remains a Premium upsell in the nav.
-  const core = SECTION_DEFS
-    .filter(s => s.key !== 'usuaris' && (CLIENT_MODULES_ENABLED || s.key !== 'moduls'))
-    .map(s => (s.key === 'connexio' ? { ...s, label: 'Publica', desc: 'Posa el blog en línia', icon: Rocket } : s))
-  const premium = SECTION_DEFS.filter(s => s.key === 'usuaris')
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {core.map(s => {
-          const Icon = s.icon
-          const activeS = s.key === active
-          return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => onSelect(s.key)}
-              aria-current={activeS ? 'page' : undefined}
-              className={cn(
-                'group relative flex cursor-pointer flex-col items-start gap-2.5 rounded-2xl p-4 text-left transition-all duration-200',
-                activeS
-                  ? 'bg-accent-soft ring-2 ring-accent/25 shadow-sm'
-                  : 'bg-surface shadow-card hover:-translate-y-0.5 hover:shadow-pop',
-              )}
-            >
-              <span className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-xl transition-colors',
-                activeS ? 'bg-accent text-on-accent' : 'bg-surface-subtle text-muted group-hover:text-text',
-              )}>
-                <Icon className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className={cn('block text-sm font-bold leading-tight', activeS ? 'text-accent' : 'text-text')}>{s.label}</span>
-                <span className={cn('mt-0.5 block text-xs leading-tight', activeS ? 'text-accent/70' : 'text-subtle')}>{s.desc}</span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 pl-0.5">
-        <span className="text-xs font-medium text-subtle">Amb Premium:</span>
-        {premium.map(s => {
-          const Icon = s.icon
-          const activeS = s.key === active
-          return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => onSelect(s.key)}
-              aria-current={activeS ? 'page' : undefined}
-              className={cn(
-                'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors',
-                activeS ? 'bg-accent-soft text-accent' : 'text-subtle hover:bg-surface-hover hover:text-muted',
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {s.label}
-              <LockBadge />
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }

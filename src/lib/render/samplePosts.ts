@@ -137,3 +137,89 @@ export function buildSampleArticle(locale: Locale, authorName = 'Carma') {
 /** Sentinel slug the dashboard uses to request the article preview when the site
  *  has no published post yet. The article render serves the sample for it. */
 export const SAMPLE_ARTICLE_SLUG = '__carma_demo__'
+
+// ── SEEDABLE starter posts (template onboarding) ─────────────────────────────
+// Unlike the preview-only samples above (demo:true, empty bodies), these become
+// REAL posts in the database when a user starts from a template: the blog is
+// born alive — full cards on the feed, full articles behind them — and every
+// piece is the user's to edit or delete. Bodies are generated from a localized
+// skeleton so all samples read as genuine, useful articles.
+
+const SEED_BODY: Record<UiLocale, (s: Sample) => string> = {
+  ca: (s) => `<p>${s.excerpt} En aquest article t'expliquem el nostre enfocament, pas a pas i sense fum.</p>
+<h2>Per què és important</h2>
+<p>Les marques que destaquen no ho fan per casualitat: darrere hi ha decisions petites preses amb criteri i mantingudes en el temps. ${s.title.replace(/\.$/, '')} és una d'aquelles palanques que semblen menors fins que en veus l'efecte acumulat.</p>
+<p>La bona notícia és que no cal cap gran pressupost per començar — només un mètode clar.</p>
+<h2>Com aplicar-ho, en quatre passos</h2>
+<ul>
+<li><strong>Observa</strong> el que ja tens: què funciona i què fa soroll.</li>
+<li><strong>Decideix</strong> un criteri simple i escriu-lo — si no està escrit, no existeix.</li>
+<li><strong>Aplica'l</strong> a una peça petita aquesta mateixa setmana.</li>
+<li><strong>Revisa</strong> el resultat al cap de quinze dies i ajusta.</li>
+</ul>
+<blockquote>La constància guanya la intensitat: val més un pas cada setmana que deu passos un sol dia.</blockquote>
+<h3>Per acabar</h3>
+<p>Comença petit, mesura i repeteix. La resta és qüestió de temps.</p>
+<p><em>Aquest article és de mostra: edita'l des del panell o esborra'l quan tinguis contingut propi.</em></p>`,
+  es: (s) => `<p>${s.excerpt} En este artículo te contamos nuestro enfoque, paso a paso y sin humo.</p>
+<h2>Por qué importa</h2>
+<p>Las marcas que destacan no lo hacen por casualidad: detrás hay decisiones pequeñas tomadas con criterio y sostenidas en el tiempo. ${s.title.replace(/\.$/, '')} es una de esas palancas que parecen menores hasta que ves su efecto acumulado.</p>
+<p>La buena noticia es que no hace falta un gran presupuesto para empezar — solo un método claro.</p>
+<h2>Cómo aplicarlo, en cuatro pasos</h2>
+<ul>
+<li><strong>Observa</strong> lo que ya tienes: qué funciona y qué hace ruido.</li>
+<li><strong>Decide</strong> un criterio simple y escríbelo — si no está escrito, no existe.</li>
+<li><strong>Aplícalo</strong> a una pieza pequeña esta misma semana.</li>
+<li><strong>Revisa</strong> el resultado a los quince días y ajusta.</li>
+</ul>
+<blockquote>La constancia gana a la intensidad: vale más un paso cada semana que diez pasos en un solo día.</blockquote>
+<h3>Para terminar</h3>
+<p>Empieza pequeño, mide y repite. El resto es cuestión de tiempo.</p>
+<p><em>Este artículo es de muestra: edítalo desde el panel o bórralo cuando tengas contenido propio.</em></p>`,
+  en: (s) => `<p>${s.excerpt} In this article we walk through our approach, step by step and with zero fluff.</p>
+<h2>Why it matters</h2>
+<p>Brands that stand out don't do it by accident: behind them are small decisions made with judgement and sustained over time. ${s.title.replace(/\.$/, '')} is one of those levers that looks minor until you see its compound effect.</p>
+<p>The good news: you don't need a big budget to start — just a clear method.</p>
+<h2>How to apply it, in four steps</h2>
+<ul>
+<li><strong>Observe</strong> what you already have: what works and what's noise.</li>
+<li><strong>Decide</strong> on one simple rule and write it down — unwritten rules don't exist.</li>
+<li><strong>Apply it</strong> to one small piece this very week.</li>
+<li><strong>Review</strong> the result two weeks later and adjust.</li>
+</ul>
+<blockquote>Consistency beats intensity: one step every week is worth more than ten steps in a single day.</blockquote>
+<h3>Wrapping up</h3>
+<p>Start small, measure, repeat. The rest is a matter of time.</p>
+<p><em>This is a sample article: edit it from the dashboard, or delete it once you have your own content.</em></p>`,
+}
+
+function seedSlug(title: string): string {
+  return title.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80)
+}
+
+export type SeedPost = {
+  title: string
+  slug: string
+  excerpt: string
+  contentHtml: string
+  featured_image: string
+  categories: string[]
+  created_at: string
+}
+
+/** The 4 starter posts a template blog is born with (locale-aware, real slugs). */
+export function buildSeedPosts(locale: Locale): SeedPost[] {
+  const ui = uiLocale(locale)
+  const set = SAMPLES[ui] ?? SAMPLES.ca
+  const body = SEED_BODY[ui] ?? SEED_BODY.ca
+  return set.slice(0, 4).map((s, i) => ({
+    title: s.title,
+    slug: seedSlug(s.title),
+    excerpt: s.excerpt,
+    contentHtml: body(s),
+    featured_image: `https://picsum.photos/seed/${s.seed}/1200/675`,
+    categories: [s.cat],
+    created_at: new Date(Date.now() - i * 3 * 86_400_000).toISOString(),
+  }))
+}

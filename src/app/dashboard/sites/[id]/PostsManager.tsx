@@ -53,6 +53,15 @@ export default function PostsManager({
 }) {
   const [posts, setPosts] = useState<PostListItem[]>(initialPosts)
   const [meta, setMeta] = useState<PostsMeta>(initialMeta)
+  // Render-time prop resync: a router.refresh() from the host (e.g. after the
+  // template onboarding seeds the starter articles) must show up here even
+  // though this component keeps its own working copy for optimistic edits.
+  const [syncedInitial, setSyncedInitial] = useState(initialPosts)
+  if (initialPosts !== syncedInitial) {
+    setSyncedInitial(initialPosts)
+    setPosts(initialPosts)
+    setMeta(initialMeta)
+  }
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
