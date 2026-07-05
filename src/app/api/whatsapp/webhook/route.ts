@@ -36,7 +36,8 @@ import { rateLimit } from '@/lib/ratelimit'
 import { WA_WINDOW_HOURS } from '@/lib/whatsapp/config'
 import { sendWhatsApp } from '@/lib/whatsapp/kapso'
 import { publishThreadDraft } from '@/lib/whatsapp/publish'
-import { generateNanoBananaCover } from '@/lib/whatsapp/coverImage'
+import { generateNanoBananaCover, coverImageEnabled } from '@/lib/whatsapp/coverImage'
+import { spendKarma, outOfPuntsMessage } from '@/lib/karma/karma'
 import { inboundMatchesCode } from '@/lib/whatsapp/verify'
 import { runDueJobs, logOutbound } from '@/lib/whatsapp/worker'
 import { WA_BUTTON, type WaMsgType } from '@/lib/whatsapp/types'
@@ -418,7 +419,7 @@ async function handleButton(
 ): Promise<void> {
   const { button, threadId, phone, phoneNumberId, host } = ctx
   const { data: th } = await admin
-    .from('wa_threads').select('agent_state, current_post_id, site_id').eq('id', threadId).maybeSingle()
+    .from('wa_threads').select('agent_state, current_post_id, site_id, identity_id').eq('id', threadId).maybeSingle()
   const stateNow = (th?.agent_state as Record<string, unknown> | null) ?? {}
 
   // Send + log: button outcomes are part of the conversation, so the intent
@@ -456,6 +457,22 @@ async function handleButton(
     if (!postId) {
       await say('No tinc cap article actiu per a la portada 🤔 Envia’m un tema i te’n preparo un.')
       return
+    }
+    // Punts de Carma: la portada només es cobra quan el proveïdor d'imatges és
+    // REAL (mentre el flux està mockejat, cap càrrec per un no-op). Dedupe per
+    // post: regenerar la portada del mateix article no torna a cobrar.
+    if (coverImageEnabled() && th?.identity_id) {
+      const { data: ident } = await admin
+        .from('wa_identities').select('user_id').eq('id', th.identity_id).maybeSingle()
+      if (ident?.user_id) {
+        const coverSpend = await spendKarma(ident.user_id as string, 'cover_image', {
+          ref: postId, dedupeKey: `cover:${postId}`,
+        }, admin)
+        if (!coverSpend.ok) {
+          await say(outOfPuntsMessage())
+          return
+        }
+      }
     }
     await say('✨ Perfecte! Estic preparant la portada…')
     const res = await generateNanoBananaCover(admin, postId, { siteId: (th?.site_id as string | null) ?? null })

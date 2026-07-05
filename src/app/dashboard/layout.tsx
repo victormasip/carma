@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { getKarma } from '@/lib/karma/karma'
 import { LocaleProvider } from '@/lib/i18n/LocaleProvider'
 import { getLocale } from '@/lib/i18n/locale-server'
 import DashboardSidebar from './DashboardSidebar'
@@ -16,18 +17,24 @@ export default async function DashboardLayout({
   // Sites for the left-hand hub: superadmins see all (admin client), clients see
   // their assigned sites (RLS-scoped). Capped so the sidebar stays compact.
   // Locale (cookie read) resolves in the same round trip.
-  const [{ data: sitesData }, locale] = await Promise.all([
+  const [{ data: sitesData }, locale, karma] = await Promise.all([
     isSuperAdmin
       ? createAdminClient().from('sites').select('id, name').order('created_at', { ascending: false }).limit(40)
       : supabase.from('sites').select('id, name').order('name'),
     getLocale(),
+    getKarma(user.id),
   ])
   const sites = (sitesData ?? []) as { id: string; name: string }[]
 
   return (
     <LocaleProvider initialLocale={locale}>
       <div className="min-h-screen bg-bg">
-        <DashboardSidebar isSuperAdmin={isSuperAdmin} sites={sites} userEmail={user.email ?? ''} />
+        <DashboardSidebar
+          isSuperAdmin={isSuperAdmin}
+          sites={sites}
+          userEmail={user.email ?? ''}
+          karma={{ balance: karma.balance, allocation: karma.allocation, superadmin: karma.superadmin || isSuperAdmin, available: karma.available }}
+        />
 
         {/* overflow-x-clip: hard guard against horizontal scroll from any wide
             child (tables, code blocks, long URLs) — clip, not hidden, so

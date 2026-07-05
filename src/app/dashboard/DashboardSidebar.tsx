@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { Menu, X } from 'lucide-react'
 import SidebarNav from './SidebarNav'
 import UserMenu from './UserMenu'
+import KarmaWidget, { type KarmaWidgetData } from './KarmaWidget'
 import Wordmark from '@/components/ui/Wordmark'
 import { useT } from '@/lib/i18n/LocaleProvider'
 
@@ -15,10 +16,12 @@ export default function DashboardSidebar({
   isSuperAdmin,
   sites,
   userEmail,
+  karma,
 }: {
   isSuperAdmin: boolean
   sites: Site[]
   userEmail: string
+  karma: KarmaWidgetData
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
@@ -47,6 +50,10 @@ export default function DashboardSidebar({
       </div>
 
       <SidebarNav isSuperAdmin={isSuperAdmin} sites={sites} />
+
+      <div className="px-3 pb-2">
+        <KarmaWidget karma={karma} />
+      </div>
 
       <div className="p-3 border-t border-border">
         <UserMenu userEmail={userEmail} isSuperAdmin={isSuperAdmin} />

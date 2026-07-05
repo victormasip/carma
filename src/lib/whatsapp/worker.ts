@@ -33,6 +33,8 @@ import { mintReviewToken, reviewTokenExpiry } from './tokens'
 import { downloadKapsoMedia, transcribeAudio } from './transcribe'
 import { runAgent, type AgentUsage, type AgentDraft } from './agent'
 import { routeTurn, type HistoryTurn } from './brain'
+import { spendKarma, refundKarma, refundJobSpends, getKarma, outOfPuntsMessage } from '@/lib/karma/karma'
+import { KARMA_COSTS, KARMA_CLARIFY_NET } from '@/lib/karma/config'
 import { buildSiteContext, formatSiteContext, type SiteContext } from './persona'
 import { publishThreadDraft } from './publish'
 import { sendWhatsApp, sendWhatsAppButtons, reviewUrl } from './kapso'
@@ -244,9 +246,10 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   const t = thread as WaThreadRow
 
   const { data: identity } = await admin
-    .from(WA_TABLES.identities).select('phone_e164, status').eq('id', t.identity_id).maybeSingle()
+    .from(WA_TABLES.identities).select('phone_e164, status, user_id').eq('id', t.identity_id).maybeSingle()
   if (!identity || identity.status !== 'active') return finishJob(admin, job.id, 'done') // gate changed; drop
   const phone = identity.phone_e164 as string
+  const ownerId = identity.user_id as string
 
   const payload = (job.payload ?? {}) as {
     candidate_site_ids?: string[]
@@ -290,10 +293,32 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   const state: WaAgentState = (t.agent_state as WaAgentState) ?? { phase: 'await_brief' }
 
+  // ── Punts de Carma: pre-flight a cost zero ──
+  // Amb el saldo a 0, el torn no arriba MAI a cap crida d'LLM/Whisper: resposta
+  // determinista i càlida amb el camí per guanyar punts o pujar de pla. Excepció
+  // deliberada: si hi ha un esborrany pendent deixem passar el torn (val 1 punt
+  // de router com a molt) perquè "publica'l" per TEXT segueixi funcionant — ja
+  // el va pagar; publicar mai es bloqueja. (Superadmin: balance null = infinit.)
+  const draftPendingNow = !!(t.current_post_id && (state.phase === 'awaiting_review' || state.phase === 'awaiting_edit'))
+  const karmaNow = await getKarma(ownerId, admin)
+  if (karmaNow.balance !== null && karmaNow.balance <= 0 && !draftPendingNow) {
+    await say(admin, t.id, phone, outOfPuntsMessage(), pnid)
+    await updateThread(admin, t.id, { turn_count: t.turn_count + 1 })
+    return finishJob(admin, job.id, 'done')
+  }
+
   // ── Input text: transcribe audio (T3) or use the text body ──
   let inboundText = (msg.text ?? '').trim()
   let usedAudio = false
   if (msg.msg_type === 'audio' && (payload.media_id || payload.media_url)) {
+    // Nota de veu = Whisper = punts. Dedupe per feina: un reintent transitori
+    // (descàrrega/Whisper caigut) NO torna a cobrar el mateix àudio.
+    const audioSpend = await spendKarma(ownerId, 'voice_note', { ref: job.id, dedupeKey: `job:${job.id}:audio` }, admin)
+    if (!audioSpend.ok) {
+      await say(admin, t.id, phone, outOfPuntsMessage(), pnid)
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1 })
+      return finishJob(admin, job.id, 'done')
+    }
     const media = await downloadKapsoMedia({
       mediaId: payload.media_id ?? null,
       phoneNumberId: payload.phone_number_id ?? null,
@@ -381,6 +406,9 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   // ── chat: the reply WAS the turn ──
   if (route.intent === 'chat') {
+    // 1 punt per torn de conversa (el router ja ha corregut). Si el saldo just
+    // s'ha esgotat en paral·lel, ho deixem passar de gràcia — mai en negatiu.
+    await spendKarma(ownerId, 'agent_chat', { ref: job.id, dedupeKey: `job:${job.id}:chat` }, admin)
     await updateThread(admin, t.id, {
       turn_count: t.turn_count + 1,
       cost_cents: t.cost_cents + cost,
@@ -413,6 +441,14 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   // ── edit: revise the pending draft in place, re-issue the review link ──
   if (route.intent === 'edit' && t.current_post_id && siteId && siteCtx) {
+    // Revisió = punts, cobrats ABANS de l'LLM. Dedupe per feina: els reintents
+    // transitoris no tornen a cobrar; la fallada definitiva es reemborsa.
+    const editSpend = await spendKarma(ownerId, 'article_revision', { ref: job.id, dedupeKey: `job:${job.id}:edit` }, admin)
+    if (!editSpend.ok) {
+      await say(admin, t.id, phone, outOfPuntsMessage(), pnid)
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost })
+      return finishJob(admin, job.id, 'done')
+    }
     const { data: cur } = await admin
       .from('posts').select('title, content, excerpt').eq('id', t.current_post_id).maybeSingle()
     const curContent = cur?.content as { html?: unknown } | null
@@ -485,6 +521,16 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     return finishJob(admin, job.id, 'done')
   }
 
+  // Punts de Carma: l'esborrany es cobra ABANS de l'LLM (atòmic, mai negatiu).
+  // Si l'agent respon amb una PREGUNTA en lloc d'un esborrany, es retorna la
+  // diferència (el torn queda al net de clarificació). Dedupe per feina.
+  const draftSpend = await spendKarma(ownerId, 'article_draft', { ref: job.id, dedupeKey: `job:${job.id}:draft` }, admin)
+  if (!draftSpend.ok) {
+    await say(admin, t.id, phone, outOfPuntsMessage(), pnid)
+    await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost })
+    return finishJob(admin, job.id, 'done')
+  }
+
   // Turn-Budget-1: once we've spent our one clarification (or budget is 0), draft.
   const mustDraft = !!state.clarification_used || WA_TURN_BUDGET <= 0
 
@@ -499,6 +545,9 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   cost += estimateCostCents(result.usage, false)
 
   if (result.kind === 'clarify') {
+    await refundKarma(ownerId, KARMA_COSTS.article_draft - KARMA_CLARIFY_NET, 'clarify_refund', {
+      ref: job.id, dedupeKey: `job:${job.id}:draft:clarify`,
+    }, admin)
     await say(admin, t.id, phone, result.message, pnid)
     await updateThread(admin, t.id, {
       turn_count: t.turn_count + 1,
@@ -579,7 +628,10 @@ export async function runDueJobs(limit = 5, budgetMs = 20_000): Promise<number> 
         try {
           const { data: th } = await admin.from(WA_TABLES.threads).select('identity_id').eq('id', job.thread_id).maybeSingle()
           if (th) {
-            const { data: id } = await admin.from(WA_TABLES.identities).select('phone_e164').eq('id', th.identity_id).maybeSingle()
+            const { data: id } = await admin.from(WA_TABLES.identities).select('phone_e164, user_id').eq('id', th.identity_id).maybeSingle()
+            // Punts de Carma: una feina morta no es paga — retorna els spends
+            // d'aquesta feina (dedupe per fila de ledger; segur de reintentar).
+            if (id?.user_id) await refundJobSpends(admin, id.user_id as string, job.id)
             if (id?.phone_e164) await sendWhatsApp(id.phone_e164 as string, "Uf, se m'ha embolicat preparant l'article 😅 Torna-m'ho a enviar d'aquí una estona.")
           }
         } catch { /* best-effort notify */ }

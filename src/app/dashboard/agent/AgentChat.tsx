@@ -37,6 +37,7 @@ type MsgBody =
   | { role: 'user'; text: string }
   | { role: 'agent'; kind: 'text'; text: string }
   | { role: 'agent'; kind: 'error'; text: string }
+  | { role: 'agent'; kind: 'nokarma'; text: string }
   | { role: 'agent'; kind: 'draft'; draft: AgentDraft; brief: string; saved?: SavedInfo; published?: PublishedInfo; discarded?: boolean }
 type Msg = MsgBody & { id: number }
 type DraftMsg = Extract<Msg, { kind: 'draft' }>
@@ -120,7 +121,14 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
       : { brief: text })
 
     setBusy(false)
-    if (!res.ok) { push({ role: 'agent', kind: 'error', text: res.error }); return }
+    if (!res.ok) {
+      // Sense punts: mai un error sec — una invitació daurada a guanyar-ne o
+      // pujar de pla (la bombolla porta els CTAs).
+      push({ role: 'agent', kind: res.code === 'no_karma' ? 'nokarma' : 'error', text: res.error })
+      return
+    }
+    // Feedback de consum (spec: mai gastar en silenci). Superadmin no en veu.
+    if (res.karma) toast(`−${res.karma.spent} Punts de Carma · Et queden ${res.karma.balance}`, 'info')
     if (res.kind === 'clarify') { push({ role: 'agent', kind: 'text', text: res.message }); return }
 
     // A fresh draft (or a revision) becomes the new edit target automatically —
@@ -245,6 +253,26 @@ export default function AgentChat({ sites, initialSiteId }: { sites: Site[]; ini
                 onChanges={() => requestChanges(m)}
                 onDiscard={() => discard(m.id)}
               />
+            )
+          }
+          if (m.kind === 'nokarma') {
+            return (
+              <div key={m.id} className="flex">
+                <div className="gold-trace gold-trace-aura max-w-[85%] rounded-2xl rounded-bl-md border border-accent/40 bg-bg-elevated px-4 py-3.5">
+                  <p className="relative z-10 flex items-center gap-2 text-sm font-extrabold text-text">
+                    <EndlessKnot size={16} glow /> T&apos;has quedat sense Punts de Carma
+                  </p>
+                  <p className="relative z-10 mt-1 text-sm leading-relaxed text-muted">{m.text}</p>
+                  <div className="relative z-10 mt-3 flex flex-wrap gap-2">
+                    <Button href="/dashboard/karma" size="sm" glow iconLeft={<Sparkles className="h-3.5 w-3.5" />}>
+                      Guanya punts amb reptes
+                    </Button>
+                    <Button href="/#preus" size="sm" variant="secondary">
+                      Mira els plans
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )
           }
           return (

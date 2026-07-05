@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { spendKarma } from '@/lib/karma/karma'
 import { parse, HTMLElement } from 'node-html-parser'
 import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText, decodeEntities } from '@/lib/scrape/http'
 import { extractTokens } from '@/lib/scrape/tokens'
@@ -386,6 +388,36 @@ export async function POST(request: NextRequest) {
   // auto-detection is unsure. Validated/SSRF-checked like the main URL.
   const blogUrlRaw = body.blogUrl?.trim() ?? ''
   const blogUrlOverride = blogUrlRaw && isValidHttpUrl(blogUrlRaw) && isSafeUrl(blogUrlRaw) ? blogUrlRaw : ''
+
+  // ── Punts de Carma: la clonació del grabber és cara (30–90 s de còmput) ──
+  // La PRIMERA captura de l'usuari és GRATIS — és el funnel d'onboarding. Les
+  // re-captures costen punts, amb dedupe diari: reintentar una captura que
+  // falla el mateix dia no torna a cobrar mai. (Superadmin: la RPC curtcircuita.)
+  {
+    const admin = createAdminClient()
+    const { data: memberships } = await admin
+      .from('site_users').select('site_id').eq('user_id', user.id)
+    const siteIds = (memberships ?? []).map((r) => r.site_id as string)
+    let hasTheme = false
+    if (siteIds.length) {
+      const { count } = await admin
+        .from('site_themes').select('site_id', { count: 'exact', head: true }).in('site_id', siteIds)
+      hasTheme = (count ?? 0) > 0
+    }
+    if (hasTheme) {
+      const day = new Date().toISOString().slice(0, 10)
+      const spend = await spendKarma(user.id, 'site_clone', {
+        ref: referenceUrl.slice(0, 200),
+        dedupeKey: `clone:${user.id}:${day}`,
+      }, admin)
+      if (!spend.ok) {
+        return NextResponse.json(
+          { error: 'T’has quedat sense Punts de Carma per aquest mes 😅 Guanya’n més completant reptes o puja de pla des de «Punts de Carma» al teu tauler — i tornem a clonar el que vulguis.' },
+          { status: 402 },
+        )
+      }
+    }
+  }
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({

@@ -73,6 +73,9 @@ function LangSwitch({ locale }: { locale: UiLocale }) {
   const router = useRouter()
   const pick = (l: UiLocale) => {
     if (l === locale) return
+    // Cookie write in an event handler is intentional (no React state involved);
+    // react-hooks v6 immutability flags any `document.*` assignment.
+    // eslint-disable-next-line react-hooks/immutability
     document.cookie = `${LOCALE_COOKIE}=${l};path=/;max-age=31536000;samesite=lax`
     router.refresh()
   }

@@ -17,11 +17,16 @@ import { createPost } from '@/lib/actions/posts'
 import { WA_TABLES } from '@/lib/whatsapp/types'
 import { publicBlogUrl } from '@/lib/sites/domain'
 import { LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
+import { spendKarma, refundKarma, outOfPuntsConsoleMessage } from '@/lib/karma/karma'
+import { KARMA_COSTS, KARMA_CLARIFY_NET } from '@/lib/karma/config'
+
+/** Feedback de consum perquè la UI pugui ensenyar el toast "−80 · et queden X". */
+export type KarmaFeedback = { spent: number; balance: number }
 
 export type ConsoleTurnResult =
-  | { ok: true; kind: 'clarify'; message: string }
-  | { ok: true; kind: 'draft'; draft: AgentDraft }
-  | { ok: false; error: string }
+  | { ok: true; kind: 'clarify'; message: string; karma?: KarmaFeedback }
+  | { ok: true; kind: 'draft'; draft: AgentDraft; karma?: KarmaFeedback }
+  | { ok: false; error: string; code?: 'no_karma'; balance?: number }
 
 export type ConsolePublishResult =
   | { ok: true; postId: string; editorUrl: string; liveUrl: string; published: boolean }
@@ -40,7 +45,7 @@ async function assertConsoleAccess(siteId: string) {
       .from('site_users').select('site_id').eq('site_id', siteId).eq('user_id', user.id).maybeSingle()
     if (!member) throw new Error('No tens accés a aquest lloc')
   }
-  return createAdminClient()
+  return { admin: createAdminClient(), userId: user.id }
 }
 
 /** One agent turn: a fresh brief, or a revision of the current draft. */
@@ -49,11 +54,19 @@ export async function consoleAgentTurn(
   input: { brief?: string; editInstructions?: string; currentDraft?: { title: string; contentHtml: string; excerpt?: string } },
 ): Promise<ConsoleTurnResult> {
   try {
-    const admin = await assertConsoleAccess(siteId)
+    const { admin, userId } = await assertConsoleAccess(siteId)
 
     const brief = (input.brief ?? '').trim()
     const editing = !!(input.editInstructions?.trim() && input.currentDraft)
     if (!brief && !editing) return { ok: false, error: 'Escriu de què vols l’article.' }
+
+    // Punts de Carma: es cobra ABANS de l'LLM (atòmic, mai negatiu). Una
+    // clarificació retorna la diferència; un error de proveïdor retorna tot.
+    const spendAction = editing ? 'article_revision' as const : 'article_draft' as const
+    const spend = await spendKarma(userId, spendAction, { ref: siteId }, admin)
+    if (!spend.ok) {
+      return { ok: false, code: 'no_karma', error: outOfPuntsConsoleMessage(), balance: spend.balance }
+    }
 
     // Site context for the agent: name, article language, existing categories.
     const [siteRes, themeRes, catRes] = await Promise.all([
@@ -68,20 +81,35 @@ export async function consoleAgentTurn(
       (catRes.data ?? []).flatMap((r) => (r.categories as string[] | null) ?? []),
     )].slice(0, 12)
 
-    const result = await runAgent({
-      brief,
-      articleLanguage: LOCALE_META[locale].native,
-      siteName: siteRes.data.name as string,
-      existingCategories,
-      // A revision must always produce a draft; a fresh brief may ask ONE
-      // clarification (same Turn-Budget-1 spirit as the phone channel — the
-      // console user can simply answer in the next message).
-      mustDraft: editing,
-      ...(editing ? { editInstructions: input.editInstructions, currentDraft: input.currentDraft } : {}),
-    })
+    let result: Awaited<ReturnType<typeof runAgent>>
+    try {
+      result = await runAgent({
+        brief,
+        articleLanguage: LOCALE_META[locale].native,
+        siteName: siteRes.data.name as string,
+        existingCategories,
+        // A revision must always produce a draft; a fresh brief may ask ONE
+        // clarification (same Turn-Budget-1 spirit as the phone channel — the
+        // console user can simply answer in the next message).
+        mustDraft: editing,
+        ...(editing ? { editInstructions: input.editInstructions, currentDraft: input.currentDraft } : {}),
+      })
+    } catch (err) {
+      // El proveïdor ha fallat: l'usuari no paga per un error nostre.
+      await refundKarma(userId, KARMA_COSTS[spendAction], 'job_failed_refund', { ref: siteId }, admin)
+      throw err
+    }
 
-    if (result.kind === 'clarify') return { ok: true, kind: 'clarify', message: result.message }
-    return { ok: true, kind: 'draft', draft: result.draft }
+    if (result.kind === 'clarify') {
+      const refund = KARMA_COSTS.article_draft - KARMA_CLARIFY_NET
+      await refundKarma(userId, refund, 'clarify_refund', { ref: siteId }, admin)
+      const karma = spend.balance === null ? undefined
+        : { spent: KARMA_CLARIFY_NET, balance: spend.balance + refund }
+      return { ok: true, kind: 'clarify', message: result.message, karma }
+    }
+    const karma = spend.balance === null ? undefined
+      : { spent: KARMA_COSTS[spendAction], balance: spend.balance }
+    return { ok: true, kind: 'draft', draft: result.draft, karma }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Error desconegut' }
   }
@@ -94,7 +122,7 @@ export async function consolePublish(
   opts: { publish: boolean; brief?: string },
 ): Promise<ConsolePublishResult> {
   try {
-    const admin = await assertConsoleAccess(siteId)
+    const { admin } = await assertConsoleAccess(siteId)
 
     const data = {
       title: draft.title,

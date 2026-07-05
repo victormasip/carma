@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, FileText, Globe, Wand2, MessageCircle, Palette } from 'lucide-react'
+import { LayoutDashboard, Settings, FileText, Globe, Wand2, MessageCircle, Palette, Sparkles } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 
@@ -38,6 +38,12 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
         active={pathname.startsWith('/dashboard/studio')}
         icon={<Palette className="w-4 h-4" />}
         label={t('nav.studio')}
+      />
+      <NavItem
+        href="/dashboard/karma"
+        active={pathname.startsWith('/dashboard/karma')}
+        icon={<Sparkles className="w-4 h-4" />}
+        label={t('nav.karma')}
       />
 
       {sites.length > 0 && (
