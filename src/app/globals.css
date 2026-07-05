@@ -760,11 +760,15 @@ section[id] { scroll-margin-top: 110px; }
  * ══════════════════════════════════════════════════════════════════════════ */
 .wa-scene { --wa-cycle: 16s; }
 .wa-step { opacity: 0; will-change: transform, opacity; }
-.wa-step-1 { animation: wa-step-1 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite; }
-.wa-step-2 { animation: wa-step-2 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite; }
-.wa-step-3 { animation: wa-step-3 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite; }
-.wa-step-4 { animation: wa-step-4 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite; }
-.wa-step-5 { animation: wa-step-5 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite; }
+/* !important on every .wa-* animation: the scene is the landing's product demo
+   and must play even on Windows machines with OS animations disabled — the same
+   brand exemption as .animate-spin / .knot-draw / .btn-gold. A class rule with
+   !important beats the blanket `*` reduced-motion kill-switch above. */
+.wa-step-1 { animation: wa-step-1 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-step-2 { animation: wa-step-2 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-step-3 { animation: wa-step-3 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-step-4 { animation: wa-step-4 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-step-5 { animation: wa-step-5 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
 @keyframes wa-step-1 {
   0%, 2%   { opacity: 0; transform: translateY(12px) scale(.94); }
   5%, 93%  { opacity: 1; transform: none; }
@@ -794,9 +798,9 @@ section[id] { scroll-margin-top: 110px; }
 }
 /* Typing indicators — visible only in the pause before their bubble. */
 .wa-typing { opacity: 0; }
-.wa-typing-1 { animation: wa-typing-1 var(--wa-cycle) ease-in-out infinite; }
-.wa-typing-2 { animation: wa-typing-2 var(--wa-cycle) ease-in-out infinite; }
-.wa-typing-3 { animation: wa-typing-3 var(--wa-cycle) ease-in-out infinite; }
+.wa-typing-1 { animation: wa-typing-1 var(--wa-cycle) ease-in-out infinite !important; }
+.wa-typing-2 { animation: wa-typing-2 var(--wa-cycle) ease-in-out infinite !important; }
+.wa-typing-3 { animation: wa-typing-3 var(--wa-cycle) ease-in-out infinite !important; }
 @keyframes wa-typing-1 {
   0%, 8%  { opacity: 0; transform: translateY(6px); }
   10%, 13% { opacity: 1; transform: none; }
@@ -812,26 +816,26 @@ section[id] { scroll-margin-top: 110px; }
   67%, 70% { opacity: 1; transform: none; }
   72%, 100% { opacity: 0; transform: none; }
 }
-.wa-typing-dot { animation: wa-typing-dot 1.2s ease-in-out infinite; }
+.wa-typing-dot { animation: wa-typing-dot 1.2s ease-in-out infinite !important; }
 @keyframes wa-typing-dot {
   0%, 60%, 100% { transform: none; opacity: .45; }
   30% { transform: translateY(-3px); opacity: 1; }
 }
 /* Voice-note waveform: bars breathe from the baseline while the note "plays". */
-.wa-wave-bar { transform-origin: 50% 100%; animation: wa-wave 1.05s ease-in-out infinite; }
+.wa-wave-bar { transform-origin: 50% 100%; animation: wa-wave 1.05s ease-in-out infinite !important; }
 @keyframes wa-wave { 0%, 100% { transform: scaleY(.5); } 50% { transform: scaleY(1); } }
 /* The «Publicar» tap: an expanding gold ring + a quick press dip on the button. */
 .wa-tap {
   position: absolute; inset: -5px; border-radius: 12px; pointer-events: none;
   border: 2px solid rgba(255, 215, 105, .95); opacity: 0;
-  animation: wa-tap var(--wa-cycle) ease-out infinite;
+  animation: wa-tap var(--wa-cycle) ease-out infinite !important;
 }
 @keyframes wa-tap {
   0%, 52% { opacity: 0; transform: scale(.72); }
   55%     { opacity: .95; transform: scale(1); }
   61%, 100% { opacity: 0; transform: scale(1.32); }
 }
-.wa-press { animation: wa-press var(--wa-cycle) ease-out infinite; }
+.wa-press { animation: wa-press var(--wa-cycle) ease-out infinite !important; }
 @keyframes wa-press {
   0%, 53% { transform: none; }
   55%     { transform: scale(.93); }
@@ -841,7 +845,7 @@ section[id] { scroll-margin-top: 110px; }
 .wa-spark {
   position: absolute; width: 6px; height: 6px; border-radius: 999px;
   background: #ffd23d; opacity: 0; pointer-events: none;
-  animation: wa-spark var(--wa-cycle) ease-out infinite;
+  animation: wa-spark var(--wa-cycle) ease-out infinite !important;
 }
 @keyframes wa-spark {
   0%, 73% { opacity: 0; transform: translate(0, 0) scale(.3); }
@@ -865,10 +869,9 @@ section[id] { scroll-margin-top: 110px; }
   .hero-word { opacity: 1; transform: none; }
   .skeleton::after { display: none; }
   .zen-breathe { animation: none; opacity: .6; }
-  /* WhatsApp hero scene degrades to the full static conversation. */
-  .wa-step { animation: none !important; opacity: 1 !important; transform: none !important; }
-  .wa-typing, .wa-tap, .wa-spark { display: none !important; }
-  .wa-press, .wa-wave-bar, .wa-typing-dot { animation: none !important; }
+  /* The WhatsApp hero scene keeps playing (brand exemption, like the knot and
+     the gold sheen): its .wa-* rules carry class-level !important animations
+     that beat the blanket `*` kill-switch — no override needed here. */
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

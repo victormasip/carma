@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Ubuntu } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/Modal";
@@ -30,7 +29,12 @@ export default function RootLayout({
   return (
     <html lang="ca" suppressHydrationWarning>
       <head>
-        <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* MUST be a plain inline <script>, NOT next/script: it sets data-theme
+            synchronously during HTML parsing, BEFORE first paint. next/script's
+            beforeInteractive queues inline content into self.__next_s and only
+            executes it when the framework runtime boots — after paint — which
+            breaks dark/light detection (flash of wrong theme / stuck light). */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Reveal-on-scroll needs JS; without it, below-the-fold sections must
             never stay invisible. */}
         <noscript><style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style></noscript>
