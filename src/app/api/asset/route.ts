@@ -61,7 +61,9 @@ export async function GET(request: NextRequest) {
       const css = proxyFontsInCss(absolutiseCssUrls(new TextDecoder().decode(ab), base))
       return new NextResponse(css, {
         status: 200,
-        headers: { ...CORS, 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400' },
+        // s-maxage caches the proxied sheet at the CDN edge (max-age alone never
+        // edge-caches on Vercel → every visitor paid a lambda + origin fetch).
+        headers: { ...CORS, 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800' },
       })
     }
 
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
         ...CORS,
         'Content-Type': ct,
         'Content-Length': String(ab.byteLength),
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
         'X-Content-Type-Options': 'nosniff',
       },
     })

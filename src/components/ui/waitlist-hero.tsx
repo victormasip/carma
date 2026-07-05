@@ -11,7 +11,17 @@ import { normalizeUrl } from "@/lib/onboarding/url"
 // decorative device); copy is Catalan and the accent is gold.
 // `variant="section"` renders a contained dark band (for embedding in a page);
 // the default `"screen"` is the original full-viewport hero.
-export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "section" } = {}) => {
+type WaitlistCopy = { title: string; sub: string; cloning: string; placeholder: string; cta: string }
+
+const DEFAULT_COPY: WaitlistCopy = {
+  title: "Enganxa una URL.",
+  sub: "Un blog idèntic a la teva web en 30 segons — amb l'agent de WhatsApp a dins.",
+  cloning: "Clonant la teva web…",
+  placeholder: "la-teva-web.cat",
+  cta: "Genera el meu blog",
+}
+
+export const WaitlistHero = ({ variant = "screen", copy = DEFAULT_COPY }: { variant?: "screen" | "section"; copy?: WaitlistCopy } = {}) => {
   const router = useRouter()
   const [url, setUrl] = useState("")
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle")
@@ -114,10 +124,10 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
           </div>
 
           <h1 className="text-5xl md:text-6xl font-extrabold text-center tracking-tight text-white">
-            Enganxa una URL.
+            {copy.title}
           </h1>
           <p className="text-lg font-medium text-white/60 text-center max-w-md">
-            Un blog idèntic a la teva web en 30 segons — amb l&apos;agent de WhatsApp a dins.
+            {copy.sub}
           </p>
 
           {/* Form / success */}
@@ -131,7 +141,7 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
             >
               <div className={`flex items-center gap-2 text-[#1a1400] font-bold text-lg ${status === "success" ? "cz-bounce-in" : ""}`}>
                 <Wand2 className="w-5 h-5" />
-                <span>Clonant la teva web…</span>
+                <span>{copy.cloning}</span>
               </div>
             </div>
 
@@ -144,7 +154,7 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
                 type="text"
                 inputMode="url"
                 required
-                placeholder="la-teva-web.cat"
+                placeholder={copy.placeholder}
                 value={url}
                 disabled={status === "loading"}
                 onChange={(e) => setUrl(e.target.value)}
@@ -157,7 +167,7 @@ export const WaitlistHero = ({ variant = "screen" }: { variant?: "screen" | "sec
                   disabled={status === "loading"}
                   className="btn-gold h-full px-6 rounded-full font-extrabold transition-all active:scale-95 disabled:cursor-wait flex items-center justify-center gap-2 min-w-[150px]"
                 >
-                  <Wand2 className="h-4 w-4" /> Genera el meu blog
+                  <Wand2 className="h-4 w-4" /> {copy.cta}
                 </button>
               </div>
             </form>

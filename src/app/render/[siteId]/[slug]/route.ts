@@ -183,7 +183,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const fragment = buildArticleFragment(themeForRender, siteId, resolution.post, locale, extra)
     return NextResponse.json(fragment, {
       status: 200,
-      headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+      headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=86400' },
     })
   }
 
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // copy to everyone, or a locked copy to a subscriber).
       'Cache-Control': paywallOn
         ? 'private, no-store'
-        : 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+        : 'public, max-age=0, s-maxage=60, stale-while-revalidate=86400',
     },
   })
 }

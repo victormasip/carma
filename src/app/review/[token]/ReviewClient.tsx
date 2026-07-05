@@ -219,7 +219,7 @@ export default function ReviewScreen(props: ReviewScreenProps) {
             onClick={onApprove}
             iconLeft={<Sparkles className="h-4 w-4" />}
           >
-            {pending ? 'Publicant…' : 'Aprovar i Publicar'}
+            {pending ? 'Publicant…' : 'Publicar'}
           </Button>
 
           {/* Edit: WhatsApp edit loop (token-gated, no login) OR the full editor. */}

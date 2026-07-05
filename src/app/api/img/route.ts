@@ -118,8 +118,10 @@ export async function GET(request: NextRequest) {
       'Content-Type': outMime,
       'Content-Length': String(out.length),
       // Long-lived, immutable. The URL fully describes the variant (w/fmt/q) so
-      // the same params always produce the same bytes.
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      // the same params always produce the same bytes. s-maxage is REQUIRED for
+      // the Vercel edge cache — with max-age alone every visitor's every image
+      // invoked this sharp lambda (the #1 mobile slowness, fixed 2026-07-05).
+      'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
       'Vary': 'Accept',
       'X-Content-Type-Options': 'nosniff',
     },

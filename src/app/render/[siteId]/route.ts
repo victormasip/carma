@@ -96,7 +96,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const fragment = buildListingFragment(themeForRender, site.name, siteId, renderPosts, locale)
     return NextResponse.json(fragment, {
       status: 200,
-      headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+      headers: { ...FRAGMENT_CORS, 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=86400' },
     })
   }
 
@@ -114,7 +114,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // immediately — saveTheme calls revalidatePath); the CDN edge still caches
       // for visitors via s-maxage. Fixes "re-captured chrome doesn't show on the
       // live render but does in the preview" (the preview always cache-busts).
-      'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+      // SWR is a full day: after the first hit, visitors get instant edge HTML
+      // while the edge refreshes in the background — content is never more than
+      // one request behind, but the mobile TTFB stops paying the origin render.
+      'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=86400',
     },
   })
 }

@@ -34,9 +34,20 @@ export function slugifySubdomain(name: string): string {
   return base || 'blog'
 }
 
-/** Configured production apex (lowercased, no port), or '' when unset (dev). */
+/**
+ * Configured production apex (lowercased, no port), or '' when unset (dev).
+ *
+ * Production fallback (founder escalation 2026-07-05: "subdomains don't work,
+ * it's always the ugly /render URL"): when NEXT_PUBLIC_ROOT_DOMAIN is missing
+ * from the deploy env — which silently disabled ALL subdomain routing and made
+ * every public URL fall back to /render/<uuid> — production defaults to the
+ * product apex. NEXT_PUBLIC_ROOT_DOMAIN still overrides; dev stays '' so
+ * *.localhost handling keeps working.
+ */
 export function rootDomain(): string {
-  return (process.env.NEXT_PUBLIC_ROOT_DOMAIN || '').trim().toLowerCase().split(':')[0]
+  const configured = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || '').trim().toLowerCase().split(':')[0]
+  if (configured) return configured
+  return process.env.NODE_ENV === 'production' ? 'carma.cat' : ''
 }
 
 /**

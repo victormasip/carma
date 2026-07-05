@@ -16,14 +16,23 @@ const EXAMPLES = [
  * animated placeholder, follows the cursor with a soft gold spotlight, and fires
  * the Magic-Link funnel. Reusable (hero + final CTA).
  */
+const DEFAULT_LABELS = {
+  aria: 'La URL del teu lloc web',
+  placeholder: 'la-teva-web.cat',
+  cta: 'Genera el meu blog',
+  ctaShort: 'Generar',
+}
+
 export default function UrlInput({
   onSubmit,
   autoFocus = false,
   size = 'lg',
+  labels = DEFAULT_LABELS,
 }: {
   onSubmit: (url: string) => void
   autoFocus?: boolean
   size?: 'lg' | 'md'
+  labels?: { aria: string; placeholder: string; cta: string; ctaShort: string }
 }) {
   const [value, setValue] = useState('')
   const [exampleIdx, setExampleIdx] = useState(0)
@@ -88,13 +97,13 @@ export default function UrlInput({
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
           inputMode="url"
-          aria-label="La URL del teu lloc web"
+          aria-label={labels.aria}
           className="w-full bg-transparent text-lg font-medium text-text outline-none placeholder:text-transparent sm:text-xl"
         />
         {/* Animated placeholder overlay (only while empty). */}
         {!value && (
           <span className="caret-blink pointer-events-none absolute left-[2.25rem] text-lg font-medium text-subtle sm:text-xl">
-            {typed || 'la-teva-web.cat'}
+            {typed || labels.placeholder}
           </span>
         )}
       </div>
@@ -106,8 +115,8 @@ export default function UrlInput({
       >
         <span className="relative z-[1] inline-flex items-center gap-2">
           <Wand2 className="h-4 w-4" />
-          <span className="hidden sm:inline">Genera el meu blog</span>
-          <span className="sm:hidden">Generar</span>
+          <span className="hidden sm:inline">{labels.cta}</span>
+          <span className="sm:hidden">{labels.ctaShort}</span>
           <ArrowRight className="h-4 w-4" />
         </span>
       </button>

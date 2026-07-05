@@ -9,6 +9,8 @@
 
 import { Mic, Check, Play } from 'lucide-react'
 import EndlessKnot from '@/components/ui/EndlessKnot'
+import type { LandingCopy } from './copy'
+import { LANDING } from './copy'
 
 // Static waveform silhouette for the voice-note bubble.
 const WAVE = [5, 9, 6, 12, 8, 14, 7, 11, 5, 9, 13, 6, 10, 4]
@@ -28,7 +30,7 @@ function Typing({ step }: { step: 1 | 2 | 3 }) {
   )
 }
 
-export default function AgentPhoneMock() {
+export default function AgentPhoneMock({ phone: p = LANDING.ca.phone }: { phone?: LandingCopy['phone'] }) {
   return (
     <div className="wa-scene relative mx-auto w-full max-w-[300px] shrink-0 sm:max-w-[330px]">
       {/* Gold aura behind the device */}
@@ -45,7 +47,7 @@ export default function AgentPhoneMock() {
           </span>
           <div className="min-w-0">
             <p className="text-sm font-bold leading-tight text-white">Carma</p>
-            <p className="text-[0.7rem] leading-tight text-[#8696a0]">en línia</p>
+            <p className="text-[0.7rem] leading-tight text-[#8696a0]">{p.status}</p>
           </div>
         </div>
 
@@ -71,7 +73,7 @@ export default function AgentPhoneMock() {
           <div className="relative flex">
             <Typing step={1} />
             <div className="wa-step wa-step-2 max-w-[80%] rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-2 text-[0.8rem] leading-relaxed text-[#e9edef]">
-              Quina bona idea! M&apos;hi poso ara mateix ✨
+              {p.ack}
             </div>
           </div>
 
@@ -81,21 +83,21 @@ export default function AgentPhoneMock() {
             <div className="wa-step wa-step-3 w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-[#1f2c34] p-1.5">
               <div className="rounded-xl border border-white/10 bg-[#111b21] p-3">
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#f5bc00]/15 px-2 py-0.5 text-[0.62rem] font-extrabold uppercase tracking-wider text-[#ffd23d]">
-                  ✦ Esborrany a punt
+                  {p.badge}
                 </span>
                 <p className="mt-2 text-[0.85rem] font-bold leading-snug text-white">
-                  5 rutes de tardor per descobrir el Berguedà
+                  {p.title}
                 </p>
-                <p className="mt-1 text-[0.7rem] text-[#8696a0]">SEO llest · 950 paraules · 3 seccions</p>
+                <p className="mt-1 text-[0.7rem] text-[#8696a0]">{p.meta}</p>
                 <div className="mt-2.5 grid grid-cols-2 gap-1.5">
                   <span className="relative">
                     <span className="wa-tap" aria-hidden />
                     <span className="wa-press block rounded-lg bg-gradient-to-b from-[#ffd769] to-[#e6ad00] py-1.5 text-center text-[0.72rem] font-extrabold text-[#1a1400]">
-                      ✅ Publicar
+                      {p.publish}
                     </span>
                   </span>
                   <span className="rounded-lg border border-white/20 py-1.5 text-center text-[0.72rem] font-bold text-[#e9edef]">
-                    ✏️ Editar
+                    {p.edit}
                   </span>
                 </div>
               </div>
@@ -105,7 +107,7 @@ export default function AgentPhoneMock() {
           {/* 4 · The owner's tap echoes back */}
           <div className="wa-step wa-step-4 flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-[#005c4b] px-3.5 py-2 text-[0.8rem] font-semibold text-white">
-              ✅ Publicar
+              {p.publish}
             </div>
           </div>
 
@@ -117,10 +119,10 @@ export default function AgentPhoneMock() {
               <span className="wa-spark -top-3 right-6" style={{ '--spark': 'translate(2px,-20px)' } as React.CSSProperties} aria-hidden />
               <span className="wa-spark -right-2 top-4 h-1 w-1" style={{ '--spark': 'translate(18px,-4px)' } as React.CSSProperties} aria-hidden />
               <span className="inline-flex items-center gap-1.5 font-bold text-[#7ae0b8]">
-                <Check className="h-3.5 w-3.5" /> Publicat! 🎉
+                <Check className="h-3.5 w-3.5" /> {p.published}
               </span>
               <span className="mt-0.5 block truncate font-medium text-[#ffd23d] underline decoration-[#ffd23d]/40 underline-offset-2">
-                la-teva-web.cat/rutes-tardor
+                {p.url}
               </span>
             </div>
           </div>
@@ -128,7 +130,7 @@ export default function AgentPhoneMock() {
 
         {/* Input strip */}
         <div className="flex items-center gap-2 bg-[#1f2c34] px-3 py-2.5">
-          <div className="flex-1 rounded-full bg-[#2a3942] px-3.5 py-2 text-xs text-[#8696a0]">Missatge…</div>
+          <div className="flex-1 rounded-full bg-[#2a3942] px-3.5 py-2 text-xs text-[#8696a0]">{p.input}</div>
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd769] to-[#e6ad00]">
             <Mic className="h-4 w-4 text-[#1a1400]" />
           </span>
