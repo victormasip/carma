@@ -29,7 +29,10 @@ export default async function DashboardLayout({
       <div className="min-h-screen bg-bg">
         <DashboardSidebar isSuperAdmin={isSuperAdmin} sites={sites} userEmail={user.email ?? ''} />
 
-        <main className="lg:ml-60 min-w-0 p-5 sm:p-8 lg:p-10">
+        {/* overflow-x-clip: hard guard against horizontal scroll from any wide
+            child (tables, code blocks, long URLs) — clip, not hidden, so
+            position:sticky inside keeps working. */}
+        <main className="lg:ml-60 min-w-0 overflow-x-clip p-5 sm:p-8 lg:p-10">
           <div className="max-w-[1400px] mx-auto w-full min-w-0">
             {children}
           </div>

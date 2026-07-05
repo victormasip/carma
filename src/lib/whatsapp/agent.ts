@@ -2,8 +2,13 @@
 //
 // One structured-output call decides Turn-Budget-1: draft on any usable topic,
 // clarify only when the brief is empty/incomprehensible (or never, when
-// MUST_DRAFT is set because we already spent our one clarification). Persona is
-// Catalan, concise, professional, practical — no robotic pleasantries.
+// MUST_DRAFT is set because we already spent our one clarification).
+//
+// Brain overhaul (2026-07-05): the writer now shares Carma's master persona
+// (persona.ts) with the intent router (brain.ts), receives the dynamic BLOG
+// CONTEXT block (brand, recent articles, categories, identity hints) and writes
+// its owner-facing lines (clarification, strategy) in the OWNER'S language
+// instead of hardcoded Catalan.
 //
 // Provider: OpenAI (WA_AGENT_MODEL). The dashboard's article generator
 // (generate.ts) stays on Anthropic Opus 4.8; we only reuse its pure, security-
@@ -11,6 +16,7 @@
 
 import OpenAI from 'openai'
 import { sanitizeHtml, slugify } from '@/lib/writing/generate'
+import { CARMA_PERSONA } from './persona'
 import { WA_AGENT_MODEL, WA_MOCK_AGENT } from './config'
 
 export type AgentDraft = {
@@ -38,6 +44,10 @@ export type AgentInput = {
   articleLanguage: string // native label, e.g. "Català" / "Español" / "English"
   siteName: string
   existingCategories?: string[]
+  // The formatted BLOG CONTEXT block (persona.ts formatSiteContext): brand,
+  // recent article titles, categories, identity hints. Optional — the console
+  // channel may call without it.
+  siteContext?: string
   // True once the single clarification has been spent (or the budget is 0): the
   // model MUST draft, never clarify.
   mustDraft: boolean
@@ -48,23 +58,26 @@ export type AgentInput = {
   currentDraft?: { title: string; contentHtml: string; excerpt?: string }
 }
 
-const SYSTEM_PROMPT = `You are Carma, an assistant that turns a short brief (often a transcribed WhatsApp voice note) from a small-business or agency owner into a publish-ready SEO blog article.
+const SYSTEM_PROMPT = `${CARMA_PERSONA}
+
+TASK: turn the owner's brief (often a transcribed WhatsApp voice note) into a publish-ready SEO blog article for THEIR blog.
 
 You ALWAYS return a strict JSON object with: decision ('clarify' | 'draft'), clarification, article.
 
-DECISION RULE (Turn-Budget-1 — do NOT be chatty):
+DECISION RULE (do NOT be chatty):
 - Default to 'draft'. If the brief names ANY discernible topic, theme, product, service, event or question, draft immediately. Do not ask for confirmation, tone, length, audience or keywords — infer them.
 - Use 'clarify' ONLY when the brief is empty, pure gibberish, or has no intelligible topic at all.
 - If MUST_DRAFT is true in the request, you MUST draft even from a thin brief: pick the single most reasonable angle and write the article. Never clarify when MUST_DRAFT is true.
 
 CLARIFICATION (decision='clarify'):
-- 'clarification' is ONE short line in CATALAN — direct, casual and practical, like a quick WhatsApp from a helpful colleague. You MAY use ONE friendly emoji. No formal greeting, no "benvolgut", no corporate tone — just ask what the article should be about. Example: "No m'ha arribat cap tema! 😅 Envia'm de què vols l'article i m'hi poso."
+- 'clarification' is ONE short line in the OWNER'S language (mirror the language of the brief; fall back to the article language) — a quick, warm WhatsApp asking what the article should be about, in your persona voice.
 - Leave every 'article' field as an empty string / empty array.
 
 ARTICLE (decision='draft'): write it in the ARTICLE LANGUAGE given in the request.
+- Use the BLOG CONTEXT when provided: match the blog's niche and voice, reuse its existing categories when they fit, avoid duplicating a recent article's angle (complement it instead), and let the brand hints colour the register — a rustic agroturisme does not read like a fintech.
 - 'content_html' is an HTML FRAGMENT using ONLY these tags: <h2> <h3> <p> <ul> <ol> <li> <strong> <em> <a href> <blockquote>. No <h1>, no inline styles, no <script>, no class attributes. 700-1100 words of genuinely useful, specific content with a clear intro, well-structured H2/H3 sections and a short conclusion. Avoid AI clichés ("En el món actual", "En conclusió"). Open and close every tag.
 - 'title' compelling and includes the focus keyword. 'slug' lowercase, ASCII, hyphenated. 'excerpt' 1-2 sentences. 'seo_title' ~50-60 chars with the keyword. 'seo_description' ~140-160 chars with the keyword. 'focus_keyword' the 2-4 word target phrase (must appear in title, first paragraph and at least one H2). 'categories' 1-3 and 'tags' 3-6, in the article language; reuse the provided existing categories when they fit. 'niche' one sentence naming the site topic + audience.
-- 'strategy' is ONE short sentence in CATALAN naming the chosen angle and the search intent — it is shown to the owner over WhatsApp, so keep it crisp, casual and practical (no corporate tone).
+- 'strategy' is ONE short sentence in the OWNER'S language naming the chosen angle and the search intent — it is shown to the owner over WhatsApp, so keep it crisp and in your persona voice.
 - SAFETY: never invent specific statistics, prices, dates or quotes attributed to real people. Leave 'clarification' as an empty string.
 
 Output ONLY the JSON object.`
@@ -106,6 +119,9 @@ function buildUserMessage(input: AgentInput): string {
     `MUST_DRAFT: ${input.mustDraft ? 'true' : 'false'}`,
     `SITE: ${input.siteName || '(unknown)'}`,
   ]
+  if (input.siteContext) {
+    lines.push('', 'BLOG CONTEXT:', input.siteContext, '')
+  }
   if (input.existingCategories?.length) {
     lines.push(`EXISTING CATEGORIES (reuse when they fit): ${input.existingCategories.join(' · ')}`)
   }

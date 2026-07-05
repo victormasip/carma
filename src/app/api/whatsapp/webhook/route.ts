@@ -10,12 +10,24 @@
 //      at-least-once → never double-spend.
 //   4. Identity-gate: map the sender's phone → an ACTIVE wa_identities owner + their
 //      candidate sites. Unbound/blocked numbers reach NO LLM (cost guard, E4).
-//   5. Enqueue one generation_jobs row and return 200 fast (well under Netlify's
-//      ~10s synchronous function cap). The Background Function worker (T4) does the
-//      generation; the 1-min Scheduled re-driver (T4) guarantees at-least-once.
+//   5. Enqueue one generation_jobs row, return 200 fast, and DRAIN THE QUEUE in this
+//      same invocation via after() — see "Serverless execution model" below.
+//
+// Serverless execution model (founder directive 2026-07-05): in production there is
+// NO always-on worker process — a background loop dies the moment the serverless
+// function returns. So this route is the engine, not just the front door:
+//   · ACK 200 immediately (Meta/Kapso drop the hook as unhealthy after ~3s).
+//   · after() → processInbound() → runDueJobs(): the platform keeps the invocation
+//     alive after the response is flushed (Vercel/Netlify waitUntil), so the job we
+//     just enqueued is generated NOW, with maxDuration as the ceiling.
+//   · Delivery/read receipts for every message we send arrive seconds later as
+//     signed webhook events → each one opportunistically re-drains the queue, so a
+//     transiently-failed (requeued) job is retried without any platform cron.
+//   · /api/whatsapp/cron stays as the slow safety sweep (vercel.json, daily) for
+//     retention purges and any job orphaned while its lease expired.
 //
 // Provider note: the agent/generation worker (T4) runs on OpenAI (WA_AGENT_MODEL),
-// not Anthropic. This route is LLM-agnostic — it touches no model.
+// not Anthropic. This route is LLM-agnostic — it touches no model directly.
 
 import { NextResponse, type NextRequest, after } from 'next/server'
 import { createHmac, timingSafeEqual } from 'node:crypto'
@@ -26,10 +38,14 @@ import { sendWhatsApp } from '@/lib/whatsapp/kapso'
 import { publishThreadDraft } from '@/lib/whatsapp/publish'
 import { generateNanoBananaCover } from '@/lib/whatsapp/coverImage'
 import { inboundMatchesCode } from '@/lib/whatsapp/verify'
+import { runDueJobs, logOutbound } from '@/lib/whatsapp/worker'
 import { WA_BUTTON, type WaMsgType } from '@/lib/whatsapp/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+// after() work counts against maxDuration. 300s fits Vercel Fluid on every plan and
+// leaves room for one full generation (OpenAI timeout 160s) plus the pipeline.
+export const maxDuration = 300
 
 // Kapso expects a 200 within 10s. Outbound replies (drafts, clarifications) are sent
 // later by the worker via the Kapso REST API — never synchronously here.
@@ -151,7 +167,11 @@ export async function POST(request: NextRequest) {
   }
   const event = request.headers.get('x-webhook-event') || String(body.event ?? '')
   if (event !== 'whatsapp.message.received') {
-    if (DEV) console.log(`[wa/webhook] ignored event=${event || '(none)'}`)
+    if (DEV) console.log(`[wa/webhook] event=${event || '(none)'} → ack + opportunistic drain`)
+    // Free re-driver: every message WE send comes back seconds later as a signed
+    // sent/delivered/read event. Re-draining here retries any requeued job without
+    // a platform cron. Cheap no-op when the queue is empty (one indexed SELECT).
+    after(() => drainQueue('receipt'))
     return ok()
   }
 
@@ -188,8 +208,24 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('[wa/webhook] background processing failed:', e instanceof Error ? e.message : e)
     }
+    // Same-invocation execution: the job processInbound just enqueued is generated
+    // NOW — production needs no separate worker process for the happy path.
+    await drainQueue('inbound')
   })
   return ok()
+}
+
+// Drain due generation_jobs inside this (post-response) invocation. Budget 120s for
+// CLAIMING: a job claimed at t=119s still has the full 160s OpenAI timeout ahead of
+// it and finishes inside maxDuration=300. Lease-based claiming makes concurrent
+// webhook invocations draining at once safe (at-most-one winner per job).
+async function drainQueue(trigger: 'inbound' | 'receipt'): Promise<void> {
+  try {
+    const processed = await runDueJobs(3, 120_000)
+    if (DEV && processed) console.log(`[wa/webhook] drained ${processed} job(s) (trigger=${trigger})`)
+  } catch (e) {
+    console.error(`[wa/webhook] queue drain failed (trigger=${trigger}):`, e instanceof Error ? e.message : e)
+  }
 }
 
 // ─── Background pipeline (runs AFTER the 200 is flushed) ───────────────────────
@@ -366,13 +402,13 @@ async function processInbound(i: Inbound): Promise<void> {
     console.error('[wa/webhook] job enqueue failed:', jErr.message)
     return
   }
-  if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → worker via /api/whatsapp/cron`)
+  if (DEV) console.log(`[wa/webhook] enqueued agent_turn for ${phone} (${msgType}) → drained in this same invocation`)
 
-  // Instant "rebut" ack — the worker owns every later beat (preparant…, draft ready).
-  const ackMsg = msgType === 'audio'
-    ? '🎧 He rebut la teva nota de veu! Ara l’escolto i m’hi poso…'
-    : '📝 He rebut el teu missatge! M’hi poso ara mateix…'
-  await sendWhatsApp(phone, ackMsg, phoneNumberId)
+  // Brain overhaul (2026-07-05): the real reply is LLM-authored by the intent
+  // router seconds from now (this invocation drains the queue itself), so text
+  // turns get no canned ack. Voice notes keep a minimal, language-neutral receipt
+  // because download + transcription add a noticeably silent stretch.
+  if (msgType === 'audio') await sendWhatsApp(phone, '🎧', phoneNumberId)
 }
 
 // ─── Interactive button postbacks (Approve / Edit / Cover) ────────────────────
@@ -385,6 +421,13 @@ async function handleButton(
     .from('wa_threads').select('agent_state, current_post_id, site_id').eq('id', threadId).maybeSingle()
   const stateNow = (th?.agent_state as Record<string, unknown> | null) ?? {}
 
+  // Send + log: button outcomes are part of the conversation, so the intent
+  // router's memory (recentHistory) must see them on later turns.
+  const say = async (text: string) => {
+    await sendWhatsApp(phone, text, phoneNumberId)
+    await logOutbound(admin, threadId, text)
+  }
+
   if (button.id === WA_BUTTON.approve) {
     const res = await publishThreadDraft(admin, threadId, host)
     const reply = res.ok
@@ -395,7 +438,7 @@ async function handleButton(
           ? 'No tinc cap esborrany pendent per publicar 🤔 Envia’m un tema i te’n preparo un.'
           : 'Ups, no he pogut publicar-lo 😕 Torna-ho a provar d’aquí un moment.'
     if (res.ok) await admin.from('wa_threads').update({ agent_state: { ...stateNow, phase: 'done' } }).eq('id', threadId)
-    await sendWhatsApp(phone, reply, phoneNumberId)
+    await say(reply)
     return
   }
 
@@ -403,7 +446,7 @@ async function handleButton(
     await admin.from('wa_threads')
       .update({ agent_state: { ...stateNow, phase: 'awaiting_edit', writing_for: undefined } })
       .eq('id', threadId)
-    await sendWhatsApp(phone, 'Què vols canviar? ✏️ Escriu-me (o envia’m un àudio amb) els canvis — to, longitud, què afegir o treure — i el reescric.', phoneNumberId)
+    await say('Què vols canviar? ✏️ Escriu-me (o envia’m un àudio amb) els canvis — to, longitud, què afegir o treure — i el reescric.')
     return
   }
 
@@ -411,28 +454,28 @@ async function handleButton(
   if (button.id === WA_BUTTON.coverYes) {
     const postId = (th?.current_post_id as string | null) ?? null
     if (!postId) {
-      await sendWhatsApp(phone, 'No tinc cap article actiu per a la portada 🤔 Envia’m un tema i te’n preparo un.', phoneNumberId)
+      await say('No tinc cap article actiu per a la portada 🤔 Envia’m un tema i te’n preparo un.')
       return
     }
-    await sendWhatsApp(phone, '✨ Perfecte! Estic preparant la portada…', phoneNumberId)
+    await say('✨ Perfecte! Estic preparant la portada…')
     const res = await generateNanoBananaCover(admin, postId, { siteId: (th?.site_id as string | null) ?? null })
     const reply = res.ok
       ? (res.mocked
           ? '🖼️ Portada encarregada! (mode de proves — quan activem el generador d’imatges apareixerà a l’article). Pots publicar quan vulguis.'
           : `🖼️ Ja tens la portada a l’article! Fes-hi un cop d’ull i publica quan vulguis.`)
       : 'Ara mateix no he pogut preparar la portada 😕 La pots afegir des del Carma.'
-    await sendWhatsApp(phone, reply, phoneNumberId)
+    await say(reply)
     return
   }
   if (button.id === WA_BUTTON.coverNo) {
-    await sendWhatsApp(phone, 'Cap problema! 👍 La pots afegir més tard des del Carma.', phoneNumberId)
+    await say('Cap problema! 👍 La pots afegir més tard des del Carma.')
     return
   }
 
   if (button.id === WA_BUTTON.translate) {
-    await sendWhatsApp(phone, '🌍 Les traduccions automàtiques arriben molt aviat! De moment, aprova l’article i el podràs traduir des del Carma.', phoneNumberId)
+    await say('🌍 Les traduccions automàtiques arriben molt aviat! De moment, aprova l’article i el podràs traduir des del Carma.')
     return
   }
 
-  await sendWhatsApp(phone, 'Rebut! 👍', phoneNumberId)
+  await say('Rebut! 👍')
 }

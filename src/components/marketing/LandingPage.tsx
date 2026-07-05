@@ -70,7 +70,7 @@ function Nav() {
     { href: '#preus', label: 'Preus' },
   ]
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header className="fixed inset-x-0 top-0 z-50 px-3 sm:px-4">
       <div className="mx-auto mt-3 flex max-w-6xl items-center justify-between gap-4 rounded-2xl border border-border bg-bg-elevated/80 px-4 py-2.5 shadow-card backdrop-blur-xl sm:mt-4 sm:px-5">
         <Link href="/" className="no-underline"><Wordmark size="text-xl" /></Link>
 
@@ -211,7 +211,7 @@ function FeatureBento() {
                 ✦ Esborrany a punt: <span className="font-bold text-text">«La fira d’enguany: 7 novetats»</span>
               </div>
               <div className="ml-auto w-fit rounded-2xl rounded-br-md bg-accent-soft px-3.5 py-2 text-sm font-bold text-text">
-                Aprovar ✓
+                ✅ Publicar
               </div>
               <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md border border-border bg-surface px-3.5 py-2 text-sm text-muted">
                 <span className="font-bold text-success">Publicat!</span> <span className="font-semibold text-accent underline decoration-accent/40 underline-offset-2">la-teva-web.cat/fira-novetats</span>

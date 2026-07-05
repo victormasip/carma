@@ -145,7 +145,8 @@ if (res.status === 403) {
   die('403 — signature rejected. KAPSO_WEBHOOK_SECRET in .env.local does not match the value the running server loaded. Restart `npm run dev` after editing .env.local.')
 }
 if (res.ok) {
-  console.log('\n✓ Accepted. Now wake the worker to process the queued job:')
-  console.log('    curl "http://carma.cat/api/whatsapp/cron?key=<CRON_SECRET>"')
-  console.log('  Then watch the `npm run dev` console for:  [wa/dev] review link → http://carma.cat/review/<token>')
+  console.log('\n✓ Accepted. The webhook drains the queue itself (after() → runDueJobs),')
+  console.log('  so no manual worker wake-up is needed. Watch the server console for:')
+  console.log('    [wa/dev] review link → <base>/review/<token>')
+  console.log('  (Fallback, only if a job got stuck: curl "<base>/api/whatsapp/cron?key=<CRON_SECRET>")')
 }

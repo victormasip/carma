@@ -810,8 +810,11 @@ function pageBackground(theme: Theme, tokens: DesignTokens): string {
 // — the client's injected CSS owns the chrome's look, and the blog owns its own
 // inside the shadow.
 function buildPageResetCss(bg: string): string {
+  // overflow-x:clip — no horizontal scroll on any rendered blog, ever. `clip`
+  // (not `hidden`) doesn't create a scroll container, so the injected chrome's
+  // position:sticky headers keep working.
   return `html{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;overflow-x:clip}
 body{background:${bg}}`
 }
 

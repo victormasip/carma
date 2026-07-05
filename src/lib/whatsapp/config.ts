@@ -59,6 +59,12 @@ export const WA_JOB_RETENTION_DAYS = intEnv('WA_JOB_RETENTION_DAYS', 7)
 // default; set WA_AGENT_MODEL to a gpt-5 id when available.
 export const WA_AGENT_MODEL = process.env.WA_AGENT_MODEL || 'gpt-4o'
 
+// The intent router (brain.ts) — the fast, cheap conversational half that decides
+// write/edit/publish/chat and speaks Carma's immediate replies. Runs on every
+// inbound turn, so it defaults to the mini tier; the article writer above stays on
+// the full model.
+export const WA_ROUTER_MODEL = process.env.WA_ROUTER_MODEL || 'gpt-4o-mini'
+
 // Dev/testing escape hatch (founder directive 2026-06-30): when set, the agent
 // returns a deterministic, hardcoded draft INSTEAD of calling OpenAI, so the whole
 // WhatsApp flow — ack → buttons → approve/edit → publish — can be exercised end to

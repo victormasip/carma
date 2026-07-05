@@ -1,20 +1,28 @@
 // WhatsApp Agent — the async worker (T4, server-only).
 //
-// Drains generation_jobs one claimed job at a time. Per job (E1 async tier):
+// Drains generation_jobs one claimed job at a time. Per job (brain overhaul,
+// founder directive 2026-07-05):
 //   inbound message → (audio) safeFetchBinary + Whisper → text
-//   → resolve the target site (1 auto / >1 ask "per a quin client?")
-//   → OpenAI agent (Turn-Budget-1): clarify OR draft
-//   → save the draft (admin insert, is_published:false), mint a review token,
-//     capture the outcome record, update thread cost/turn/state
-//   → Twilio reply: the clarification OR "draft ready → /review/<token>".
+//   → routeTurn (brain.ts): ONE cheap LLM call understands the intent — write /
+//     edit / publish / chat — and speaks Carma's immediate reply in the owner's
+//     language (no more canned progress strings, no more phase machine driving
+//     the conversation)
+//   → execute the intent: draft via runAgent (with the dynamic BLOG CONTEXT),
+//     revise the pending draft, publish it, or just talk
+//   → persist outcomes (draft row, review token, outcome record, thread cost) and
+//     log every outbound message so the router has real conversation memory.
+//
+// What stayed deterministic ON PURPOSE (safety, not rigidity): signature checks,
+// identity gating, cost/turn/daily ceilings, dedupe, the lease-based queue, token
+// consumption and the publish transaction. The LLM decides WHAT to do; the worker
+// alone decides whether it is ALLOWED and executes it atomically.
 //
 // Fail-safe (req 4): transient failures (Whisper/OpenAI timeout, media download)
 // retry up to WA_JOB_MAX_ATTEMPTS, then the job is marked 'error' and the owner
-// gets a localized apology — never an infinite retry. The worker never throws to
-// its caller; every job ends 'done' or 'error'.
+// gets an apology — never an infinite retry. The worker never throws to its
+// caller; every job ends 'done' or 'error'.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { DEFAULT_LOCALE, LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
 import {
   WA_JOB_LEASE_MIN, WA_JOB_MAX_ATTEMPTS, WA_REVIEW_TOKEN_TTL_HOURS,
   WA_THREAD_COST_CENTS_CEILING, WA_THREAD_MAX_TURNS, WA_TURN_BUDGET, WA_DAILY_GEN_CAP,
@@ -24,6 +32,9 @@ import { WA_TABLES, WA_BUTTON, type GenerationJobRow, type WaAgentState, type Wa
 import { mintReviewToken, reviewTokenExpiry } from './tokens'
 import { downloadKapsoMedia, transcribeAudio } from './transcribe'
 import { runAgent, type AgentUsage, type AgentDraft } from './agent'
+import { routeTurn, type HistoryTurn } from './brain'
+import { buildSiteContext, formatSiteContext, type SiteContext } from './persona'
+import { publishThreadDraft } from './publish'
 import { sendWhatsApp, sendWhatsAppButtons, reviewUrl } from './kapso'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -72,29 +83,40 @@ async function updateThread(admin: Admin, threadId: string, patch: Record<string
   await admin.from(WA_TABLES.threads).update(patch).eq('id', threadId)
 }
 
-async function siteMeta(admin: Admin, siteId: string): Promise<{ name: string; locale: string }> {
-  const { data: site } = await admin.from('sites').select('name').eq('id', siteId).maybeSingle()
-  let locale: string = DEFAULT_LOCALE
+/**
+ * Record an outbound message so the router has real conversation memory on the
+ * next turn. Best-effort — a logging miss must never fail a send or a job.
+ */
+export async function logOutbound(admin: Admin, threadId: string, text: string): Promise<void> {
   try {
-    const { data: theme } = await admin.from('site_themes').select('default_locale').eq('site_id', siteId).maybeSingle()
-    if (theme?.default_locale) locale = normalizeLocale(theme.default_locale)
-  } catch {
-    /* column may not exist on an old env — fall back to the default locale */
-  }
-  return { name: site?.name ?? '', locale }
+    await admin.from(WA_TABLES.messages).insert({
+      thread_id: threadId, direction: 'out', msg_type: 'text', text: text.slice(0, 2000),
+    })
+  } catch { /* best-effort */ }
 }
 
-async function existingCategories(admin: Admin, siteId: string): Promise<string[]> {
-  try {
-    const { data } = await admin.from('posts').select('categories').eq('site_id', siteId).limit(50)
-    const set = new Set<string>()
-    for (const row of data ?? []) {
-      for (const c of (row.categories as string[] | null) ?? []) if (c?.trim()) set.add(c.trim())
-    }
-    return [...set].slice(0, 12)
-  } catch {
-    return []
-  }
+/** Send + log in one beat — the default way the worker talks to the owner. */
+async function say(admin: Admin, threadId: string, phone: string, body: string, pnid?: string): Promise<boolean> {
+  const ok = await sendWhatsApp(phone, body, pnid)
+  if (ok) await logOutbound(admin, threadId, body)
+  return ok
+}
+
+/** Last N conversation turns (both directions), oldest first, for the router. */
+async function recentHistory(admin: Admin, threadId: string, excludeMessageId: string, limit = 10): Promise<HistoryTurn[]> {
+  const { data } = await admin
+    .from(WA_TABLES.messages)
+    .select('id, direction, msg_type, text, transcript')
+    .eq('thread_id', threadId)
+    .neq('id', excludeMessageId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return (data ?? [])
+    .reverse()
+    .map((r) => ({
+      role: (r.direction === 'in' ? 'owner' : 'carma') as HistoryTurn['role'],
+      text: String(r.transcript || r.text || `[${r.msg_type}]`).slice(0, 400),
+    }))
 }
 
 // Insert a draft post via the admin client (the worker has no user session, so it
@@ -165,10 +187,12 @@ async function issueReviewToken(admin: Admin, postId: string, siteId: string, th
   return raw
 }
 
-// The draft-ready reply: interactive Approve/Edit buttons with the review link in
-// the body. Falls back to a plain text+link send when interactive is unavailable so
-// the owner always has a working way to publish (the web link still approves).
+// The draft-ready reply: interactive Publicar/Editar buttons with the review link
+// in the body. Falls back to a plain text+link send when interactive is unavailable
+// so the owner always has a working way to publish (the web link still approves).
 async function sendDraftReady(
+  admin: Admin,
+  threadId: string,
   phone: string,
   d: Pick<AgentDraft, 'title' | 'strategy'>,
   link: string,
@@ -186,14 +210,16 @@ async function sendDraftReady(
     ],
     pnid,
   )
-  return ok || sendWhatsApp(phone, body, pnid)
+  const sent = ok || (await sendWhatsApp(phone, body, pnid))
+  if (sent) await logOutbound(admin, threadId, body)
+  return sent
 }
 
 // Free-flow step (founder directive 2026-06-30): after the draft, proactively offer
 // to generate a cover image. A dedicated Yes/No interactive message — the owner taps
 // "Sí" and the webhook runs generateNanoBananaCover. Best-effort (never blocks/fails
 // the job); falls back to a plain prompt if interactive is unavailable.
-async function sendCoverOffer(phone: string, pnid?: string): Promise<void> {
+async function sendCoverOffer(admin: Admin, threadId: string, phone: string, pnid?: string): Promise<void> {
   const body = '🖼️ Vols que generi una imatge de portada per a aquest article?'
   const ok = await sendWhatsAppButtons(
     phone,
@@ -205,6 +231,7 @@ async function sendCoverOffer(phone: string, pnid?: string): Promise<void> {
     pnid,
   )
   if (!ok) await sendWhatsApp(phone, `${body} Respon "sí" o "no".`, pnid)
+  await logOutbound(admin, threadId, body)
 }
 
 // ─── One job ──────────────────────────────────────────────────────────────────
@@ -231,14 +258,14 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   // Cost / loop ceilings (also enforced before any LLM spend).
   if (t.cost_cents >= WA_THREAD_COST_CENTS_CEILING || t.turn_count >= WA_THREAD_MAX_TURNS) {
-    await sendWhatsApp(phone, "Has arribat al límit d'aquest fil 🙌 Comença'n un de nou quan vulguis.", pnid)
+    await say(admin, t.id, phone, "Has arribat al límit d'aquest fil 🙌 Comença'n un de nou quan vulguis.", pnid)
     return finishJob(admin, job.id, 'done')
   }
 
   // Daily per-IDENTITY generation cap (A1) — a hard backstop across ALL the owner's
   // threads, checked BEFORE any transcription/OpenAI spend. We proxy a "generation"
-  // by inbound messages in the last 24h (Turn-Budget-1 → ~1 inbound per article), so
-  // a bound user can never burn the budget. Cheap (indexed thread_id + created_at).
+  // by INBOUND messages in the last 24h (outbound logging never counts against the
+  // owner), so a bound user can never burn the budget. Cheap (indexed columns).
   if (WA_DAILY_GEN_CAP > 0) {
     const since = new Date(Date.now() - 24 * 3600_000).toISOString()
     const { data: idThreads } = await admin.from(WA_TABLES.threads).select('id').eq('identity_id', t.identity_id)
@@ -251,7 +278,7 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
         .eq('direction', 'in')
         .gte('created_at', since)
       if ((count ?? 0) > WA_DAILY_GEN_CAP) {
-        await sendWhatsApp(phone, "Has arribat al límit d'articles per avui 🙌 Torna-m'ho a enviar demà i seguim.", pnid)
+        await say(admin, t.id, phone, "Has arribat al límit d'articles per avui 🙌 Torna-m'ho a enviar demà i seguim.", pnid)
         return finishJob(admin, job.id, 'done')
       }
     }
@@ -262,10 +289,6 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   const msg = msgRow as WaMessageRow
 
   const state: WaAgentState = (t.agent_state as WaAgentState) ?? { phase: 'await_brief' }
-
-  // (Receipt ack — "he rebut" — is now sent instantly by the webhook the moment the
-  // message lands, so the owner is never left waiting on the 1-min worker cron. The
-  // worker still owns every later beat: "preparant…", the draft, clarifications.)
 
   // ── Input text: transcribe audio (T3) or use the text body ──
   let inboundText = (msg.text ?? '').trim()
@@ -283,50 +306,131 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     await admin.from(WA_TABLES.messages).update({ transcript }).eq('id', msg.id)
   }
 
-  // ── Empty / unintelligible input → casual re-ask, NO LLM spend (req 4 voice tone).
-  // Skip during a site pick ('resolving_site'), where an empty reply is just a failed
-  // number parse handled below. We can't draft from nothing, so this ignores mustDraft.
-  if (!inboundText.trim() && state.phase !== 'resolving_site') {
+  // ── Empty / unintelligible input → casual re-ask, NO LLM spend. The only
+  // pre-LLM canned reply left, kept because its whole point is costing zero.
+  if (!inboundText.trim()) {
     const reask = usedAudio
-      ? "M'has passat un àudio buit o no s'entén! 😅 Torna-m'ho a enviar amb el tema i m'hi poso."
-      : "No m'ha arribat cap tema! 😅 Escriu-me o envia'm un àudio de què vols l'article i m'hi poso."
-    await sendWhatsApp(phone, reask, pnid)
+      ? "M'has passat un àudio buit o no s'entén! 😅 Torna-m'ho a enviar i m'hi poso."
+      : "No m'ha arribat res! 😅 Escriu-me o envia'm un àudio i m'hi poso."
+    await say(admin, t.id, phone, reask, pnid)
+    await updateThread(admin, t.id, { turn_count: t.turn_count + 1, agent_state: { ...state } })
+    return finishJob(admin, job.id, 'done')
+  }
+
+  // ── Context for the brain: conversation memory, candidate sites, pending draft ──
+  const history = await recentHistory(admin, t.id, msg.id)
+
+  const payloadCandidates = Array.isArray(payload.candidate_site_ids) ? payload.candidate_site_ids : []
+  const heldCandidates = state.candidate_site_ids ?? []
+  let siteId = t.site_id
+  const candidateIds = siteId ? [] : heldCandidates.length ? heldCandidates : payloadCandidates
+
+  // Exactly one candidate auto-routes — no need to make the owner choose.
+  if (!siteId && candidateIds.length === 1) {
+    siteId = candidateIds[0]
+    await updateThread(admin, t.id, { site_id: siteId })
+  }
+
+  let candidates: { id: string; name: string }[] = []
+  if (!siteId && candidateIds.length > 1) {
+    const { data: sites } = await admin.from('sites').select('id, name').in('id', candidateIds)
+    const byId = new Map((sites ?? []).map((s) => [s.id as string, String(s.name ?? '')]))
+    candidates = candidateIds.map((id) => ({ id, name: byId.get(id) ?? '' })).filter((c) => c.name)
+  }
+
+  let siteCtx: SiteContext | null = siteId ? await buildSiteContext(admin, siteId) : null
+
+  let hasPendingDraft = false
+  let pendingDraftTitle: string | null = null
+  if (t.current_post_id && (state.phase === 'awaiting_review' || state.phase === 'awaiting_edit')) {
+    const { data: cur } = await admin.from('posts').select('title, is_published').eq('id', t.current_post_id).maybeSingle()
+    if (cur && cur.is_published !== true) {
+      hasPendingDraft = true
+      pendingDraftTitle = String(cur.title ?? '') || null
+    }
+  }
+
+  // ── The brain: one cheap call decides the intent and speaks the reply ──
+  const route = await routeTurn({
+    message: inboundText,
+    history,
+    siteContext: siteCtx ? formatSiteContext(siteCtx) : null,
+    candidateSites: candidates.map((c) => c.name),
+    noSites: !siteId && candidateIds.length === 0,
+    hasPendingDraft,
+    pendingDraftTitle,
+    awaitingEdit: state.phase === 'awaiting_edit',
+    pendingBrief: state.pending_brief ?? null,
+  })
+  let cost = estimateCostCents(route.usage, usedAudio)
+
+  // Site pick resolved by the router (by number or by name).
+  if (!siteId && route.siteIndex && route.siteIndex <= candidates.length) {
+    siteId = candidates[route.siteIndex - 1].id
+    await updateThread(admin, t.id, { site_id: siteId })
+    siteCtx = await buildSiteContext(admin, siteId)
+  }
+
+  // The immediate reply — Carma's voice, owner's language. Deduped on transient
+  // retries via writing_for (same guard the old canned progress beat used).
+  if (route.reply && state.writing_for !== job.message_id) {
+    await say(admin, t.id, phone, route.reply, pnid)
+    state.writing_for = job.message_id ?? undefined
+    await updateThread(admin, t.id, { agent_state: { ...state } })
+  }
+
+  // ── chat: the reply WAS the turn ──
+  if (route.intent === 'chat') {
     await updateThread(admin, t.id, {
       turn_count: t.turn_count + 1,
-      agent_state: { ...state, phase: 'await_brief', clarification_used: true },
+      cost_cents: t.cost_cents + cost,
+      agent_state: { ...state },
     })
     return finishJob(admin, job.id, 'done')
   }
 
-  // ── Edit loop (founder directive 2026-06-30): the owner tapped "Editar" and this
-  // message is their change request. Revise the SAME post in place, re-issue the
-  // review token and re-send the Approve/Edit buttons — no site resolution needed
-  // (we already drafted for t.site_id). ──
-  if (state.phase === 'awaiting_edit' && t.current_post_id && t.site_id) {
-    const { name: siteName, locale } = await siteMeta(admin, t.site_id)
+  // ── publish: same transaction the button uses; the link beat is deterministic
+  // because the LLM must never invent a URL ──
+  if (route.intent === 'publish') {
+    const res = await publishThreadDraft(admin, t.id)
+    if (res.ok) {
+      await say(admin, t.id, phone, res.already ? `✅ Ja era online:\n${res.url}` : `🎉 ${res.url}`, pnid)
+      await updateThread(admin, t.id, {
+        turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost,
+        agent_state: { ...state, phase: 'done' },
+      })
+    } else {
+      const sorry = res.reason === 'expired'
+        ? "Aquest esborrany ja ha caducat 😕 Envia'm el tema un altre cop i te'n preparo un de nou."
+        : res.reason === 'no_draft'
+          ? "No tinc cap esborrany pendent 🤔 Envia'm un tema i te'n preparo un."
+          : "Ups, no l'he pogut publicar 😕 Torna-ho a provar d'aquí un moment."
+      await say(admin, t.id, phone, sorry, pnid)
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost })
+    }
+    return finishJob(admin, job.id, 'done')
+  }
+
+  // ── edit: revise the pending draft in place, re-issue the review link ──
+  if (route.intent === 'edit' && t.current_post_id && siteId && siteCtx) {
     const { data: cur } = await admin
       .from('posts').select('title, content, excerpt').eq('id', t.current_post_id).maybeSingle()
     const curContent = cur?.content as { html?: unknown } | null
     const currentHtml = curContent && typeof curContent === 'object' ? String(curContent.html ?? '') : ''
 
-    if (state.writing_for !== job.message_id) {
-      await sendWhatsApp(phone, '✏️ Estic aplicant els teus canvis… Un momentet.', pnid)
-      state.writing_for = job.message_id ?? undefined
-      await updateThread(admin, t.id, { agent_state: { ...state } })
-    }
-
     const editResult = await runAgent({
       brief: '',
-      articleLanguage: LOCALE_META[normalizeLocale(locale)].native,
-      siteName,
+      articleLanguage: siteCtx.localeNative,
+      siteName: siteCtx.siteName,
+      siteContext: formatSiteContext(siteCtx),
       mustDraft: true,
       editInstructions: inboundText,
       currentDraft: { title: String(cur?.title ?? ''), contentHtml: currentHtml, excerpt: String(cur?.excerpt ?? '') },
     })
-    const editCost = estimateCostCents(editResult.usage, usedAudio)
+    cost += estimateCostCents(editResult.usage, false)
     if (editResult.kind !== 'draft') {
-      await sendWhatsApp(phone, editResult.message, pnid)
-      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + editCost })
+      await say(admin, t.id, phone, editResult.message, pnid)
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost })
       return finishJob(admin, job.id, 'done')
     }
     const ed = editResult.draft
@@ -339,69 +443,46 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
       categories: ed.categories,
       tags: ed.tags,
       meta: { seo_title: ed.seoTitle, seo_description: ed.seoDescription, canonical: '', noindex: false, focus_keyword: ed.focusKeyword },
-    }).eq('id', t.current_post_id).eq('site_id', t.site_id)
+    }).eq('id', t.current_post_id).eq('site_id', siteId)
 
-    const editRaw = await issueReviewToken(admin, t.current_post_id, t.site_id, t.id)
-    const sent = await sendDraftReady(phone, ed, reviewUrl(editRaw), pnid, true)
+    const editRaw = await issueReviewToken(admin, t.current_post_id, siteId, t.id)
+    const sent = await sendDraftReady(admin, t.id, phone, ed, reviewUrl(editRaw), pnid, true)
     await updateThread(admin, t.id, {
       turn_count: t.turn_count + 1,
-      cost_cents: t.cost_cents + editCost,
+      cost_cents: t.cost_cents + cost,
       agent_state: { ...state, phase: 'awaiting_review' },
     })
     if (!sent) return finishJob(admin, job.id, 'done', { error: 'edit reply send failed (post updated)' })
     return finishJob(admin, job.id, 'done')
   }
+  // (an 'edit' with nothing pending falls through and is treated as a fresh brief —
+  // belt and braces; the router is told not to produce it)
 
-  // ── Site resolution (G2): one auto-routes, many asks which client ──
-  let siteId = t.site_id
-  let brief = inboundText
+  // ── write: a new article ──
+  // Brief precedence: the router's distilled topic → a brief held while the owner
+  // picked a blog → the raw message.
+  const brief = (route.topic || state.pending_brief || inboundText).trim()
+
   if (!siteId) {
-    const candidates = Array.isArray(payload.candidate_site_ids) ? payload.candidate_site_ids : []
-
-    if (state.phase === 'resolving_site') {
-      // This message is the owner's pick. Parse a number; draft from the held brief.
-      const picks = state.candidate_site_ids ?? candidates
-      const n = Number.parseInt(inboundText.replace(/[^\d]/g, ''), 10)
-      if (Number.isFinite(n) && n >= 1 && n <= picks.length) {
-        siteId = picks[n - 1]
-        brief = (state.pending_brief ?? '').trim()
-        await updateThread(admin, t.id, { site_id: siteId })
-      } else {
-        await sendWhatsApp(phone, "Ups, no t'he entès 😅 Respon-me només amb el número del client.", pnid)
-        await updateThread(admin, t.id, { turn_count: t.turn_count + 1 })
-        return finishJob(admin, job.id, 'done')
-      }
-    } else if (candidates.length === 0) {
-      await sendWhatsApp(phone, "Encara no tens cap blog connectat a aquest número 📲 Connecta'l al teu compte de Carma i ja podrem començar.", pnid)
-      return finishJob(admin, job.id, 'done')
-    } else if (candidates.length === 1) {
-      siteId = candidates[0]
-      await updateThread(admin, t.id, { site_id: siteId })
-    } else {
-      // >1 candidates → ask which client (routing, not a content clarification).
-      const { data: sites } = await admin.from('sites').select('id, name').in('id', candidates)
-      const ordered = (sites ?? []) as { id: string; name: string }[]
-      const list = ordered.map((s, i) => `${i + 1}) ${s.name}`).join('\n')
-      await sendWhatsApp(phone, `Per a quin client és? Respon-me amb el número:\n${list}`, pnid)
-      await updateThread(admin, t.id, {
-        turn_count: t.turn_count + 1,
-        agent_state: { ...state, phase: 'resolving_site', candidate_site_ids: ordered.map((s) => s.id), pending_brief: inboundText },
-      })
+    if (candidateIds.length === 0) {
+      // No connected blog — the router already explained the onboarding path.
+      await updateThread(admin, t.id, { turn_count: t.turn_count + 1, cost_cents: t.cost_cents + cost })
       return finishJob(admin, job.id, 'done')
     }
-  }
-
-  // siteId is set now.
-  const { name: siteName, locale } = await siteMeta(admin, siteId!)
-  const cats = await existingCategories(admin, siteId!)
-
-  // ── Transparency beat 2: name the destination + signal the working phase before
-  // the (slow) generation, so the wait is never silent. Neutral wording so it fits
-  // whether the agent drafts or asks a clarification. Once per message. ──
-  if (state.writing_for !== job.message_id) {
-    await sendWhatsApp(phone, `🪄 Estic preparant l'article per a ${siteName || 'el teu blog'}… Et responc en un momentet.`, pnid)
-    state.writing_for = job.message_id ?? undefined
-    await updateThread(admin, t.id, { agent_state: { ...state } })
+    // >1 candidates without a clear pick — the router asked which blog; hold the
+    // brief so the next turn (the pick) can draft immediately. Store the SAME
+    // filtered list the router numbered, so site_index always maps 1:1.
+    await updateThread(admin, t.id, {
+      turn_count: t.turn_count + 1,
+      cost_cents: t.cost_cents + cost,
+      agent_state: {
+        ...state,
+        phase: 'resolving_site',
+        candidate_site_ids: candidates.length ? candidates.map((c) => c.id) : candidateIds,
+        pending_brief: brief,
+      },
+    })
+    return finishJob(admin, job.id, 'done')
   }
 
   // Turn-Budget-1: once we've spent our one clarification (or budget is 0), draft.
@@ -409,16 +490,16 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   const result = await runAgent({
     brief,
-    articleLanguage: LOCALE_META[normalizeLocale(locale)].native,
-    siteName,
-    existingCategories: cats,
+    articleLanguage: siteCtx!.localeNative,
+    siteName: siteCtx!.siteName,
+    existingCategories: siteCtx!.categories,
+    siteContext: formatSiteContext(siteCtx!),
     mustDraft,
   })
-
-  const cost = estimateCostCents(result.usage, usedAudio)
+  cost += estimateCostCents(result.usage, false)
 
   if (result.kind === 'clarify') {
-    await sendWhatsApp(phone, result.message, pnid)
+    await say(admin, t.id, phone, result.message, pnid)
     await updateThread(admin, t.id, {
       turn_count: t.turn_count + 1,
       cost_cents: t.cost_cents + cost,
@@ -429,9 +510,9 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
 
   // ── Draft → post + token + outcome record + reply ──
   const d = result.draft
-  const postId = await saveDraft(admin, siteId!, normalizeLocale(locale), d)
+  const postId = await saveDraft(admin, siteId, siteCtx!.locale, d)
 
-  const raw = await issueReviewToken(admin, postId, siteId!, t.id)
+  const raw = await issueReviewToken(admin, postId, siteId, t.id)
 
   // G3: capture the front of the outcome loop now (published_at fills on approve).
   await admin.from(WA_TABLES.outcomes).insert({
@@ -453,8 +534,8 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
   // hash), so in dev — where Kapso delivery may not reach you — echo the link to the
   // server console. Never logs in production.
   if (process.env.NODE_ENV !== 'production') console.log(`[wa/dev] review link → ${link}`)
-  // Interactive Approve/Edit buttons (text+link fallback inside sendDraftReady).
-  const sent = await sendDraftReady(phone, d, link, pnid)
+  // Interactive Publicar/Editar buttons (text+link fallback inside sendDraftReady).
+  const sent = await sendDraftReady(admin, t.id, phone, d, link, pnid)
   // The draft + token already exist, so we must NOT retry here (that would mint a
   // duplicate draft on the next tick). But a failed delivery must never masquerade as
   // success: record it on the job so a silent send failure — e.g. a stale
@@ -465,7 +546,7 @@ async function processJob(admin: Admin, job: GenerationJobRow): Promise<void> {
     return finishJob(admin, job.id, 'done', { error: 'reply send failed (draft saved)' })
   }
   // Free-flow multi-step: proactively offer a cover image (separate Yes/No message).
-  await sendCoverOffer(phone, pnid)
+  await sendCoverOffer(admin, t.id, phone, pnid)
   return finishJob(admin, job.id, 'done')
 }
 

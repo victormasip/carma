@@ -1,9 +1,12 @@
-// WhatsApp Agent — portable cron entry point (final MVP step).
+// WhatsApp Agent — portable cron entry point (SAFETY SWEEP, not the main engine).
 //
 // GET /api/whatsapp/cron drains the generation_jobs queue by calling the T4 worker
-// (runDueJobs). It is the platform-agnostic "engine starter": wire it to Vercel Cron,
-// an external pinger (cron-job.org / UptimeRobot / a GitHub Action), or any scheduler
-// that can hit a URL once a minute.
+// (runDueJobs). Since 2026-07-05 the PRIMARY driver is the webhook itself: it drains
+// the queue in-invocation via after(), and delivery receipts re-drain it (see
+// webhook/route.ts "Serverless execution model"). This route remains as the backstop
+// for jobs orphaned with an expired lease and for the retention purge. Wired to
+// Vercel Cron daily via vercel.json (Hobby-safe; on Pro, tighten the schedule to
+// "* * * * *" for a classic 1-min re-driver), or to any external pinger.
 //
 // Auth — a single pre-shared key, CRON_SECRET, accepted three ways so any pinger works:
 //   1. Authorization: Bearer <CRON_SECRET>   (Vercel Cron sends exactly this)

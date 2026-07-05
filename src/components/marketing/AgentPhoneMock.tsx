@@ -1,8 +1,11 @@
-// The landing hero's WhatsApp scene — pure CSS/HTML (zero images, zero CLS,
-// prerender-safe). Tells the whole product story in four bubbles: voice note in,
-// draft card back, one tap to approve, published with a link. Bubbles cascade in
-// with the house [data-reveal] mechanic; colours are WhatsApp-dark so the scene
-// reads instantly, with Carma gold reserved for the agent's brand moments.
+// The landing hero's WhatsApp scene — pure CSS/HTML (zero images, zero JS, zero
+// CLS, prerender-safe). Auto-plays the whole product story on a 16s loop (the
+// .wa-* keyframes in globals.css): voice note in → Carma acks warmly → the gold
+// draft card lands → a tap on «Publicar» → the live link with a spark burst.
+// Every bubble owns its layout slot from SSR and only animates transform/opacity
+// (composited), so the page stays fast and nothing ever shifts. Colours are
+// WhatsApp-dark so the scene reads instantly, with Carma gold reserved for the
+// agent's brand moments. Reduced-motion shows the full static conversation.
 
 import { Mic, Check, Play } from 'lucide-react'
 import EndlessKnot from '@/components/ui/EndlessKnot'
@@ -10,13 +13,24 @@ import EndlessKnot from '@/components/ui/EndlessKnot'
 // Static waveform silhouette for the voice-note bubble.
 const WAVE = [5, 9, 6, 12, 8, 14, 7, 11, 5, 9, 13, 6, 10, 4]
 
-function delay(i: number): React.CSSProperties {
-  return { '--reveal-delay': `${240 + i * 260}ms` } as React.CSSProperties
+// Typing indicator overlaying the slot its bubble will occupy (absolute → it
+// never pushes layout when it swaps with the real message).
+function Typing({ step }: { step: 1 | 2 | 3 }) {
+  return (
+    <div
+      className={`wa-typing wa-typing-${step} absolute bottom-0 left-0 flex items-center gap-1 rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-3`}
+      aria-hidden
+    >
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="wa-typing-dot h-1.5 w-1.5 rounded-full bg-[#8696a0]" style={{ animationDelay: `${i * 160}ms` }} />
+      ))}
+    </div>
+  )
 }
 
 export default function AgentPhoneMock() {
   return (
-    <div className="relative mx-auto w-[300px] shrink-0 sm:w-[330px]">
+    <div className="wa-scene relative mx-auto w-full max-w-[300px] shrink-0 sm:max-w-[330px]">
       {/* Gold aura behind the device */}
       <div className="halo -inset-10 opacity-[0.16]" style={{ background: 'radial-gradient(circle, #f5bc00, transparent 65%)' }} aria-hidden />
 
@@ -35,17 +49,17 @@ export default function AgentPhoneMock() {
           </div>
         </div>
 
-        {/* Conversation */}
-        <div className="min-h-[380px] space-y-2.5 px-3 py-4">
+        {/* Conversation — anchored to the bottom like a real chat */}
+        <div className="flex min-h-[400px] flex-col justify-end space-y-2.5 px-3 py-4">
           {/* 1 · Voice note from the owner */}
-          <div className="flex justify-end" data-reveal style={delay(0)}>
+          <div className="wa-step wa-step-1 flex justify-end">
             <div className="flex max-w-[85%] items-center gap-2 rounded-2xl rounded-br-md bg-[#005c4b] px-3 py-2.5">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10">
                 <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
               </span>
               <span className="flex h-6 items-end gap-[2.5px]" aria-hidden>
                 {WAVE.map((h, i) => (
-                  <span key={i} className="w-[3px] rounded-full bg-[#9adbd0]" style={{ height: h }} />
+                  <span key={i} className="wa-wave-bar w-[3px] rounded-full bg-[#9adbd0]" style={{ height: h, animationDelay: `${i * 90}ms` }} />
                 ))}
               </span>
               <span className="text-[0.7rem] font-medium text-[#9adbd0]">0:12</span>
@@ -53,16 +67,18 @@ export default function AgentPhoneMock() {
             </div>
           </div>
 
-          {/* 2 · Agent acknowledges */}
-          <div className="flex" data-reveal style={delay(1)}>
-            <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-2 text-[0.8rem] leading-relaxed text-[#e9edef]">
-              Bona idea! M&apos;hi poso 🖊️
+          {/* 2 · Carma acknowledges (typing first) */}
+          <div className="relative flex">
+            <Typing step={1} />
+            <div className="wa-step wa-step-2 max-w-[80%] rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-2 text-[0.8rem] leading-relaxed text-[#e9edef]">
+              Quina bona idea! M&apos;hi poso ara mateix ✨
             </div>
           </div>
 
-          {/* 3 · Draft card */}
-          <div className="flex" data-reveal style={delay(2)}>
-            <div className="w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-[#1f2c34] p-1.5">
+          {/* 3 · The gold draft card */}
+          <div className="relative flex">
+            <Typing step={2} />
+            <div className="wa-step wa-step-3 w-[88%] overflow-hidden rounded-2xl rounded-bl-md bg-[#1f2c34] p-1.5">
               <div className="rounded-xl border border-white/10 bg-[#111b21] p-3">
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#f5bc00]/15 px-2 py-0.5 text-[0.62rem] font-extrabold uppercase tracking-wider text-[#ffd23d]">
                   ✦ Esborrany a punt
@@ -72,29 +88,36 @@ export default function AgentPhoneMock() {
                 </p>
                 <p className="mt-1 text-[0.7rem] text-[#8696a0]">SEO llest · 950 paraules · 3 seccions</p>
                 <div className="mt-2.5 grid grid-cols-2 gap-1.5">
-                  <span className="rounded-lg bg-gradient-to-b from-[#ffd769] to-[#e6ad00] py-1.5 text-center text-[0.72rem] font-extrabold text-[#1a1400]">
-                    Aprovar
+                  <span className="relative">
+                    <span className="wa-tap" aria-hidden />
+                    <span className="wa-press block rounded-lg bg-gradient-to-b from-[#ffd769] to-[#e6ad00] py-1.5 text-center text-[0.72rem] font-extrabold text-[#1a1400]">
+                      ✅ Publicar
+                    </span>
                   </span>
                   <span className="rounded-lg border border-white/20 py-1.5 text-center text-[0.72rem] font-bold text-[#e9edef]">
-                    Editar
+                    ✏️ Editar
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 4 · Owner taps approve */}
-          <div className="flex justify-end" data-reveal style={delay(3)}>
+          {/* 4 · The owner's tap echoes back */}
+          <div className="wa-step wa-step-4 flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-[#005c4b] px-3.5 py-2 text-[0.8rem] font-semibold text-white">
-              Aprovar ✓
+              ✅ Publicar
             </div>
           </div>
 
-          {/* 5 · Published */}
-          <div className="flex" data-reveal style={delay(4)}>
-            <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-2.5 text-[0.8rem] leading-relaxed text-[#e9edef]">
+          {/* 5 · Published — live link + spark burst */}
+          <div className="relative flex">
+            <Typing step={3} />
+            <div className="wa-step wa-step-5 relative max-w-[85%] rounded-2xl rounded-bl-md bg-[#1f2c34] px-3.5 py-2.5 text-[0.8rem] leading-relaxed text-[#e9edef]">
+              <span className="wa-spark -right-1 -top-2 h-[5px] w-[5px]" style={{ '--spark': 'translate(14px,-16px)' } as React.CSSProperties} aria-hidden />
+              <span className="wa-spark -top-3 right-6" style={{ '--spark': 'translate(2px,-20px)' } as React.CSSProperties} aria-hidden />
+              <span className="wa-spark -right-2 top-4 h-1 w-1" style={{ '--spark': 'translate(18px,-4px)' } as React.CSSProperties} aria-hidden />
               <span className="inline-flex items-center gap-1.5 font-bold text-[#7ae0b8]">
-                <Check className="h-3.5 w-3.5" /> Publicat!
+                <Check className="h-3.5 w-3.5" /> Publicat! 🎉
               </span>
               <span className="mt-0.5 block truncate font-medium text-[#ffd23d] underline decoration-[#ffd23d]/40 underline-offset-2">
                 la-teva-web.cat/rutes-tardor
