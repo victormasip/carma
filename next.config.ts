@@ -10,6 +10,7 @@ const TUNNEL_ORIGINS = [
   "*.ngrok.io",
   "*.ngrok-free.dev",
   "*.trycloudflare.com",
+  "carma.cat",
   "localhost",
 ];
 

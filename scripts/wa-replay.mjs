@@ -76,7 +76,7 @@ if (args.help) {
   process.exit(0)
 }
 
-const WEBHOOK_URL = (typeof args.url === 'string' && args.url) || process.env.WA_WEBHOOK_URL || 'http://localhost:3000/api/whatsapp/webhook'
+const WEBHOOK_URL = (typeof args.url === 'string' && args.url) || process.env.WA_WEBHOOK_URL || 'http://carma.cat/api/whatsapp/webhook'
 const SECRET = process.env.KAPSO_WEBHOOK_SECRET
 const FROM = (typeof args.from === 'string' && args.from) || process.env.WA_TEST_FROM || ''
 const PNID = (typeof args.pnid === 'string' && args.pnid) || process.env.KAPSO_PHONE_NUMBER_ID || '000000000000000'
@@ -146,6 +146,6 @@ if (res.status === 403) {
 }
 if (res.ok) {
   console.log('\n✓ Accepted. Now wake the worker to process the queued job:')
-  console.log('    curl "http://localhost:3000/api/whatsapp/cron?key=<CRON_SECRET>"')
-  console.log('  Then watch the `npm run dev` console for:  [wa/dev] review link → http://localhost:3000/review/<token>')
+  console.log('    curl "http://carma.cat/api/whatsapp/cron?key=<CRON_SECRET>"')
+  console.log('  Then watch the `npm run dev` console for:  [wa/dev] review link → http://carma.cat/review/<token>')
 }
