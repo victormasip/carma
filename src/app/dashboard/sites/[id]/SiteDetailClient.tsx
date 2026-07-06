@@ -3,7 +3,7 @@
 import { useState, useRef, useSyncExternalStore, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, FileText, Plug, Users, Sparkles, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
+import { ArrowLeft, FileText, Plug, Users, Sparkles, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight, X } from 'lucide-react'
 import { SiteAdminActions, SiteUsersManager, InlineSiteName } from './SiteManager'
 import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
@@ -268,11 +268,8 @@ export default function SiteDetailClient({
         <div className="space-y-6">
           <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} isSuperAdmin={isSuperAdmin} />
 
-          {/* Pas 3 de l'onboarding, sempre visible fins que es fa (o es descarta):
-              connectar l'agent de WhatsApp — la promesa central del producte. */}
-          {!waConnected && !showOnboarding && (
-            <ConnectAgentBanner hasPosts={initialPostsMeta.total > 0} />
-          )}
+          {/* Suggeriment discret (descartable) per connectar l'agent de WhatsApp. */}
+          {!waConnected && !showOnboarding && <ConnectAgentBanner />}
 
           <div className="min-w-0">
             {activeTab === 'resum' && (
@@ -426,16 +423,13 @@ function SiteSectionCards({
   )
 }
 
-// ── Pas 3: connecta l'agent de WhatsApp ────────────────────────────────────────
-// El banner d'onboarding persistent (founder directive 2026-07-06): després de
-// clonar (pas 1) i importar (pas 2), connectar l'agent ha de ser IMPOSSIBLE de
-// no veure. Es mostra fins que l'usuari té una identitat activa o el descarta
-// (localStorage — reapareix en un altre navegador, i està bé: és la promesa
-// central del producte).
+// ── Suggeriment discret: connecta l'agent de WhatsApp ─────────────────────────
+// Una sola línia, descartable per sempre (founder 2026-07-06: útil, mai pesat —
+// la configuració de debò viu, ben visible, a /dashboard/agent).
 const WA_BANNER_DISMISS_KEY = 'carma:wa-banner-dismissed'
 const emptySubscribe = () => () => {}
 
-function ConnectAgentBanner({ hasPosts }: { hasPosts: boolean }) {
+function ConnectAgentBanner() {
   // localStorage és un magatzem extern → useSyncExternalStore (hydration-safe:
   // el servidor el considera descartat i el client corregeix al primer render).
   const initiallyDismissed = useSyncExternalStore(
@@ -451,52 +445,30 @@ function ConnectAgentBanner({ hasPosts }: { hasPosts: boolean }) {
     try { localStorage.setItem(WA_BANNER_DISMISS_KEY, '1') } catch { /* cosmètic */ }
   }
 
-  const steps: { label: string; done: boolean }[] = [
-    { label: 'Blog creat', done: true },
-    { label: 'Articles', done: hasPosts },
-    { label: 'WhatsApp', done: false },
-  ]
-
   return (
-    <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] relative overflow-hidden rounded-2xl border border-transparent bg-bg-elevated p-5 shadow-card sm:p-6">
-      <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ffd769] to-[#e6ad00] text-[#1a1400] shadow-[0_8px_20px_-8px_rgba(245,188,0,0.7)]">
-          <MessageCircle className="h-6 w-6" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-extrabold tracking-tight text-text">
-            L&apos;últim pas: connecta l&apos;agent de WhatsApp
-          </p>
-          <p className="mt-0.5 text-sm leading-relaxed text-muted">
-            Envia-li una nota de veu i tindràs l&apos;article escrit, maquetat i a punt de publicar. És el teu blog escrivint-se sol.
-          </p>
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {steps.map((s, i) => (
-              <span
-                key={s.label}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-extrabold uppercase tracking-wider',
-                  s.done ? 'bg-success-soft text-success' : 'bg-accent-soft text-accent',
-                )}
-              >
-                {i + 1} · {s.label}{s.done ? ' ✓' : ''}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button href="/dashboard/agent" glow iconLeft={<MessageCircle className="h-4 w-4" />}>
-            Connecta WhatsApp
-          </Button>
-          <button
-            type="button"
-            onClick={dismiss}
-            className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold text-subtle transition-colors hover:bg-surface-hover hover:text-text"
-          >
-            Més tard
-          </button>
-        </div>
-      </div>
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-elevated px-3.5 py-2.5">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+        <MessageCircle className="h-3.5 w-3.5" />
+      </span>
+      <p className="min-w-0 flex-1 truncate text-sm text-muted">
+        <span className="font-semibold text-text">Vols escriure per WhatsApp?</span>{' '}
+        <span className="hidden sm:inline">Envia una nota de veu i l&apos;agent et prepara l&apos;article.</span>
+      </p>
+      <Link
+        href="/dashboard/agent"
+        className="shrink-0 rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-extrabold text-accent no-underline transition-colors hover:bg-accent hover:text-on-accent"
+      >
+        Connecta&apos;l
+      </Link>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Descarta el suggeriment"
+        title="No m'ho tornis a ensenyar"
+        className="shrink-0 cursor-pointer rounded-md p-1 text-subtle transition-colors hover:bg-surface-hover hover:text-text"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   )
 }

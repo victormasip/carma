@@ -45,11 +45,22 @@ export default function AgentClient({ agentNumber, identities, scopes, sites, ac
         {/* Chat console — the main stage. */}
         <AgentChat sites={sites} />
 
-        {/* Side rail: phone channel + what the agent has shipped. */}
-        <div className="min-w-0 space-y-6 lg:h-full lg:overflow-y-auto lg:pr-1">
+        {/* Side rail: phone channel + what the agent has shipped. While NOT
+            connected, the WhatsApp setup is THE thing this page must make easy
+            (founder directive 2026-07-06): it jumps ABOVE the chat on mobile
+            and wears the gold trace so it can't be overlooked — without
+            hijacking the chat, which stays fully usable. */}
+        <div className={cn('min-w-0 space-y-6 lg:h-full lg:overflow-y-auto lg:pr-1', !active && 'order-first lg:order-none')}>
           <section className="space-y-3">
             <RailLabel icon={<Smartphone className="h-4 w-4" />}>Canal de WhatsApp</RailLabel>
-            <AgentConnection agentNumber={agentNumber} identities={identities} sites={sites} scopes={scopes} />
+            {!active && (
+              <p className="text-xs leading-relaxed text-muted">
+                Vincula el teu número en 2 minuts i escriu articles enviant una nota de veu des d&apos;on siguis.
+              </p>
+            )}
+            <div className={cn(!active && 'gold-trace gold-trace-aura [--gold-trace-w:1.5px] rounded-2xl')}>
+              <AgentConnection agentNumber={agentNumber} identities={identities} sites={sites} scopes={scopes} />
+            </div>
           </section>
 
           <section className="space-y-3">

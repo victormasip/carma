@@ -188,8 +188,7 @@ function Hero({ c }: { c: LandingCopy }) {
           </p>
 
           <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start" data-reveal style={{ '--reveal-delay': '200ms' } as React.CSSProperties}>
-            {/* gold-trace-live: THE one always-spinning comet on the page. */}
-            <Link href="/registre" className="btn-gold gold-trace gold-trace-live [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-7 py-3.5 text-base font-extrabold no-underline">
+            <Link href="/registre" className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-7 py-3.5 text-base font-extrabold no-underline">
               <span className="relative z-[1] inline-flex items-center gap-2"><Sparkles className="h-4.5 w-4.5" /> {c.hero.cta1}</span>
             </Link>
             <a href="#clona" className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border-strong px-7 py-3.5 text-base font-bold text-text no-underline transition-colors hover:border-accent/50 hover:bg-surface-hover">

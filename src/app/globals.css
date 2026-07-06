@@ -571,16 +571,15 @@ a[role="button"]:active {
   pointer-events: none;
   z-index: 0;
 }
-/* PERF (landing-freeze fix, 2026-07-06): animating --gold-angle re-rasterizes
-   the conic gradient on the MAIN thread every frame (registered custom-property
-   animations aren't compositable). With a trace on every CTA + cards + the
-   sidebar widget, the page repainted constantly even at idle — the freeze. At
-   rest the ring is now the static iridescent gradient (+ the aura pulse below,
-   which is opacity-only = composited = free). The comet spins on hover/focus,
-   and ALWAYS on `.gold-trace-live` — reserve that for ONE hero element. */
-.gold-trace:hover::before,
-.gold-trace:focus-visible::before,
-.gold-trace-live::before {
+/* The comet is ALWAYS alive (founder directive 2026-07-06: the traveling gold
+   border on CTAs and cards is the brand's signature — non-negotiable). Yes,
+   animating --gold-angle re-paints the conic each frame; that cost is small
+   per element and BOUNDED — the actual landing freeze came from the stacked
+   heavy effects that stay dead (blur(140px) halos, giant rotating discs, the
+   background-position sheens, everything painting below the fold). Below-fold
+   traces don't paint at all thanks to content-visibility on the landing
+   sections. If a page ever feels heavy again, count its traces first. */
+.gold-trace::before {
   animation: gold-trace-spin 3.2s linear infinite;
 }
 /* A soft pulsing gold aura under the trace, for "important" cards/CTAs. */
@@ -596,13 +595,13 @@ a[role="button"]:active {
 }
 @keyframes gold-aura-pulse { 0%, 100% { opacity: .4; } 50% { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) {
-  /* Keep the brand pulse alive under reduced motion, but ONLY the cheap,
-     compositor-friendly pieces: the aura (opacity) and the single .gold-trace-live
-     comet. The old rule force-spun EVERY trace — on a machine with OS animations
-     off (which maps to this media query) that meant full-time repaints, i.e. the
-     exact machines that asked for less motion got the most work. */
+  /* The tracing border + aura stay alive under reduced motion (brand signature;
+     founder's Windows has OS animations off and must still see it). Class-level
+     !important beats the blanket `*` kill rule. The HEAVY effects that used to
+     be forced here (blurred halos, sheens, shimmer, discs) remain dead — they
+     were the freeze, not the traces. */
+  .gold-trace::before { animation: gold-trace-spin 3.2s linear infinite !important; }
   .gold-trace.gold-trace-aura::after { animation: gold-aura-pulse 3.2s ease-in-out infinite !important; }
-  .gold-trace-live::before { animation: gold-trace-spin 3.2s linear infinite !important; }
 }
 /* Hover-only trace — the ring fades in and the spin only runs while hovered, so a
    whole grid of cards doesn't animate at once. Pair with `.gold-trace`. */

@@ -3,11 +3,12 @@
 // Selector de llocs del sidebar (patró popover Vercel/Linear) — substitueix la
 // llista plana que feia scroll infinit amb dotzenes de llocs (agències).
 //
-//   · Disparador compacte: el lloc ACTIU (logo + nom + subdomini) o el recompte
-//     total quan no n'hi ha cap d'actiu.
-//   · Popover amb cerca auto-enfocada (sense accents, multi-terme), grup de
-//     "Recents" (localStorage), llista completa en un contenidor d'alçada fixa
-//     (max-h-64) i una fila d'accions enganxada a sota.
+//   · Disparador d'UNA sola línia (el sidebar no perd vertical): logo + nom del
+//     lloc actiu + recompte + chevró.
+//   · El popover és un FLYOUT LATERAL en escriptori (s'obre a la DRETA del
+//     sidebar, position:fixed per escapar de l'overflow del nav) i cau a sota
+//     en mòbil. Cerca auto-enfocada (sense accents, multi-terme), "Recents"
+//     (localStorage), llista d'alçada fixa (max-h-64) i accions a sota.
 //   · Accions HONESTES per pla (2026-07-06): si el pla permet més llocs
 //     (SITE_LIMITS), "Clona un nou lloc" hi porta de debò; si no, l'acció útil
 //     és "Canvia el disseny" (Tema) + una invitació suau a pujar de pla — mai
@@ -68,7 +69,10 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
   const [recentIds, setRecentIds] = useState<string[]>([])
+  // Posició del popover (fixed: el flyout ha d'escapar de l'overflow del nav).
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -84,21 +88,42 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
   }, [activeId, sites])
 
   const openPopover = () => {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) {
+      // Escriptori (lg): flyout a la dreta del sidebar, alineat amb el trigger
+      // (i mai per sota del viewport). Mòbil: cau a sota, amplada del trigger.
+      const flyout = window.matchMedia('(min-width: 1024px)').matches
+      setPos(flyout
+        ? { left: r.right + 12, top: Math.max(8, Math.min(r.top - 4, window.innerHeight - 440)), width: 304 }
+        : { left: r.left, top: r.bottom + 8, width: r.width })
+    }
     setRecentIds(readRecents())
     setQuery('')
     setCursor(0)
     setOpen(true)
   }
 
-  // Enfoca la cerca en obrir; tanca amb clic fora.
+  // Enfoca la cerca en obrir; tanca amb clic fora, amb scroll extern o resize
+  // (el popover és fixed: si el món es mou, millor tancar que quedar penjat).
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
     const onDoc = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
+    const close = () => setOpen(false)
+    const onScroll = (e: Event) => {
+      if (rootRef.current?.contains(e.target as Node)) return // scroll INTERN de la llista
+      setOpen(false)
+    }
     document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    window.addEventListener('resize', close)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      window.removeEventListener('resize', close)
+      document.removeEventListener('scroll', onScroll, true)
+    }
   }, [open])
 
   const q = fold(query.trim())
@@ -143,40 +168,37 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
 
   return (
     <div ref={rootRef} className="relative">
-      {/* ── Disparador compacte ── */}
+      {/* ── Disparador d'una sola línia ── */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => (open ? setOpen(false) : openPopover())}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'group flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all duration-200',
+          'group flex w-full cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-all duration-200',
           open
-            ? 'border-accent/45 bg-surface-hover shadow-[0_0_16px_-7px_rgba(245,188,0,0.55)]'
-            : 'border-border bg-bg-elevated hover:border-accent/35 hover:bg-surface-hover hover:shadow-[0_0_14px_-7px_rgba(245,188,0,0.45)]',
+            ? 'border-accent/45 bg-surface-hover shadow-[0_0_14px_-7px_rgba(245,188,0,0.55)]'
+            : 'border-border bg-bg-elevated hover:border-accent/35 hover:bg-surface-hover hover:shadow-[0_0_12px_-7px_rgba(245,188,0,0.45)]',
         )}
       >
-        <SiteAvatar site={active} size="md" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-bold leading-tight text-text">
-            {active ? active.name : (isSuperAdmin ? t('nav.allSites') : t('nav.yourSites'))}
-          </span>
-          <span className="block truncate text-[11px] leading-tight text-subtle">
-            {active
-              ? (active.subdomain || `${sites.length} ${sites.length === 1 ? 'lloc' : 'llocs'}`)
-              : `${sites.length} ${sites.length === 1 ? 'lloc' : 'llocs'}`}
-          </span>
+        <SiteAvatar site={active} size="xs" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-bold leading-tight text-text">
+          {active ? active.name : (isSuperAdmin ? t('nav.allSites') : t('nav.yourSites'))}
         </span>
-        <ChevronsUpDown className="h-4 w-4 shrink-0 text-subtle transition-colors group-hover:text-muted" />
+        <span className="shrink-0 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[0.6rem] font-extrabold tabular-nums text-subtle">
+          {sites.length}
+        </span>
+        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-subtle transition-colors group-hover:text-muted" />
       </button>
 
-      {/* ── Popover ── */}
-      {open && (
+      {/* ── Popover (flyout lateral en lg · a sota en mòbil) ── */}
+      {open && pos && (
         <div
-          className="absolute -left-0.5 -right-0.5 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-premium"
+          className="fixed z-[60] overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-premium"
           role="listbox"
           onKeyDown={onKey}
-          style={{ animation: 'toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1)' }}
+          style={{ left: pos.left, top: pos.top, width: pos.width, animation: 'toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {/* Cerca */}
           <div className="relative border-b border-border bg-surface-subtle/60">
@@ -304,8 +326,8 @@ function SiteOption({ site, idx, cursor, activeId, onSelect, onHover }: {
 }
 
 /** Logo del lloc, o la inicial sobre or suau quan no n'hi ha. */
-function SiteAvatar({ site, size = 'sm' }: { site: SwitcherSite | null; size?: 'sm' | 'md' }) {
-  const box = size === 'md' ? 'h-8 w-8' : 'h-7 w-7'
+function SiteAvatar({ site, size = 'sm' }: { site: SwitcherSite | null; size?: 'xs' | 'sm' | 'md' }) {
+  const box = size === 'md' ? 'h-8 w-8' : size === 'xs' ? 'h-6 w-6' : 'h-7 w-7'
   if (site?.logo_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- favicons/logos externs de mida fixa; next/image no aporta res aquí

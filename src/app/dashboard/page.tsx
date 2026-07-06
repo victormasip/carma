@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation'
 import NewSiteModal from './NewSiteModal'
 import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
-import Badge from '@/components/ui/Badge'
 import { fetchSitesViewCounts } from '@/lib/analytics/read'
 import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 import { formatNumber } from '@/lib/format'
@@ -90,10 +89,11 @@ export default async function DashboardHome() {
   let sitesRes = await sitesSel('id, name, created_at, logo_url')
   if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
   const { data: sites, error } = sitesRes
-  const [{ data: clientProfiles }, postCounts, { data: su }] = await Promise.all([
+  // clientProfiles: only for NewSiteModal's assign-to-client picker — the
+  // clients LIST view moved to /admin/users (founder directive 2026-07-06).
+  const [{ data: clientProfiles }, postCounts] = await Promise.all([
     admin.from('profiles').select('id, email').eq('role', 'client').order('email'),
     fetchPostCounts(admin, null),
-    admin.from('site_users').select('user_id'),
   ])
 
   const siteList = (sites ?? []) as unknown as SiteRow[]
@@ -101,9 +101,6 @@ export default async function DashboardHome() {
   const sitesWithCounts = withCounts(siteList, postCounts, viewMap)
   const totals = aggregate(sitesWithCounts)
   const clients = (clientProfiles ?? []) as { id: string; email: string }[]
-
-  const siteUserCounts: Record<string, number> = {}
-  for (const row of su ?? []) siteUserCounts[row.user_id] = (siteUserCounts[row.user_id] ?? 0) + 1
 
   return (
     <div className="space-y-8">
@@ -124,7 +121,6 @@ export default async function DashboardHome() {
             { icon: <Globe className="w-4 h-4" />, label: 'Llocs', value: sitesWithCounts.length },
             { icon: <FileText className="w-4 h-4" />, label: 'Articles', value: totals.total },
             { icon: <CheckCircle2 className="w-4 h-4" />, label: 'Publicats', value: totals.published, tone: 'success' },
-            { icon: <Users className="w-4 h-4" />, label: 'Clients', value: clients.length },
           ]} />
 
           <section className="space-y-4">
@@ -140,32 +136,23 @@ export default async function DashboardHome() {
             )}
           </section>
 
-          <section className="space-y-4">
-            <SectionTitle icon={<Users className="w-4 h-4" />} title="Clients" count={clients.length} />
-            {clients.length === 0 ? (
-              <EmptyState
-                icon={<Users className="w-7 h-7" />}
-                title="Encara no hi ha clients registrats"
-                description="Crea usuaris amb rol &quot;client&quot; des de Supabase."
-              />
-            ) : (
-              <div className="bg-surface border border-border rounded-2xl divide-y divide-border overflow-hidden">
-                {clients.map(client => (
-                  <div key={client.id} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-surface-hover transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-8 h-8 rounded-lg bg-surface-subtle text-muted flex items-center justify-center text-sm font-bold shrink-0 uppercase">
-                        {client.email.charAt(0)}
-                      </span>
-                      <span className="text-sm font-medium text-text truncate">{client.email}</span>
-                    </div>
-                    <Badge tone={siteUserCounts[client.id] ? 'accent' : 'neutral'} dot={!!siteUserCounts[client.id]}>
-                      {siteUserCounts[client.id] ?? 0} lloc{(siteUserCounts[client.id] ?? 0) !== 1 ? 's' : ''}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* La llista de clients viu a /admin/users (cerca, plans, punts,
+              accions) — aquí només un accés directe, no una segona còpia. */}
+          <Link
+            href="/admin/users"
+            className="group flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 no-underline transition-colors hover:border-accent/40 hover:bg-surface-hover"
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                <Users className="h-4.5 w-4.5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold text-text">Gestió d&apos;usuaris</span>
+                <span className="block text-xs text-muted">{clients.length} client{clients.length !== 1 ? 's' : ''} · plans, punts i accions a /admin/users</span>
+              </span>
+            </span>
+            <span className="text-xs font-bold text-subtle transition-colors group-hover:text-accent">Obrir →</span>
+          </Link>
         </>
       )}
     </div>
