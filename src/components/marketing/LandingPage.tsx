@@ -160,8 +160,9 @@ function Hero({ c }: { c: LandingCopy }) {
   const wordsB = c.hero.h1b.split(' ')
   return (
     <section className="relative px-4 pb-16 pt-32 sm:pt-36 lg:pb-24">
-      <div className="halo halo-drift-a -top-[10%] left-[8%] h-[420px] w-[420px] bg-accent opacity-[0.12]" />
-      <div className="halo halo-drift-b top-[15%] right-[5%] h-[360px] w-[360px] bg-carma-300 opacity-[0.10]" />
+      {/* Soft radial gradients, NOT blur() — see .halo in globals.css (perf). */}
+      <div className="halo halo-drift-a -top-[10%] left-[8%] h-[420px] w-[420px] opacity-[0.12]" style={{ '--halo-c': '#f5bc00' } as React.CSSProperties} />
+      <div className="halo halo-drift-b top-[15%] right-[5%] h-[360px] w-[360px] opacity-[0.10]" style={{ '--halo-c': '#ffe066' } as React.CSSProperties} />
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-16">
         <div className="text-center lg:text-left">
@@ -187,7 +188,8 @@ function Hero({ c }: { c: LandingCopy }) {
           </p>
 
           <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start" data-reveal style={{ '--reveal-delay': '200ms' } as React.CSSProperties}>
-            <Link href="/registre" className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-7 py-3.5 text-base font-extrabold no-underline">
+            {/* gold-trace-live: THE one always-spinning comet on the page. */}
+            <Link href="/registre" className="btn-gold gold-trace gold-trace-live [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-7 py-3.5 text-base font-extrabold no-underline">
               <span className="relative z-[1] inline-flex items-center gap-2"><Sparkles className="h-4.5 w-4.5" /> {c.hero.cta1}</span>
             </Link>
             <a href="#clona" className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border-strong px-7 py-3.5 text-base font-bold text-text no-underline transition-colors hover:border-accent/50 hover:bg-surface-hover">
@@ -212,7 +214,7 @@ function Hero({ c }: { c: LandingCopy }) {
 function HowItWorks({ c }: { c: LandingCopy }) {
   const icons = [Globe, MessageCircle, Mic]
   return (
-    <section id="com-funciona" className="px-4 py-24">
+    <section id="com-funciona" className="cv-auto px-4 py-24">
       <div className="mx-auto max-w-6xl">
         <SectionHead eyebrow={c.how.eyebrow} title={c.how.title} />
         <div className="relative mt-14 grid gap-5 md:grid-cols-3">
@@ -243,7 +245,7 @@ function HowItWorks({ c }: { c: LandingCopy }) {
 function FeatureBento({ c }: { c: LandingCopy }) {
   const b = c.bento
   return (
-    <section id="funcions" className="px-4 py-24">
+    <section id="funcions" className="cv-auto px-4 py-24">
       <div className="mx-auto max-w-6xl">
         <SectionHead eyebrow={b.eyebrow} title={b.title} />
         <div className="mt-14 grid auto-rows-[minmax(0,1fr)] gap-4 md:grid-cols-3">
@@ -307,7 +309,7 @@ function BentoCard({ icon: Icon, title, body, children, className = '', featured
 function StudioShowcase({ c }: { c: LandingCopy }) {
   const s = c.studio
   return (
-    <section className="px-4 py-24">
+    <section className="cv-auto px-4 py-24">
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
         {/* Copy */}
         <div data-reveal>
@@ -405,7 +407,7 @@ function GridGlyph() {
 /* ─────────────────────── Clone (the magic wand keeps its stage) ─────────────────────── */
 function CloneSection({ c, onGenerate }: { c: LandingCopy; onGenerate: (u: string) => void }) {
   return (
-    <section id="clona" className="px-4 py-24">
+    <section id="clona" className="cv-auto px-4 py-24">
       <div className="mx-auto max-w-4xl text-center">
         <SectionHead eyebrow={c.clone.eyebrow} title={c.clone.title} />
         <p className="mx-auto mt-4 max-w-xl text-pretty text-base font-medium leading-relaxed text-muted" data-reveal>
@@ -428,7 +430,7 @@ function CloneSection({ c, onGenerate }: { c: LandingCopy; onGenerate: (u: strin
 function Pricing({ c }: { c: LandingCopy }) {
   const p = c.pricing
   return (
-    <section id="preus" className="px-4 py-24">
+    <section id="preus" className="cv-auto px-4 py-24">
       <div className="mx-auto max-w-5xl">
         <SectionHead eyebrow={p.eyebrow} title={p.title} />
         <div className="mx-auto mt-14 grid max-w-3xl gap-5 sm:grid-cols-2">
@@ -485,7 +487,7 @@ function Perk({ children, gold = false }: { children: React.ReactNode; gold?: bo
 /* ───────────────────────────── FAQ ─────────────────────────── */
 function Faq({ c }: { c: LandingCopy }) {
   return (
-    <section className="px-4 pb-24">
+    <section className="cv-auto px-4 pb-24">
       <div className="mx-auto max-w-3xl">
         <SectionHead eyebrow={c.faq.eyebrow} title={c.faq.title} />
         <div className="mt-10 space-y-3">

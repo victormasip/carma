@@ -196,6 +196,11 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background-color 0.2s ease, color 0.2s ease;
+  /* Bulletproof: the app never scrolls horizontally at page level (mobile audit
+     2026-07-06). `clip` — not `hidden` — creates no scroll container, so sticky
+     headers/toolbars keep working. Intentional wide content (tables, code)
+     scrolls inside its OWN container instead of dragging the page. */
+  overflow-x: clip;
 }
 
 /* Theme-aware selection */
@@ -481,25 +486,25 @@ a[role="button"]:active {
 /* Signature gold gradient button — a wide gold gradient that slides on hover. */
 .btn-gold {
   position: relative;
-  /* A bright gold sheen band baked into the gradient; the animation sweeps it
-     across so the button INTERIOR is always visibly alive. The two ends are the
-     SAME colour (#c79722) so the tile seam is invisible — that, plus a position
-     delta of exactly one tile (200%), makes the sweep loop seamlessly with no
-     abrupt reset. */
+  /* A bright gold sheen band baked into the gradient; hover sweeps it across.
+     The two ends are the SAME colour (#c79722) so the tile seam is invisible —
+     that, plus a position delta of exactly one tile (200%), makes the sweep
+     loop seamlessly with no abrupt reset.
+     PERF (landing-freeze fix, 2026-07-06): the sweep used to run infinitely on
+     EVERY gold button — background-position isn't compositable, so each button
+     repainted every frame forever. At rest the button is now the static rich
+     gradient + glow; the sweep runs on hover/focus, where one animating element
+     is negligible. */
   background-image: linear-gradient(110deg, #c79722 0%, #f5bc00 18%, #ffe27a 34%, #fff7d6 46%, #ffe27a 58%, #f5bc00 74%, #c79722 100%);
   background-size: 200% 100%;
   background-repeat: repeat;
-  background-position: 0% 0;
+  background-position: 55% 0;
   color: #1a1400;
   transition: transform .2s var(--ease-emphasis, ease), box-shadow .35s ease, filter .25s ease;
   box-shadow: 0 10px 30px -6px rgba(245, 188, 0, 0.40), inset 0 1px 0 rgba(255,255,255,0.55);
-  animation: btn-gold-sheen 4.2s linear infinite;
 }
-/* The interior is ALWAYS alive — a bright band sweeps across continuously; on
-   hover it accelerates (constant motion under the cursor). Shifting by exactly
-   one 200% tile means phase 0% ≡ phase 200%, so the keyframe wrap is invisible. */
 @keyframes btn-gold-sheen { from { background-position: 200% 0; } to { background-position: 0% 0; } }
-.btn-gold:hover { animation-duration: 1.5s; transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 18px 44px -8px rgba(245, 188, 0, 0.60), inset 0 1px 0 rgba(255,255,255,0.7); }
+.btn-gold:hover, .btn-gold:focus-visible { animation: btn-gold-sheen 1.5s linear infinite; transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 18px 44px -8px rgba(245, 188, 0, 0.60), inset 0 1px 0 rgba(255,255,255,0.7); }
 .btn-gold:active { transform: scale(0.985); }
 
 /* ── Animated glowing border that traces the perimeter (CTAs + hero cards) ──
@@ -541,9 +546,20 @@ a[role="button"]:active {
           mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
-  animation: gold-trace-spin 3.2s linear infinite;
   pointer-events: none;
   z-index: 0;
+}
+/* PERF (landing-freeze fix, 2026-07-06): animating --gold-angle re-rasterizes
+   the conic gradient on the MAIN thread every frame (registered custom-property
+   animations aren't compositable). With a trace on every CTA + cards + the
+   sidebar widget, the page repainted constantly even at idle — the freeze. At
+   rest the ring is now the static iridescent gradient (+ the aura pulse below,
+   which is opacity-only = composited = free). The comet spins on hover/focus,
+   and ALWAYS on `.gold-trace-live` — reserve that for ONE hero element. */
+.gold-trace:hover::before,
+.gold-trace:focus-visible::before,
+.gold-trace-live::before {
+  animation: gold-trace-spin 3.2s linear infinite;
 }
 /* A soft pulsing gold aura under the trace, for "important" cards/CTAs. */
 .gold-trace.gold-trace-aura::after {
@@ -558,10 +574,13 @@ a[role="button"]:active {
 }
 @keyframes gold-aura-pulse { 0%, 100% { opacity: .4; } 50% { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) {
-  /* Keep the tracing border alive (it's the brand's signature CTA cue). Re-assert
-     with !important so it beats the blanket `*` reduced-motion rule. */
-  .gold-trace::before { animation: gold-trace-spin 3.2s linear infinite !important; }
+  /* Keep the brand pulse alive under reduced motion, but ONLY the cheap,
+     compositor-friendly pieces: the aura (opacity) and the single .gold-trace-live
+     comet. The old rule force-spun EVERY trace — on a machine with OS animations
+     off (which maps to this media query) that meant full-time repaints, i.e. the
+     exact machines that asked for less motion got the most work. */
   .gold-trace.gold-trace-aura::after { animation: gold-aura-pulse 3.2s ease-in-out infinite !important; }
+  .gold-trace-live::before { animation: gold-trace-spin 3.2s linear infinite !important; }
 }
 /* Hover-only trace — the ring fades in and the spin only runs while hovered, so a
    whole grid of cards doesn't animate at once. Pair with `.gold-trace`. */
@@ -606,21 +625,32 @@ a[role="button"]:active {
 }
 @keyframes eyebrow-glow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 
-/* Atmospheric blurred gold halos — the one decorative device. */
-.halo { position: absolute; border-radius: 9999px; filter: blur(140px); pointer-events: none; }
+/* Atmospheric gold halos — the one decorative device.
+   PERF (landing-freeze fix, 2026-07-06): these used `filter: blur(140px)`, which
+   forces the compositor to rasterize a HUGE intermediate surface per halo — and
+   two of them animate, so that surface re-composited forever. A radial gradient
+   IS a soft blurry circle; painting it directly costs ~nothing and looks the
+   same at these opacities. Callers set the gradient (or use --halo-c). */
+.halo {
+  position: absolute; border-radius: 9999px; pointer-events: none;
+  background: radial-gradient(circle closest-side, var(--halo-c, rgba(245,188,0,0.9)), transparent 72%);
+}
 @keyframes halo-drift-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-30px) scale(1.06); } }
 @keyframes halo-drift-b { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,40px) scale(1.08); } }
 .halo-drift-a { animation: halo-drift-a 18s ease-in-out infinite; }
 .halo-drift-b { animation: halo-drift-b 22s ease-in-out infinite; }
 
-/* Shimmering gold text — drifts indefinitely over a wide gradient. */
+/* Shimmering gold text — sweeps the headline a few times, then settles.
+   PERF (landing-freeze fix, 2026-07-06): infinite background-position animation
+   over headline-sized text = large repaint every frame, forever. Three passes
+   grab the eye on load; `forwards` freezes on a rich gold phase after. */
 .shimmer-gold {
   background: linear-gradient(100deg, #a87f00 0%, #f5bc00 25%, #ffe680 50%, #f5bc00 75%, #a87f00 100%);
   background-size: 220% 100%;
   -webkit-background-clip: text;
           background-clip: text;
   color: transparent;
-  animation: shimmer-text 5.5s linear infinite;
+  animation: shimmer-text 5.5s linear 3 forwards;
 }
 @keyframes shimmer-text { 0% { background-position: 220% 0; } 100% { background-position: -220% 0; } }
 
@@ -663,6 +693,12 @@ a[role="button"]:active {
 
 /* Section anchors clear the floating nav. */
 section[id] { scroll-margin-top: 110px; }
+
+/* Below-the-fold landing sections skip layout/paint entirely until the visitor
+   scrolls near them (landing-freeze fix, 2026-07-06). contain-intrinsic-size
+   reserves a plausible height so the scrollbar doesn't jump; anchor navigation
+   (#preus…) still renders the target on demand per spec. */
+.cv-auto { content-visibility: auto; contain-intrinsic-size: auto 760px; }
 
 /* ════════════════════════════════════════════════════════════════════════════
  * SKELETON SHIMMER — premium loading placeholder (no layout shift).
@@ -731,10 +767,12 @@ section[id] { scroll-margin-top: 110px; }
     animation: knot-glow-pulse 3.4s ease-in-out infinite, knot-spin-slow 16s linear infinite !important;
   }
   .knot-halo { animation: gold-aura-pulse 2.4s ease-in-out infinite !important; }
-  /* Signature gold "alive" effects — light/colour sheen, not vestibular motion.
-     The founder wants these visible even when the OS disables animations. */
-  .btn-gold { animation: btn-gold-sheen 3.6s linear infinite !important; }
-  .shimmer-gold { animation: shimmer-text 5.5s linear infinite !important; }
+  /* Signature "alive" cues that survive reduced motion: ONLY the cheap,
+     compositor-friendly ones (opacity pulses). The old block also force-ran the
+     btn-gold sheen and the headline shimmer — both background-position repaints
+     on the main thread, i.e. real per-frame work on exactly the machines that
+     asked for calm (landing-freeze fix, 2026-07-06). At rest those now show
+     their static rich-gold state, which still reads premium. */
   .eyebrow .dot { animation: eyebrow-glow 2.5s ease-in-out infinite !important; }
 }
 

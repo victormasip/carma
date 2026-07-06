@@ -576,7 +576,7 @@ ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!i
 .carma-article-content pre{background:var(--ct-text)!important;color:var(--ct-bg)!important;border-radius:var(--ct-radius-lg)!important;padding:1.1rem 1.3rem!important;margin:1.75rem 0!important;overflow-x:auto!important;font-size:.875rem!important;line-height:1.65!important}
 .carma-article-content pre code{background:none!important;padding:0!important;font-size:inherit!important;color:inherit!important}
 .carma-article-content hr{border:none!important;border-top:2px solid var(--ct-border)!important;width:88px!important;margin:2.75rem auto!important}
-.carma-article-content table{width:100%!important;max-width:100%!important;border-collapse:collapse!important;margin:1.75rem 0!important;font-size:.95em!important;line-height:1.5!important}
+.carma-article-content table{display:block!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;border-collapse:collapse!important;margin:1.75rem 0!important;font-size:.95em!important;line-height:1.5!important}
 .carma-article-content th{text-align:left!important;font-weight:700!important;font-size:.8125rem!important;text-transform:uppercase!important;letter-spacing:.05em!important;color:var(--ct-muted)!important;padding:.6rem .75rem!important;border-bottom:2px solid var(--ct-border)!important}
 .carma-article-content td{padding:.65rem .75rem!important;border-bottom:1px solid var(--ct-border)!important;vertical-align:top!important}
 .carma-article-content tr:last-child td{border-bottom:none!important}
@@ -823,7 +823,12 @@ body{background:${bg}}`
 // as a normal full-width block so inherited wrapper CSS (float/flex/position) can't
 // collapse it. The host's background is painted by :host inside the shadow root.
 function buildHostGuardCss(): string {
-  return `.carma-embed-host{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;flex:1 1 auto!important;min-width:0!important;float:none!important;position:static!important;margin:0!important;padding:0!important}`
+  // overflow-x:clip (mobile audit 2026-07-06): on /embed we do NOT own the host
+  // page's <body>, so a too-wide element inside the shadow (table, wide grid,
+  // long URL) used to stretch the CUSTOMER's page into horizontal scroll. Clip
+  // at the host edge instead — `clip` creates no scroll container, so sticky
+  // chrome inside keeps working (same rationale as the html,body rule).
+  return `.carma-embed-host{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;flex:1 1 auto!important;min-width:0!important;float:none!important;position:static!important;margin:0!important;padding:0!important;overflow-x:clip!important}`
 }
 
 // ─── Chrome region resolution (raw injection · scoped template) ─────────────────

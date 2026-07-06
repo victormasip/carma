@@ -98,8 +98,6 @@ export const WaitlistHero = ({ variant = "screen", copy = DEFAULT_COPY }: { vari
   return (
     <div className={`w-full ${isSection ? "" : "min-h-screen"} bg-[#0e0d0c] flex items-center justify-center`}>
       <style>{`
-        @keyframes cz-spin-slow { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-        @keyframes cz-spin-rev { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(-360deg); } }
         @keyframes cz-bounce-in { 0% { transform: scale(0.8); opacity: 0; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         .cz-bounce-in { animation: cz-bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         @keyframes cz-glow { 0%,100% { box-shadow: 0 0 30px rgba(245,188,0,0.4); } 50% { box-shadow: 0 0 70px rgba(245,188,0,0.8), 0 0 110px rgba(245,188,0,0.4); } }
@@ -107,11 +105,15 @@ export const WaitlistHero = ({ variant = "screen", copy = DEFAULT_COPY }: { vari
       `}</style>
 
       <div className={`relative w-full ${isSection ? "h-[660px]" : "h-screen"} overflow-hidden`} style={{ backgroundColor: "#0e0d0c", fontFamily: 'var(--font-ubuntu), system-ui, sans-serif' }}>
-        {/* Drifting gold halos (replacing the original spinning images) */}
+        {/* Layered gold halos. PERF (landing-freeze fix, 2026-07-06): these used
+            to ROTATE forever — but a radially-symmetric gradient looks identical
+            at every angle, so three huge composited layers (up to 1600×1600)
+            burned GPU every frame for zero visible change. Static now; the
+            translate(-50%,-50%) the keyframes used to apply moved inline. */}
         <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ perspective: "1200px", transform: "perspective(1200px) rotateX(15deg)", transformOrigin: "center bottom" }}>
-          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 1600, height: 1600, animation: "cz-spin-slow 80s linear infinite", background: "radial-gradient(circle, rgba(245,188,0,0.10), transparent 60%)" }} />
-          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 1000, height: 1000, animation: "cz-spin-rev 60s linear infinite", background: "radial-gradient(circle, rgba(255,224,102,0.12), transparent 62%)" }} />
-          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 620, height: 620, animation: "cz-spin-slow 48s linear infinite", background: "radial-gradient(circle, rgba(245,188,0,0.18), transparent 64%)" }} />
+          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 1600, height: 1600, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(245,188,0,0.10), transparent 60%)" }} />
+          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 1000, height: 1000, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(255,224,102,0.12), transparent 62%)" }} />
+          <div className="absolute top-1/2 left-1/2 rounded-full" style={{ width: 620, height: 620, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(245,188,0,0.18), transparent 64%)" }} />
         </div>
 
         {/* Gradient overlay */}

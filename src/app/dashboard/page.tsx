@@ -48,11 +48,11 @@ export default async function DashboardHome() {
     }
 
     const siteIds = sites.map(s => s.id)
-    const [{ data: postRows }, viewMap] = await Promise.all([
-      admin.from('posts').select('site_id, is_published').in('site_id', siteIds),
+    const [postCounts, viewMap] = await Promise.all([
+      fetchPostCounts(admin, siteIds),
       fetchSitesViewCounts(admin, siteIds),
     ])
-    const sitesWithCounts = withCounts(sites, postRows, viewMap)
+    const sitesWithCounts = withCounts(sites, postCounts, viewMap)
     const totals = aggregate(sitesWithCounts)
 
     const isSingle = sitesWithCounts.length === 1
@@ -81,15 +81,15 @@ export default async function DashboardHome() {
   let sitesRes = await sitesSel('id, name, created_at, logo_url')
   if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
   const { data: sites, error } = sitesRes
-  const [{ data: clientProfiles }, { data: postRows }, { data: su }] = await Promise.all([
+  const [{ data: clientProfiles }, postCounts, { data: su }] = await Promise.all([
     admin.from('profiles').select('id, email').eq('role', 'client').order('email'),
-    admin.from('posts').select('site_id, is_published'),
+    fetchPostCounts(admin, null),
     admin.from('site_users').select('user_id'),
   ])
 
   const siteList = (sites ?? []) as unknown as SiteRow[]
   const viewMap = await fetchSitesViewCounts(admin, siteList.map(s => s.id))
-  const sitesWithCounts = withCounts(siteList, postRows, viewMap)
+  const sitesWithCounts = withCounts(siteList, postCounts, viewMap)
   const totals = aggregate(sitesWithCounts)
   const clients = (clientProfiles ?? []) as { id: string; email: string }[]
 
@@ -165,19 +165,39 @@ export default async function DashboardHome() {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function withCounts(
-  sites: SiteRow[],
-  postRows: { site_id: string; is_published: boolean }[] | null,
-  viewMap: Record<string, number>,
-): SiteWithCounts[] {
-  const map = new Map<string, { total: number; published: number }>()
-  for (const row of postRows ?? []) {
+type PostCounts = Map<string, { total: number; published: number }>
+
+// Article counts per site — ONE grouped query at the database (migració 029)
+// instead of downloading every post row and counting in JS. 42883-safe: without
+// the migration it falls back to the old row-fetch, so nothing breaks.
+async function fetchPostCounts(admin: ReturnType<typeof createAdminClient>, siteIds: string[] | null): Promise<PostCounts> {
+  try {
+    const { data, error } = await admin.rpc('posts_counts_by_site', { p_site_ids: siteIds })
+    if (!error && Array.isArray(data)) {
+      return new Map((data as { site_id: string; total: number | string; published: number | string }[])
+        .map(r => [r.site_id, { total: Number(r.total), published: Number(r.published) }]))
+    }
+  } catch { /* pre-migració 029 → fallback */ }
+
+  let q = admin.from('posts').select('site_id, is_published')
+  if (siteIds) q = q.in('site_id', siteIds)
+  const { data: rows } = await q
+  const map: PostCounts = new Map()
+  for (const row of (rows ?? []) as { site_id: string; is_published: boolean }[]) {
     const e = map.get(row.site_id) ?? { total: 0, published: 0 }
     e.total++
     if (row.is_published) e.published++
     map.set(row.site_id, e)
   }
-  return sites.map(s => ({ ...s, ...(map.get(s.id) ?? { total: 0, published: 0 }), views: viewMap[s.id] ?? 0 }))
+  return map
+}
+
+function withCounts(
+  sites: SiteRow[],
+  postCounts: PostCounts,
+  viewMap: Record<string, number>,
+): SiteWithCounts[] {
+  return sites.map(s => ({ ...s, ...(postCounts.get(s.id) ?? { total: 0, published: 0 }), views: viewMap[s.id] ?? 0 }))
 }
 
 function aggregate(sites: SiteWithCounts[]) {

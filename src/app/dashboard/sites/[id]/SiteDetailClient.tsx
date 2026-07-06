@@ -349,9 +349,12 @@ export default function SiteDetailClient({
   )
 }
 
-// Section switcher — proper CARDS (icon block + label + description), but on
-// ONE line always: a non-wrapping row that scrolls horizontally when it must
-// (founder directive: keep the card feel, never a second row).
+// Section switcher — proper CARDS (icon block + label + description). On sm+
+// they sit on ONE line (founder directive: keep the card feel, never a second
+// row). On PHONES that line became a hidden-scrollbar horizontal scroller —
+// sections past the fold were undiscoverable (mobile audit 2026-07-06) — so
+// mobile now lays the same cards in a 2-column grid: everything visible, zero
+// horizontal scroll, still cards.
 function SiteSectionCards({
   active, onSelect, isLocked, isSuperAdmin,
 }: {
@@ -371,7 +374,7 @@ function SiteSectionCards({
   return (
     <nav
       aria-label="Seccions del lloc"
-      className="flex items-stretch gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="grid grid-cols-2 gap-2 sm:flex sm:items-stretch sm:gap-3 sm:overflow-x-auto sm:pb-1 sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden"
     >
       {defs.map(s => {
         const Icon = s.icon
@@ -384,7 +387,7 @@ function SiteSectionCards({
             onClick={() => onSelect(s.key)}
             aria-current={activeS ? 'page' : undefined}
             className={cn(
-              'group flex min-w-[10.5rem] flex-1 shrink-0 cursor-pointer items-center gap-3 rounded-2xl border p-3.5 text-left transition-all duration-200',
+              'group flex min-w-0 cursor-pointer items-center gap-2.5 rounded-2xl border p-3 text-left transition-all duration-200 sm:min-w-[10.5rem] sm:flex-1 sm:shrink-0 sm:gap-3 sm:p-3.5',
               activeS
                 ? 'border-accent bg-accent-soft ring-2 ring-accent/20 shadow-sm'
                 : 'border-border bg-surface hover:border-border-strong hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-16px_rgba(0,0,0,0.25)]',
@@ -398,13 +401,13 @@ function SiteSectionCards({
             </span>
             <span className="min-w-0">
               <span className={cn(
-                'flex items-center gap-1.5 whitespace-nowrap text-sm font-bold leading-tight',
+                'flex items-center gap-1.5 text-sm font-bold leading-tight sm:whitespace-nowrap',
                 activeS ? 'text-accent' : 'text-text',
               )}>
-                {s.label}
+                <span className="truncate">{s.label}</span>
                 {locked && <LockBadge />}
               </span>
-              <span className={cn('mt-0.5 block whitespace-nowrap text-xs leading-tight', activeS ? 'text-accent/70' : 'text-subtle')}>
+              <span className={cn('mt-0.5 hidden text-xs leading-tight sm:block sm:whitespace-nowrap', activeS ? 'text-accent/70' : 'text-subtle')}>
                 {s.desc}
               </span>
             </span>
