@@ -5,9 +5,9 @@
 // the viewport with no dashboard chrome — reached from the render's owner-only
 // "Edit this site" button.
 
-import { ThemeStudioProvider, type Theme } from '@/app/dashboard/sites/[id]/ThemeStudioContext'
-import ThemeCaptureModal from '@/app/dashboard/sites/[id]/ThemeCaptureModal'
-import CarmaStudio from '@/app/dashboard/sites/[id]/studio/CarmaStudio'
+import { ThemeStudioProvider, type Theme } from '@/app/(app)/dashboard/sites/[id]/ThemeStudioContext'
+import ThemeCaptureModal from '@/app/(app)/dashboard/sites/[id]/ThemeCaptureModal'
+import CarmaStudio from '@/app/(app)/dashboard/sites/[id]/studio/CarmaStudio'
 
 export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, defaultLocale, regenCount, exitHref }: {
   siteId: string

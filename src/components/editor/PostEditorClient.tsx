@@ -29,7 +29,7 @@ import KnotLoader from '@/components/ui/KnotLoader'
 import KnotSpinner from '@/components/ui/KnotSpinner'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Modal, useConfirm } from '@/components/ui/Modal'
-import { PremiumPanel } from '@/app/dashboard/sites/[id]/PremiumGate'
+import { PremiumPanel } from '@/app/(app)/dashboard/sites/[id]/PremiumGate'
 import { cn } from '@/lib/cn'
 import Link from 'next/link'
 

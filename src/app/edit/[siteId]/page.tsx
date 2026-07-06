@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { isUuid } from '@/lib/sites/domain'
-import type { Theme } from '@/app/dashboard/sites/[id]/ThemeStudioContext'
+import type { Theme } from '@/app/(app)/dashboard/sites/[id]/ThemeStudioContext'
 import FullscreenStudio from './FullscreenStudio'
 
 // Full-screen Studio for a single site — the "Edit this site" target linked from
