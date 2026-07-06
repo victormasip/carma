@@ -28,8 +28,11 @@ import {
 import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { adminAdjustKarma, adminSetPlan, adminSetSuperadmin, adminDeleteUser } from '@/lib/actions/admin-users'
-import type { KarmaPlan } from '@/lib/karma/config'
+import {
+  adminAdjustKarma, adminSetPlan, adminSetSuperadmin, adminDeleteUser,
+  adminBulkSetPlan, adminBulkAdjustKarma,
+} from '@/lib/actions/admin-users'
+import { KARMA_ALLOCATIONS, type KarmaPlan } from '@/lib/karma/config'
 
 export type AdminUserSite = { id: string; name: string; subdomain: string | null }
 
@@ -74,9 +77,13 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
   const [query, setQuery] = useState('')
   const [planFilter, setPlanFilter] = useState<PlanFilter>('all')
   const [sort, setSort] = useState<SortMode>('recent')
-  const [adjusting, setAdjusting] = useState<AdminUserRow | null>(null)
+  const [adjusting, setAdjusting] = useState<AdminUserRow[] | null>(null)
   const [deleting, setDeleting] = useState<AdminUserRow | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Selecció múltiple → barra d'accions en bloc (pla + punts d'una tacada).
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkPlan, setBulkPlan] = useState<KarmaPlan | ''>('')
+  const [bulkPending, startBulk] = useTransition()
 
   const patchRow = (id: string, patch: Partial<AdminUserRow>) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -108,6 +115,33 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
     superadmin: rows.filter((r) => r.superadmin).length,
     whatsapp: rows.filter((r) => r.waActive).length,
   }), [rows])
+
+  // ── Selecció múltiple ──
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id))
+  const toggleSelectAll = () =>
+    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((r) => r.id)))
+  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected])
+
+  const applyBulkPlan = () => {
+    if (!bulkPlan || bulkPending) return
+    const ids = [...selected]
+    startBulk(async () => {
+      const res = await adminBulkSetPlan(ids, bulkPlan)
+      if (!res.ok) { toast(res.error, 'error'); return }
+      setRows((prev) => prev.map((r) => (selected.has(r.id) && !r.superadmin
+        ? { ...r, plan: bulkPlan, allocation: KARMA_ALLOCATIONS[bulkPlan] }
+        : r)))
+      toast(`Pla «${PLAN_LABELS[bulkPlan]}» aplicat a ${res.done} usuari${res.done !== 1 ? 's' : ''}${res.failed ? ` (${res.failed} han fallat)` : ''}`, res.failed ? 'info' : 'success')
+      setBulkPlan('')
+      router.refresh()
+    })
+  }
 
   return (
     <div>
@@ -157,11 +191,55 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
         </div>
       </div>
 
+      {/* ── Barra d'accions en bloc ── */}
+      {selected.size > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-accent/40 bg-accent-soft/60 px-4 py-2.5">
+          <span className="text-sm font-extrabold text-text">{selected.size} seleccionat{selected.size !== 1 ? 's' : ''}</span>
+          <span className="h-4 w-px bg-accent/30" aria-hidden />
+          <label className="flex items-center gap-1.5 text-xs font-bold text-muted">
+            Pla:
+            <select
+              value={bulkPlan}
+              onChange={(e) => setBulkPlan(e.target.value as KarmaPlan | '')}
+              disabled={bulkPending}
+              className="cursor-pointer rounded-lg border border-border bg-bg-elevated px-2 py-1 text-xs font-bold text-text outline-none focus:border-accent"
+            >
+              <option value="">Tria…</option>
+              {(Object.keys(PLAN_LABELS) as KarmaPlan[]).map((p) => (
+                <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+              ))}
+            </select>
+          </label>
+          <Button onClick={applyBulkPlan} loading={bulkPending} disabled={!bulkPlan} size="sm" variant="secondary">
+            Aplica el pla
+          </Button>
+          <Button onClick={() => setAdjusting(selectedRows)} disabled={bulkPending} size="sm" glow iconLeft={<Sparkles className="h-3.5 w-3.5" />}>
+            ± Punts
+          </Button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-muted transition-colors hover:bg-surface-hover hover:text-text"
+          >
+            <X className="h-3.5 w-3.5" /> Neteja la selecció
+          </button>
+        </div>
+      )}
+
       {/* ── Taula ── */}
       <div className="mt-4 overflow-x-auto rounded-2xl border border-border bg-surface">
-        <table className="w-full min-w-[860px] border-collapse text-sm">
+        <table className="w-full min-w-[900px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-subtle text-left text-xs font-extrabold uppercase tracking-wider text-subtle">
+              <th className="w-10 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Selecciona tots els visibles"
+                  className="h-4 w-4 cursor-pointer accent-[#f5bc00]"
+                />
+              </th>
               <th className="px-4 py-3">Usuari</th>
               <th className="px-4 py-3">Pla</th>
               <th className="px-4 py-3 text-right">Punts</th>
@@ -179,16 +257,18 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
                 row={r}
                 isSelf={r.id === selfId}
                 expanded={expandedId === r.id}
+                isSelected={selected.has(r.id)}
+                onToggleSelect={() => toggleSelect(r.id)}
                 onToggleExpand={() => setExpandedId((e) => (e === r.id ? null : r.id))}
                 onPatch={patchRow}
-                onAdjust={() => setAdjusting(r)}
+                onAdjust={() => setAdjusting([r])}
                 onDelete={() => setDeleting(r)}
                 toast={toast}
               />
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted">
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted">
                   Cap usuari no coincideix amb la cerca.
                 </td>
               </tr>
@@ -197,18 +277,28 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
         </table>
       </div>
 
-      {/* ── Modal d'ajust de punts ── */}
-      {adjusting && (
+      {/* ── Modal d'ajust de punts (individual o en bloc) ── */}
+      {adjusting && adjusting.length > 0 && (
         <AdjustModal
-          row={adjusting}
+          rows={adjusting}
           onClose={() => setAdjusting(null)}
-          onDone={(balance, applied) => {
-            patchRow(adjusting.id, { balance })
+          onSingleDone={(balance, applied) => {
+            const target = adjusting[0]
+            patchRow(target.id, { balance })
             setAdjusting(null)
             toast(
               applied === 0
                 ? 'Cap canvi (saldo ja a zero o usuari amb punts infinits)'
-                : applied > 0 ? `+${applied} punts per a ${adjusting.email} ✨` : `${applied} punts per a ${adjusting.email}`,
+                : applied > 0 ? `+${applied} punts per a ${target.email} ✨` : `${applied} punts per a ${target.email}`,
+              'success',
+            )
+            router.refresh()
+          }}
+          onBulkDone={(done, failed, delta) => {
+            setAdjusting(null)
+            setSelected(new Set())
+            toast(
+              `${delta > 0 ? '+' : ''}${delta} punts per a ${done} usuari${done !== 1 ? 's' : ''}${failed ? ` (${failed} sense canvi)` : ''} ✨`,
               'success',
             )
             router.refresh()
@@ -234,10 +324,12 @@ export default function UsersClient({ rows: initialRows, selfId, capped }: {
 }
 
 /* ───────────────────────── Fila (+ detall expandible) ───────────────────────── */
-function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onDelete, toast }: {
+function UserRow({ row, isSelf, expanded, isSelected, onToggleSelect, onToggleExpand, onPatch, onAdjust, onDelete, toast }: {
   row: AdminUserRow
   isSelf: boolean
   expanded: boolean
+  isSelected: boolean
+  onToggleSelect: () => void
   onToggleExpand: () => void
   onPatch: (id: string, patch: Partial<AdminUserRow>) => void
   onAdjust: () => void
@@ -270,9 +362,25 @@ function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onD
   return (
     <>
       <tr
-        className={cn('cursor-pointer transition-colors hover:bg-surface-hover', pending && 'opacity-60', expanded && 'bg-surface-hover/60')}
+        className={cn(
+          'cursor-pointer transition-colors hover:bg-surface-hover',
+          pending && 'opacity-60',
+          expanded && 'bg-surface-hover/60',
+          isSelected && 'bg-accent-soft/40',
+        )}
         onClick={onToggleExpand}
       >
+        {/* Selecció */}
+        <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            aria-label={`Selecciona ${row.email}`}
+            className="h-4 w-4 cursor-pointer accent-[#f5bc00]"
+          />
+        </td>
+
         {/* Usuari */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
@@ -291,22 +399,26 @@ function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onD
           </div>
         </td>
 
-        {/* Pla — select disfressat de badge */}
+        {/* Pla — select disfressat de badge, amb chevró perquè es vegi que és
+            clicable (abans semblava una etiqueta estàtica). */}
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          <select
-            value={row.plan}
-            disabled={pending}
-            onChange={(e) => changePlan(e.target.value as KarmaPlan)}
-            className={cn(
-              'cursor-pointer appearance-none rounded-full border-0 px-3 py-1 text-xs font-extrabold outline-none transition-shadow focus:ring-2 focus:ring-accent/40',
-              PLAN_BADGE[row.plan],
-            )}
-            title="Canvia el pla (re-avalua l'assignació a l'instant)"
-          >
-            {(Object.keys(PLAN_LABELS) as KarmaPlan[]).map((p) => (
-              <option key={p} value={p}>{PLAN_LABELS[p]}</option>
-            ))}
-          </select>
+          <span className="relative inline-flex items-center">
+            <select
+              value={row.plan}
+              disabled={pending}
+              onChange={(e) => changePlan(e.target.value as KarmaPlan)}
+              className={cn(
+                'cursor-pointer appearance-none rounded-full border-0 py-1 pl-3 pr-7 text-xs font-extrabold outline-none transition-shadow focus:ring-2 focus:ring-accent/40',
+                PLAN_BADGE[row.plan],
+              )}
+              title="Canvia el pla (re-avalua l'assignació a l'instant)"
+            >
+              {(Object.keys(PLAN_LABELS) as KarmaPlan[]).map((p) => (
+                <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 h-3 w-3 opacity-70" />
+          </span>
         </td>
 
         {/* Punts */}
@@ -325,10 +437,10 @@ function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onD
               type="button"
               onClick={onAdjust}
               disabled={pending}
-              title="Ajusta els Punts de Carma"
-              className="cursor-pointer rounded-lg border border-border bg-bg-elevated px-2 py-1 text-xs font-bold text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+              title="Suma o resta Punts de Carma a aquest usuari"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-border bg-bg-elevated px-2 py-1 text-xs font-bold text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" /> ± Punts
             </button>
           </div>
         </td>
@@ -386,7 +498,7 @@ function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onD
       {/* ── Detall expandible: llocs + accions perilloses ── */}
       {expanded && (
         <tr className="bg-surface-subtle/50">
-          <td colSpan={8} className="px-5 pb-4 pt-1">
+          <td colSpan={9} className="px-5 pb-4 pt-1">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-[0.65rem] font-extrabold uppercase tracking-wider text-subtle">Llocs de l&apos;usuari</p>
@@ -428,18 +540,20 @@ function UserRow({ row, isSelf, expanded, onToggleExpand, onPatch, onAdjust, onD
   )
 }
 
-/* ───────────────────────── Modal d'ajust de punts ───────────────────────── */
+/* ───────────────────────── Modal d'ajust de punts (1 o N usuaris) ───────────────────────── */
 const QUICK_AMOUNTS = [25, 50, 100, 400, -50, -100]
 
-function AdjustModal({ row, onClose, onDone }: {
-  row: AdminUserRow
+function AdjustModal({ rows, onClose, onSingleDone, onBulkDone }: {
+  rows: AdminUserRow[]
   onClose: () => void
-  onDone: (balance: number | null, applied: number) => void
+  onSingleDone: (balance: number | null, applied: number) => void
+  onBulkDone: (done: number, failed: number, delta: number) => void
 }) {
   const { toast } = useToast()
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [pending, startTransition] = useTransition()
+  const isBulk = rows.length > 1
 
   const parsed = Math.trunc(Number(amount))
   const valid = Number.isFinite(parsed) && parsed !== 0
@@ -447,10 +561,16 @@ function AdjustModal({ row, onClose, onDone }: {
   const submit = () => {
     if (!valid || pending) return
     startTransition(async () => {
-      const res = await adminAdjustKarma(row.id, parsed, note.trim() || undefined)
+      if (isBulk) {
+        const res = await adminBulkAdjustKarma(rows.map((r) => r.id), parsed, note.trim() || undefined)
+        if (!res.ok) { toast(res.error, 'error'); return }
+        onBulkDone(res.done, res.failed, parsed)
+        return
+      }
+      const res = await adminAdjustKarma(rows[0].id, parsed, note.trim() || undefined)
       if (!res.ok) { toast(res.error, 'error'); return }
       if (res.infinite) { toast('Aquest usuari és superadmin: punts infinits, res a ajustar.', 'info'); onClose(); return }
-      onDone(res.balance, res.applied)
+      onSingleDone(res.balance, res.applied)
     })
   }
 
@@ -460,8 +580,12 @@ function AdjustModal({ row, onClose, onDone }: {
       <div className="relative w-full max-w-sm rounded-2xl border border-border bg-bg-elevated p-5 shadow-premium" role="dialog" aria-label="Ajustar Punts de Carma">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-extrabold text-text">Ajustar Punts de Carma</p>
-            <p className="mt-0.5 truncate text-xs text-muted" title={row.email}>{row.email}</p>
+            <p className="text-sm font-extrabold text-text">
+              {isBulk ? `Ajustar punts a ${rows.length} usuaris` : 'Ajustar Punts de Carma'}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted" title={isBulk ? rows.map((r) => r.email).join(', ') : rows[0].email}>
+              {isBulk ? rows.map((r) => r.email).slice(0, 3).join(' · ') + (rows.length > 3 ? ` · +${rows.length - 3} més` : '') : rows[0].email}
+            </p>
           </div>
           <button type="button" onClick={onClose} className="cursor-pointer rounded-lg p-1 text-subtle transition-colors hover:bg-surface-hover hover:text-text" aria-label="Tancar">
             <X className="h-4 w-4" />

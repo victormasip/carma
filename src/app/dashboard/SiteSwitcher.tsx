@@ -70,7 +70,7 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
   const [cursor, setCursor] = useState(0)
   const [recentIds, setRecentIds] = useState<string[]>([])
   // Posició del popover (fixed: el flyout ha d'escapar de l'overflow del nav).
-  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [pos, setPos] = useState<{ mode: 'flyout' | 'below'; left: number; top: number; width: number } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -94,8 +94,8 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
       // (i mai per sota del viewport). Mòbil: cau a sota, amplada del trigger.
       const flyout = window.matchMedia('(min-width: 1024px)').matches
       setPos(flyout
-        ? { left: r.right + 12, top: Math.max(8, Math.min(r.top - 4, window.innerHeight - 440)), width: 304 }
-        : { left: r.left, top: r.bottom + 8, width: r.width })
+        ? { mode: 'flyout', left: r.right + 12, top: Math.max(8, Math.min(r.top - 4, window.innerHeight - 440)), width: 304 }
+        : { mode: 'below', left: r.left, top: r.bottom + 8, width: r.width })
     }
     setRecentIds(readRecents())
     setQuery('')
@@ -103,8 +103,11 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
     setOpen(true)
   }
 
-  // Enfoca la cerca en obrir; tanca amb clic fora, amb scroll extern o resize
-  // (el popover és fixed: si el món es mou, millor tancar que quedar penjat).
+  // Enfoca la cerca en obrir; tanca amb clic fora o resize. Scroll: en mode
+  // FLYOUT (escriptori) el sidebar és fixed — el trigger no es mou mai, així
+  // que fer scroll a la pàgina NO tanca el popover (founder 2026-07-06: es
+  // tancava en escrollejar i era exasperant). Només el mode 'below' (mòbil,
+  // dins el drawer que sí que escrolleja) es tanca si el món es mou.
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
@@ -118,13 +121,13 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
     }
     document.addEventListener('mousedown', onDoc)
     window.addEventListener('resize', close)
-    document.addEventListener('scroll', onScroll, true)
+    if (pos?.mode === 'below') document.addEventListener('scroll', onScroll, true)
     return () => {
       document.removeEventListener('mousedown', onDoc)
       window.removeEventListener('resize', close)
-      document.removeEventListener('scroll', onScroll, true)
+      if (pos?.mode === 'below') document.removeEventListener('scroll', onScroll, true)
     }
-  }, [open])
+  }, [open, pos?.mode])
 
   const q = fold(query.trim())
   const filtered = useMemo(
@@ -183,8 +186,8 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
         )}
       >
         <SiteAvatar site={active} size="xs" />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-bold leading-tight text-text">
-          {active ? active.name : (isSuperAdmin ? t('nav.allSites') : t('nav.yourSites'))}
+        <span className={cn('min-w-0 flex-1 truncate text-[13px] leading-tight', active ? 'font-bold text-text' : 'font-semibold text-muted')}>
+          {active ? active.name : t('switcher.pick')}
         </span>
         <span className="shrink-0 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[0.6rem] font-extrabold tabular-nums text-subtle">
           {sites.length}

@@ -7,9 +7,11 @@ import { uiLocale, type Locale, type UiLocale } from './config'
 export type Dict = Record<string, string>
 
 const en: Dict = {
+  'nav.home': 'Home',
   'nav.allSites': 'All Sites',
   'nav.mySites': 'My Sites',
   'nav.yourSites': 'Your sites',
+  'switcher.pick': 'Pick a site…',
   'nav.agent': 'Agent',
   'nav.studio': 'Studio',
   'nav.karma': 'Carma Points',
@@ -36,9 +38,11 @@ const en: Dict = {
 }
 
 const es: Dict = {
+  'nav.home': 'Inicio',
   'nav.allSites': 'Todos los sitios',
   'nav.mySites': 'Mis sitios',
   'nav.yourSites': 'Tus sitios',
+  'switcher.pick': 'Elige un sitio…',
   'nav.agent': 'Agente',
   'nav.studio': 'Studio',
   'nav.karma': 'Puntos de Carma',
@@ -62,9 +66,11 @@ const es: Dict = {
 }
 
 const ca: Dict = {
+  'nav.home': 'Inici',
   'nav.allSites': 'Tots els Llocs',
   'nav.mySites': 'Els meus Llocs',
   'nav.yourSites': 'Els teus llocs',
+  'switcher.pick': 'Tria un lloc…',
   'nav.agent': 'Agent',
   'nav.studio': 'Studio',
   'nav.karma': 'Punts de Carma',

@@ -132,6 +132,53 @@ export async function adminSetPlan(targetUserId: string, plan: KarmaPlan): Promi
   }
 }
 
+// ─── Accions en BLOC (selecció múltiple a /admin/users) ───────────────────────
+// Reutilitzen les accions unitàries (getSession és React.cache → l'assert de
+// superadmin només costa un cop per request) en chunks paral·lels de 10: prou
+// ràpid per a desenes d'usuaris i mai ofega la BD (el lock de cartera ja
+// serialitza per usuari, usuaris DIFERENTS van en paral·lel sense conflicte).
+
+const BULK_MAX = 200
+const CHUNK = 10
+
+async function inChunks<T>(items: string[], run: (id: string) => Promise<T>): Promise<T[]> {
+  const out: T[] = []
+  for (let i = 0; i < items.length; i += CHUNK) {
+    out.push(...await Promise.all(items.slice(i, i + CHUNK).map(run)))
+  }
+  return out
+}
+
+export type BulkResult = { ok: true; done: number; failed: number } | { ok: false; error: string }
+
+export async function adminBulkSetPlan(targetUserIds: string[], plan: KarmaPlan): Promise<BulkResult> {
+  try {
+    await assertSuperadmin()
+    const ids = [...new Set(targetUserIds)].slice(0, BULK_MAX)
+    if (!ids.length) return { ok: false, error: 'Cap usuari seleccionat' }
+    const results = await inChunks(ids, (id) => adminSetPlan(id, plan))
+    const done = results.filter((r) => r.ok).length
+    revalidatePath('/admin/users')
+    return { ok: true, done, failed: ids.length - done }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
+export async function adminBulkAdjustKarma(targetUserIds: string[], delta: number, note?: string): Promise<BulkResult> {
+  try {
+    await assertSuperadmin()
+    const ids = [...new Set(targetUserIds)].slice(0, BULK_MAX)
+    if (!ids.length) return { ok: false, error: 'Cap usuari seleccionat' }
+    const results = await inChunks(ids, (id) => adminAdjustKarma(id, delta, note))
+    const done = results.filter((r) => r.ok).length
+    revalidatePath('/admin/users')
+    return { ok: true, done, failed: ids.length - done }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
 export type DeleteUserResult = { ok: true } | { ok: false; error: string }
 
 /**

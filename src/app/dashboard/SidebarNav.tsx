@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, FileText, Wand2, MessageCircle, Palette, Sparkles, Users } from 'lucide-react'
+import { LayoutDashboard, Settings, Wand2, MessageCircle, Palette, Sparkles, Users } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 import SiteSwitcher, { type SwitcherSite } from './SiteSwitcher'
@@ -19,11 +19,13 @@ export default function SidebarNav({ isSuperAdmin, sites, plan = 'free' }: { isS
 
   return (
     <nav className="flex-1 py-5 px-3 overflow-y-auto">
+      {/* "Inici", no "Tots els Llocs": el nom del menú xocava amb el selector
+          de llocs de sota i semblaven la mateixa cosa (founder 2026-07-06). */}
       <NavItem
         href="/dashboard"
         active={isHome}
-        icon={isSuperAdmin ? <LayoutDashboard className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-        label={isSuperAdmin ? t('nav.allSites') : t('nav.mySites')}
+        icon={<LayoutDashboard className="w-4 h-4" />}
+        label={t('nav.home')}
       />
       <NavItem
         href="/dashboard/agent"
@@ -50,12 +52,10 @@ export default function SidebarNav({ isSuperAdmin, sites, plan = 'free' }: { isS
 
       {/* Selector de llocs (popover amb cerca) — la llista plana que creixia
           amb cada lloc clonat va morir aquí; una agència amb 60 llocs veu el
-          mateix sidebar que un client amb 1. */}
+          mateix sidebar que un client amb 1. Sense capçalera pròpia: el
+          disparador ja s'explica sol ("Tria un lloc…" + recompte). */}
       {sites.length > 0 && (
         <div className="mt-6">
-          <p className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-subtle">
-            {t('nav.yourSites')}
-          </p>
           <SiteSwitcher sites={sites} isSuperAdmin={isSuperAdmin} plan={plan} />
         </div>
       )}
