@@ -10,6 +10,7 @@ import KarmaWidget, { type KarmaWidgetData } from './KarmaWidget'
 import Wordmark from '@/components/ui/Wordmark'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import type { SwitcherSite } from './SiteSwitcher'
+import type { KarmaPlan } from '@/lib/karma/config'
 
 type Site = SwitcherSite
 
@@ -18,11 +19,13 @@ export default function DashboardSidebar({
   sites,
   userEmail,
   karma,
+  plan = 'free',
 }: {
   isSuperAdmin: boolean
   sites: Site[]
   userEmail: string
   karma: KarmaWidgetData
+  plan?: KarmaPlan
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
@@ -50,7 +53,7 @@ export default function DashboardSidebar({
         </Link>
       </div>
 
-      <SidebarNav isSuperAdmin={isSuperAdmin} sites={sites} />
+      <SidebarNav isSuperAdmin={isSuperAdmin} sites={sites} plan={plan} />
 
       <div className="px-3 pb-2">
         <KarmaWidget karma={karma} />

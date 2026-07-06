@@ -1,37 +1,56 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, FlaskConical } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { getKarma } from '@/lib/karma/karma'
+import { LocaleProvider } from '@/lib/i18n/LocaleProvider'
+import { getLocale } from '@/lib/i18n/locale-server'
+import DashboardSidebar from '@/app/dashboard/DashboardSidebar'
 
 // Segment guard for /admin — strictly superadmin. Unauthenticated users are
 // already bounced to "/" by the edge middleware; here we additionally redirect
 // any authenticated NON-superadmin to their dashboard, so these internal tools
 // are never reachable by clients even if they discover the URL.
+//
+// Shell (founder directive 2026-07-06): /admin pages live INSIDE the same
+// dashboard chrome — sidebar, karma widget, site switcher — instead of a bare
+// header. Jumping between "Usuaris" and the rest of the app no longer loses
+// the navigation.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
   if (!isSuperAdmin) redirect('/dashboard')
 
+  const admin = createAdminClient()
+  const fetchSites = async () => {
+    const sel = (cols: string) =>
+      admin.from('sites').select(cols).order('created_at', { ascending: false }).limit(200)
+    let res = await sel('id, name, subdomain, logo_url')
+    if (res.error?.code === '42703') res = await sel('id, name')
+    return (res.data ?? []) as unknown as { id: string; name: string; subdomain?: string | null; logo_url?: string | null }[]
+  }
+
+  const [sites, locale, karma] = await Promise.all([
+    fetchSites(),
+    getLocale(),
+    getKarma(user.id, admin),
+  ])
+
   return (
-    <div className="min-h-screen bg-bg text-text">
-      <header className="sticky top-0 z-30 h-14 border-b border-border bg-bg-elevated/95 backdrop-blur flex items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-text transition-colors shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Tauler</span>
-          </Link>
-          <span className="text-border">/</span>
-          <span className="inline-flex items-center gap-2 font-semibold tracking-tight truncate">
-            <FlaskConical className="w-4 h-4 text-accent" />
-            Admin
-          </span>
-        </div>
-        <span className="text-xs font-semibold uppercase tracking-wider text-subtle">Superadmin</span>
-      </header>
-      {children}
-    </div>
+    <LocaleProvider initialLocale={locale}>
+      <div className="min-h-screen bg-bg">
+        <DashboardSidebar
+          isSuperAdmin
+          sites={sites}
+          userEmail={user.email ?? ''}
+          karma={{ balance: karma.balance, allocation: karma.allocation, superadmin: true, available: karma.available }}
+          plan={karma.plan}
+        />
+        <main className="lg:ml-60 min-w-0 overflow-x-clip p-5 sm:p-8 lg:p-10">
+          <div className="max-w-[1400px] mx-auto w-full min-w-0">
+            {children}
+          </div>
+        </main>
+      </div>
+    </LocaleProvider>
   )
 }

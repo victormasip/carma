@@ -14,7 +14,7 @@ export type KarmaAction =
   | 'agent_chat'         // torn de conversa del router de WhatsApp
   | 'voice_note'         // transcripció Whisper d'una nota de veu
   | 'cover_image'        // imatge de portada (nano-banana / DALL·E)
-  | 'site_clone'         // captura/clonació del grabber (re-captures)
+  | 'site_clone'         // (històric al ledger) — la clonació ara és GRATIS
 
 export const KARMA_COSTS: Record<KarmaAction, number> = {
   article_draft: 80,
@@ -22,7 +22,20 @@ export const KARMA_COSTS: Record<KarmaAction, number> = {
   agent_chat: 1,
   voice_note: 2,
   cover_image: 25,
-  site_clone: 40,
+  // Directiva 2026-07-06: clonar no gasta punts MAI (el 402 aquí trencava el
+  // funnel). El fre premium de les re-captures és la quota de regeneració
+  // (migració 023). La clau es conserva per llegir el ledger antic.
+  site_clone: 0,
+}
+
+// ─── Límits de llocs per pla (multi-site) ─────────────────────────────────────
+// El free té UN blog; els plans de pagament n'obren més (Agència = dotzenes).
+// L'aplica provisionOnboardingSite al servidor i el SiteSwitcher a la UI.
+export const SITE_LIMITS: Record<KarmaPlan, number> = {
+  free: 1,
+  premium: 3,
+  gold: 10,
+  agency: 100,
 }
 
 // Quan runAgent respon amb una PREGUNTA (clarify) en lloc d'un esborrany, el

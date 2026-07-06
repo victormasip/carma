@@ -6,10 +6,11 @@ import { LayoutDashboard, Settings, FileText, Wand2, MessageCircle, Palette, Spa
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 import SiteSwitcher, { type SwitcherSite } from './SiteSwitcher'
+import type { KarmaPlan } from '@/lib/karma/config'
 
 type Site = SwitcherSite
 
-export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: boolean; sites: Site[] }) {
+export default function SidebarNav({ isSuperAdmin, sites, plan = 'free' }: { isSuperAdmin: boolean; sites: Site[]; plan?: KarmaPlan }) {
   const pathname = usePathname()
   const t = useT()
 
@@ -55,7 +56,7 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
           <p className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-subtle">
             {t('nav.yourSites')}
           </p>
-          <SiteSwitcher sites={sites} isSuperAdmin={isSuperAdmin} />
+          <SiteSwitcher sites={sites} isSuperAdmin={isSuperAdmin} plan={plan} />
         </div>
       )}
 

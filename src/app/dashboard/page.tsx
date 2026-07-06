@@ -8,6 +8,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
 import { fetchSitesViewCounts } from '@/lib/analytics/read'
+import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 import { formatNumber } from '@/lib/format'
 import SiteGrid from './SiteGrid'
 import AddSiteButton from './AddSiteButton'
@@ -22,10 +23,18 @@ export default async function DashboardHome() {
 
   // ── Client dashboard ─────────────────────────────────────────────────────────
   if (!isSuperAdmin) {
-    // 42703-safe: sites.logo_url only exists after migration 022.
-    let sitesRes = await supabase.from('sites').select('id, name, created_at, logo_url').order('name')
+    // 42703-safe: sites.logo_url only exists after migration 022; profiles.plan
+    // after 028. The plan decides whether "Afegir lloc" is real (SITE_LIMITS).
+    const [sitesQ, planQ] = await Promise.all([
+      supabase.from('sites').select('id, name, created_at, logo_url').order('name'),
+      supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle(),
+    ])
+    let sitesRes = sitesQ
     if (sitesRes.error?.code === '42703') sitesRes = await supabase.from('sites').select('id, name, created_at').order('name') as typeof sitesRes
     const sites = (sitesRes.data ?? []) as unknown as SiteRow[]
+    const plan = ((['free', 'premium', 'gold', 'agency'].includes((planQ.data as { plan?: string } | null)?.plan ?? '')
+      ? (planQ.data as { plan?: string } | null)?.plan : 'free')) as KarmaPlan
+    const canCreate = sites.length < SITE_LIMITS[plan]
 
     if (sites.length === 0) {
       // Free tier is one blog. A client with zero (new, or just deleted theirs)
@@ -61,7 +70,7 @@ export default async function DashboardHome() {
         <PageHeader
           title={isSingle ? 'El meu blog' : 'Els meus blogs'}
           description="Tot el teu contingut, en un sol lloc."
-          actions={<AddSiteButton />}
+          actions={<AddSiteButton canCreate={canCreate} />}
         />
         <ClientStatBento
           views={totals.views}

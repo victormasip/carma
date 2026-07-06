@@ -23,12 +23,39 @@ async function userSiteIds(admin: Admin, userId: string): Promise<string[]> {
   } catch { return [] }
 }
 
+type ThemeRow = { created_at: string; updated_at: string; modules?: Record<string, { enabled?: boolean } | null> | null }
+
+// Una sola lectura de site_themes serveix DOS reptes (estudi_fet + primer_modul).
+// 42703-safe: sense la columna modules (pre-024) es reintenta sense.
+async function fetchThemes(admin: Admin, siteIds: string[]): Promise<ThemeRow[]> {
+  if (!siteIds.length) return []
+  try {
+    let res = await admin.from('site_themes').select('created_at, updated_at, modules').in('site_id', siteIds).limit(20)
+    if (res.error?.code === '42703') {
+      res = await admin.from('site_themes').select('created_at, updated_at').in('site_id', siteIds).limit(20) as typeof res
+    }
+    return (res.data ?? []) as unknown as ThemeRow[]
+  } catch { return [] }
+}
+
+const themeCustomized = (rows: ThemeRow[]) => rows.some((r) => {
+  // "Personalitzat" = el tema s'ha tocat clarament DESPRÉS de la captura
+  // (marge de 60s perquè el desat inicial de la captura no compti).
+  const created = new Date(r.created_at).getTime()
+  const updated = new Date(r.updated_at).getTime()
+  return Number.isFinite(created) && Number.isFinite(updated) && updated - created > 60_000
+})
+
+const anyModuleEnabled = (rows: ThemeRow[]) => rows.some((r) =>
+  Object.values(r.modules ?? {}).some((m) => m?.enabled === true))
+
 /** El repte concret es compleix ara mateix? (independent de si ja s'ha reclamat) */
 export async function checkRewardEligibility(
   admin: Admin,
   userId: string,
   key: KarmaRewardKey,
   siteIds?: string[],
+  themes?: ThemeRow[],
 ): Promise<boolean> {
   try {
     switch (key) {
@@ -54,27 +81,12 @@ export async function checkRewardEligibility(
 
       case 'estudi_fet': {
         const ids = siteIds ?? await userSiteIds(admin, userId)
-        if (!ids.length) return false
-        const { data } = await admin
-          .from('site_themes').select('created_at, updated_at').in('site_id', ids).limit(20)
-        // "Personalitzat" = el tema s'ha tocat clarament DESPRÉS de la captura
-        // (marge de 60s perquè el desat inicial de la captura no compti).
-        return (data ?? []).some((r) => {
-          const created = new Date(r.created_at as string).getTime()
-          const updated = new Date(r.updated_at as string).getTime()
-          return Number.isFinite(created) && Number.isFinite(updated) && updated - created > 60_000
-        })
+        return themeCustomized(themes ?? await fetchThemes(admin, ids))
       }
 
       case 'primer_modul': {
         const ids = siteIds ?? await userSiteIds(admin, userId)
-        if (!ids.length) return false
-        const { data } = await admin
-          .from('site_themes').select('modules').in('site_id', ids).limit(20)
-        return (data ?? []).some((r) => {
-          const mods = (r.modules ?? {}) as Record<string, { enabled?: boolean } | null>
-          return Object.values(mods).some((m) => m?.enabled === true)
-        })
+        return anyModuleEnabled(themes ?? await fetchThemes(admin, ids))
       }
     }
   } catch { return false }
@@ -99,8 +111,9 @@ export async function getRewardStates(
   } catch { /* pre-migració 028 → res reclamat */ }
 
   const siteIds = await userSiteIds(admin, userId)
+  const themes = await fetchThemes(admin, siteIds) // 1 lectura per a 2 reptes
   const entries = await Promise.all(keys.map(async (key) => {
-    const eligible = await checkRewardEligibility(admin, userId, key, siteIds)
+    const eligible = await checkRewardEligibility(admin, userId, key, siteIds, themes)
     return [key, { eligible, claimed: claimed.has(key) }] as const
   }))
 

@@ -49,6 +49,20 @@ export default async function SiteDetailsPage({
     fetchSiteStats(admin, siteId, 30),
   ])
 
+  // Onboarding step 3 (founder directive 2026-07-06): connecting the WhatsApp
+  // agent must be an EVIDENT step, not a hidden Settings toggle. The site page
+  // shows a banner until this user has an active identity. 42P01-safe: without
+  // the WhatsApp migrations the banner simply never shows.
+  let waConnected = true
+  try {
+    const { count, error: waErr } = await admin
+      .from('wa_identities')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+    if (!waErr) waConnected = (count ?? 0) > 0
+  } catch { /* pre-migració WhatsApp */ }
+
   const assignedUsers = isSuperAdmin
     ? (suResult.data ?? []).map((su) => {
         const p = su.profiles as unknown as { email: string } | { email: string }[] | null
@@ -61,17 +75,22 @@ export default async function SiteDetailsPage({
     ? ((clientsResult.data ?? []) as { id: string; email: string }[])
     : []
 
+  // A pristine site (no theme captured, no posts) gets the onboarding chooser.
+  const isNewSite = !themeResult.data && (postsResult.total ?? 0) === 0
+
   // All tabs are valid deep-link targets for everyone; locked ones render an
   // upsell panel for free clients rather than the real content.
   const validTabs = ['resum', 'articles', 'tema', 'moduls', 'connexio', 'usuaris']
   // No explicit ?tab= opens the FIRST tab (Articles) — the content workspace —
   // not Resum, which now lives after Tema in the IA.
-  const defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
+  let defaultTab = typeof qTab === 'string' && validTabs.includes(qTab)
     ? (qTab as 'resum' | 'articles' | 'tema' | 'moduls' | 'connexio' | 'usuaris')
     : 'articles'
-
-  // A pristine site (no theme captured, no posts) gets the onboarding chooser.
-  const isNewSite = !themeResult.data && (postsResult.total ?? 0) === 0
+  // A ?clone= intent on an ALREADY-configured site used to be silently ignored
+  // (the onboarding only mounts on pristine sites) — the clone link felt broken
+  // (founder report 2026-07-06). Honour the intent by landing on the Tema tab,
+  // where re-capture lives (with its own freemium regen quota UX).
+  if (autoCloneUrl && !isNewSite && !qTab) defaultTab = 'tema'
 
   // Freemium theme-regeneration quota (migration 023; select('*') already returns
   // the column when present, so this is 42703-safe — absent → 0 = full quota).
@@ -107,6 +126,7 @@ export default async function SiteDetailsPage({
       initialStats={initialStats}
       defaultTab={defaultTab}
       autoCloneUrl={autoCloneUrl}
+      waConnected={waConnected}
       siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
       regenCount={regenCount}
       initialModules={initialModules}

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureUniqueSubdomain } from '@/lib/sites/subdomain'
 import { siteNameFromUrl } from '@/lib/onboarding/url'
+import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 import { revalidatePath } from 'next/cache'
 
 type ActionResult = { error?: string; id?: string; reused?: boolean }
@@ -16,9 +17,12 @@ type ActionResult = { error?: string; id?: string; reused?: boolean }
  * longer create a phantom site. It is also idempotent so re-entering the funnel
  * (or a double POST) reuses the right site instead of duplicating it:
  *
- *   • Premium (superadmin): reuse an owned site already cloned from the SAME
+ *   • Superadmin: unlimited. Reuse an owned site already cloned from the SAME
  *     `cloneUrl` (`sites.origin_url`); otherwise create a fresh one.
- *   • Free (`client`): exactly ONE site — reuse the existing one if present.
+ *   • Plans (2026-07-06, multi-site): each plan opens SITE_LIMITS[plan] blogs
+ *     (free 1 · premium 3 · gold 10 · agency 100). Under the limit → create;
+ *     at the limit → reuse the oldest (the old free behaviour, never an error
+ *     page mid-funnel).
  *
  * RLS blocks `client` accounts from inserting into `sites`, so creation runs
  * through the service-role admin client, but it is strictly gated on the
@@ -30,8 +34,15 @@ export async function provisionOnboardingSite(cloneUrl?: string): Promise<Action
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No autenticat' }
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    const isPremium = profile?.role === 'superadmin'
+    // 42703-safe: profiles.plan exists after migration 028.
+    let profileRes = await supabase.from('profiles').select('role, plan').eq('id', user.id).single()
+    if (profileRes.error?.code === '42703') {
+      profileRes = await supabase.from('profiles').select('role').eq('id', user.id).single() as typeof profileRes
+    }
+    const profile = profileRes.data as { role?: string; plan?: string } | null
+    const isSuperadmin = profile?.role === 'superadmin'
+    const plan = (['free', 'premium', 'gold', 'agency'].includes(profile?.plan ?? '') ? profile?.plan : 'free') as KarmaPlan
+    const siteLimit = isSuperadmin ? Number.POSITIVE_INFINITY : SITE_LIMITS[plan]
 
     const admin = createAdminClient()
     const origin = cloneUrl?.trim() || null
@@ -50,8 +61,9 @@ export async function provisionOnboardingSite(cloneUrl?: string): Promise<Action
       const match = own.find(s => (s.origin_url ?? '').trim() === origin)
       if (match) return { id: match.id, reused: true }
     }
-    // Free tier is one site: re-entering the funnel must never duplicate it.
-    if (!isPremium && own.length > 0) return { id: own[0].id, reused: true }
+    // At the plan's site limit: re-entering the funnel must never duplicate nor
+    // dead-end — reuse the oldest site (the classic free-tier behaviour).
+    if (own.length >= siteLimit) return { id: own[0].id, reused: true }
 
     // ── Create a fresh site, stamping origin_url for future idempotency ──
     const name = origin ? siteNameFromUrl(origin) : 'El meu blog'

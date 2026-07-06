@@ -43,6 +43,7 @@ export default async function DashboardLayout({
           sites={sites}
           userEmail={user.email ?? ''}
           karma={{ balance: karma.balance, allocation: karma.allocation, superadmin: karma.superadmin || isSuperAdmin, available: karma.available }}
+          plan={karma.plan}
         />
 
         {/* overflow-x-clip: hard guard against horizontal scroll from any wide

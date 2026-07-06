@@ -12,7 +12,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Check, Sparkles, Gift, PenLine, Mic, Image as ImageIcon, Copy, MessageCircle, Infinity as InfinityIcon, ArrowUpRight,
+  Check, Sparkles, Gift, PenLine, Mic, Image as ImageIcon, MessageCircle, Infinity as InfinityIcon, ArrowUpRight,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import EndlessKnot from '@/components/ui/EndlessKnot'
@@ -47,7 +47,6 @@ const COST_MENU: { icon: React.ReactNode; label: string; punts: number }[] = [
   { icon: <MessageCircle className="h-4 w-4" />, label: 'Revisió d’un esborrany', punts: KARMA_COSTS.article_revision },
   { icon: <Mic className="h-4 w-4" />, label: 'Nota de veu (transcripció)', punts: KARMA_COSTS.voice_note },
   { icon: <ImageIcon className="h-4 w-4" />, label: 'Imatge de portada', punts: KARMA_COSTS.cover_image },
-  { icon: <Copy className="h-4 w-4" />, label: 'Re-clonar un web (la primera és gratis)', punts: KARMA_COSTS.site_clone },
   { icon: <Sparkles className="h-4 w-4" />, label: 'Torn de conversa per WhatsApp', punts: KARMA_COSTS.agent_chat },
 ]
 
@@ -152,7 +151,7 @@ export default function KarmaClient({
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-subtle">Publicar no costa mai res: el que has creat és teu.</p>
+          <p className="mt-2 text-xs text-subtle">Publicar i clonar la teva web no costen mai res: els punts són per a la IA.</p>
         </section>
 
         {/* ── Moviments recents ── */}

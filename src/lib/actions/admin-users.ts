@@ -132,6 +132,34 @@ export async function adminSetPlan(targetUserId: string, plan: KarmaPlan): Promi
   }
 }
 
+export type DeleteUserResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Elimina el COMPTE d'un usuari (auth + perfil en cascada). Mai a tu mateix ni
+ * a un superadmin (revoca-li el rol primer — fricció deliberada). Els llocs es
+ * conserven sense usuari assignat: esborrar contingut de clients és una decisió
+ * separada que es pren lloc a lloc, mai en cascada silenciosa.
+ */
+export async function adminDeleteUser(targetUserId: string): Promise<DeleteUserResult> {
+  try {
+    const { callerId, admin } = await assertSuperadmin()
+    if (targetUserId === callerId) return { ok: false, error: 'No et pots eliminar a tu mateix.' }
+
+    const { data: target } = await admin.from('profiles').select('role, email').eq('id', targetUserId).maybeSingle()
+    if (!target) return { ok: false, error: 'Usuari no trobat' }
+    if (target.role === 'superadmin') {
+      return { ok: false, error: 'És superadmin: revoca-li el rol abans d’eliminar-lo.' }
+    }
+
+    const { error } = await admin.auth.admin.deleteUser(targetUserId)
+    if (error) return { ok: false, error: error.message }
+    revalidatePath('/admin/users')
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
 export type SetRoleResult = { ok: true; superadmin: boolean } | { ok: false; error: string }
 
 /** Concedeix o revoca superadmin (∞ punts). Mai a tu mateix — anti-bloqueig. */

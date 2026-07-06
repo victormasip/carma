@@ -5,14 +5,20 @@ import { useToast } from '@/components/ui/Toast'
 import Button from '@/components/ui/Button'
 
 /**
- * "Afegir lloc" for the client (free) dashboard. The free tier is ONE blog, so
- * adding another is a Premium action — this is a locked upsell, not a working
- * create flow (superadmins get the real NewSiteModal on the admin dashboard).
- * Kept as a `secondary` Button (not the gold primary) so it never reads as a
- * live create action; the crown badge signals it's premium-locked.
+ * "Afegir lloc" for the client dashboard. Plan-aware (2026-07-06): when the
+ * user's plan still has room (SITE_LIMITS — premium 3 / gold 10 / agency 100),
+ * this is a REAL create action into the clone funnel. At the limit (free = 1
+ * blog) it stays the locked upsell with the crown badge.
  */
-export default function AddSiteButton() {
+export default function AddSiteButton({ canCreate = false }: { canCreate?: boolean }) {
   const { toast } = useToast()
+  if (canCreate) {
+    return (
+      <Button href="/benvinguda" glow iconLeft={<Plus className="h-4 w-4" />}>
+        Afegir lloc
+      </Button>
+    )
+  }
   return (
     <Button
       variant="secondary"

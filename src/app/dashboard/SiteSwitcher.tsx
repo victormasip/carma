@@ -3,12 +3,15 @@
 // Selector de llocs del sidebar (patró popover Vercel/Linear) — substitueix la
 // llista plana que feia scroll infinit amb dotzenes de llocs (agències).
 //
-//   · Disparador compacte: el lloc ACTIU (avatar/logo + nom + subdomini) o el
-//     recompte total quan no n'hi ha cap d'actiu.
+//   · Disparador compacte: el lloc ACTIU (logo + nom + subdomini) o el recompte
+//     total quan no n'hi ha cap d'actiu.
 //   · Popover amb cerca auto-enfocada (sense accents, multi-terme), grup de
-//     "Recents" (localStorage — es registra cada visita/selecció), llista
-//     completa en un contenidor d'alçada fixa (max-h-64) i una fila d'accions
-//     enganxada a sota ("Clona un nou lloc").
+//     "Recents" (localStorage), llista completa en un contenidor d'alçada fixa
+//     (max-h-64) i una fila d'accions enganxada a sota.
+//   · Accions HONESTES per pla (2026-07-06): si el pla permet més llocs
+//     (SITE_LIMITS), "Clona un nou lloc" hi porta de debò; si no, l'acció útil
+//     és "Canvia el disseny" (Tema) + una invitació suau a pujar de pla — mai
+//     un enllaç que rebota.
 //   · Teclat: ↑/↓ per moure't, Enter per obrir, Escape per tancar.
 //
 // El lloc actiu es deriva del pathname (/dashboard/sites/[id] o /edit/[id]) —
@@ -17,9 +20,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Check, ChevronsUpDown, Clock, Globe, Plus, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Clock, Crown, Globe, Palette, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n/LocaleProvider'
+import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 
 export type SwitcherSite = {
   id: string
@@ -51,7 +55,11 @@ function pushRecent(id: string) {
   } catch { /* localStorage ple/bloquejat: els recents són cosmètics */ }
 }
 
-export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherSite[]; isSuperAdmin: boolean }) {
+export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
+  sites: SwitcherSite[]
+  isSuperAdmin: boolean
+  plan?: KarmaPlan
+}) {
   const t = useT()
   const router = useRouter()
   const pathname = usePathname()
@@ -103,8 +111,6 @@ export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherS
     () => (q ? [] : recentIds.map((id) => sites.find((s) => s.id === id)).filter((s): s is SwitcherSite => !!s).slice(0, RECENTS_SHOWN)),
     [q, recentIds, sites],
   )
-  // La llista navegable pel teclat = recents + resta (sense duplicats visuals:
-  // la secció "tots" els mostra igualment — mantenim l'ordre visual real).
   const rest = useMemo(
     () => (q ? filtered : filtered.filter((s) => !recents.some((r) => r.id === s.id))),
     [q, filtered, recents],
@@ -131,6 +137,10 @@ export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherS
 
   if (sites.length === 0) return null
 
+  // El pla mana: pots crear un lloc més? (superadmin sempre; la resta pel límit)
+  const canCreate = isSuperAdmin || sites.length < SITE_LIMITS[plan]
+  const designHref = `/dashboard/sites/${(active ?? sites[0]).id}?tab=tema`
+
   return (
     <div ref={rootRef} className="relative">
       {/* ── Disparador compacte ── */}
@@ -140,45 +150,48 @@ export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherS
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors',
-          open ? 'border-accent/40 bg-surface-hover' : 'border-border bg-bg-elevated hover:bg-surface-hover',
+          'group flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all duration-200',
+          open
+            ? 'border-accent/45 bg-surface-hover shadow-[0_0_16px_-7px_rgba(245,188,0,0.55)]'
+            : 'border-border bg-bg-elevated hover:border-accent/35 hover:bg-surface-hover hover:shadow-[0_0_14px_-7px_rgba(245,188,0,0.45)]',
         )}
       >
-        <SiteAvatar site={active} />
+        <SiteAvatar site={active} size="md" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-bold leading-tight text-text">
+          <span className="block truncate text-[13px] font-bold leading-tight text-text">
             {active ? active.name : (isSuperAdmin ? t('nav.allSites') : t('nav.yourSites'))}
           </span>
-          <span className="block truncate text-xs leading-tight text-subtle">
+          <span className="block truncate text-[11px] leading-tight text-subtle">
             {active
-              ? (active.subdomain ? `${active.subdomain} · ` : '') + (isSuperAdmin ? t('role.superadmin') : t('role.client'))
+              ? (active.subdomain || `${sites.length} ${sites.length === 1 ? 'lloc' : 'llocs'}`)
               : `${sites.length} ${sites.length === 1 ? 'lloc' : 'llocs'}`}
           </span>
         </span>
-        <ChevronsUpDown className="h-4 w-4 shrink-0 text-subtle" />
+        <ChevronsUpDown className="h-4 w-4 shrink-0 text-subtle transition-colors group-hover:text-muted" />
       </button>
 
       {/* ── Popover ── */}
       {open && (
         <div
-          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-pop"
+          className="absolute -left-0.5 -right-0.5 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-premium"
           role="listbox"
           onKeyDown={onKey}
+          style={{ animation: 'toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {/* Cerca */}
-          <div className="relative border-b border-border">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-subtle" />
+          <div className="relative border-b border-border bg-surface-subtle/60">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-subtle" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => { setQuery(e.target.value); setCursor(0) }}
               placeholder="Cerca un lloc…"
-              className="w-full bg-transparent py-2.5 pl-9 pr-3 text-sm text-text outline-none placeholder:text-subtle"
+              className="w-full bg-transparent py-2.5 pl-10 pr-3 text-sm text-text outline-none placeholder:text-subtle"
             />
           </div>
 
           {/* Llista (recents + tots) — alçada fixa, MAI creix amb el compte */}
-          <div ref={listRef} className="max-h-64 overflow-y-auto p-1">
+          <div ref={listRef} className="max-h-64 overflow-y-auto p-1.5">
             {recents.length > 0 && (
               <>
                 <GroupLabel icon={<Clock className="h-3 w-3" />} label="Recents" />
@@ -192,22 +205,50 @@ export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherS
               <SiteOption key={s.id} site={s} idx={recents.length + i} cursor={cursor} activeId={activeId} onSelect={select} onHover={setCursor} />
             ))}
             {flat.length === 0 && (
-              <p className="px-3 py-6 text-center text-sm text-muted">Cap lloc no coincideix amb «{query}»</p>
+              <div className="flex flex-col items-center gap-2 px-3 py-7 text-center">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-subtle text-subtle"><Search className="h-4 w-4" /></span>
+                <p className="text-sm text-muted">Cap lloc amb «{query}»</p>
+              </div>
             )}
           </div>
 
-          {/* Accions ràpides — enganxades a sota */}
-          <div className="border-t border-border bg-surface-subtle p-1">
-            <Link
-              href="/benvinguda"
-              onClick={() => setOpen(false)}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted no-underline transition-colors hover:bg-surface-hover hover:text-text"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-border-strong">
-                <Plus className="h-3.5 w-3.5" />
-              </span>
-              Clona un nou lloc
-            </Link>
+          {/* Accions ràpides — enganxades a sota, honestes segons el pla */}
+          <div className="space-y-0.5 border-t border-border bg-surface-subtle/60 p-1.5">
+            {canCreate ? (
+              <Link
+                href="/benvinguda"
+                onClick={() => setOpen(false)}
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted no-underline transition-colors hover:bg-surface-hover hover:text-text"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-border-strong text-subtle">
+                  <Plus className="h-3.5 w-3.5" />
+                </span>
+                Clona un nou lloc
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href={designHref}
+                  onClick={() => setOpen(false)}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted no-underline transition-colors hover:bg-surface-hover hover:text-text"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                    <Palette className="h-3.5 w-3.5" />
+                  </span>
+                  Canvia el disseny del blog
+                </Link>
+                <Link
+                  href="/dashboard/karma"
+                  onClick={() => setOpen(false)}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted no-underline transition-colors hover:bg-surface-hover hover:text-text"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
+                    <Crown className="h-3.5 w-3.5" />
+                  </span>
+                  Més blogs? Puja de pla
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -217,7 +258,7 @@ export default function SiteSwitcher({ sites, isSuperAdmin }: { sites: SwitcherS
 
 function GroupLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <p className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[0.62rem] font-extrabold uppercase tracking-wider text-subtle">
+    <p className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[0.6rem] font-extrabold uppercase tracking-[0.12em] text-subtle">
       {icon} {label}
     </p>
   )
@@ -243,6 +284,7 @@ function SiteOption({ site, idx, cursor, activeId, onSelect, onHover }: {
       className={cn(
         'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
         idx === cursor ? 'bg-surface-hover' : '',
+        isActive && 'bg-accent-soft/60',
       )}
     >
       <SiteAvatar site={site} />
@@ -250,23 +292,28 @@ function SiteOption({ site, idx, cursor, activeId, onSelect, onHover }: {
         <span className={cn('block truncate text-sm leading-tight', isActive ? 'font-bold text-accent' : 'font-medium text-text')}>
           {site.name}
         </span>
-        {site.subdomain && <span className="block truncate text-xs leading-tight text-subtle">{site.subdomain}</span>}
+        {site.subdomain && <span className="block truncate text-[11px] leading-tight text-subtle">{site.subdomain}</span>}
       </span>
-      {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-accent" />}
+      {isActive && (
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
+          <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+        </span>
+      )}
     </button>
   )
 }
 
 /** Logo del lloc, o la inicial sobre or suau quan no n'hi ha. */
-function SiteAvatar({ site }: { site: SwitcherSite | null }) {
+function SiteAvatar({ site, size = 'sm' }: { site: SwitcherSite | null; size?: 'sm' | 'md' }) {
+  const box = size === 'md' ? 'h-8 w-8' : 'h-7 w-7'
   if (site?.logo_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- favicons/logos externs de mida fixa; next/image no aporta res aquí
-      <img src={site.logo_url} alt="" className="h-7 w-7 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5" />
+      <img src={site.logo_url} alt="" className={cn(box, 'shrink-0 rounded-lg border border-border bg-white object-contain p-0.5 shadow-sm')} />
     )
   }
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-xs font-extrabold text-accent">
+    <span className={cn(box, 'flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#ffd769] to-[#e6ad00] text-xs font-extrabold text-[#1a1400] shadow-sm')}>
       {site ? site.name.trim().charAt(0).toUpperCase() || '?' : <Globe className="h-3.5 w-3.5" />}
     </span>
   )

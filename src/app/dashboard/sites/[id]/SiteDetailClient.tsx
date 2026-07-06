@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, lazy, Suspense } from 'react'
+import { useState, useRef, useSyncExternalStore, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, FileText, Plug, Users, Sparkles, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight } from 'lucide-react'
@@ -63,6 +63,8 @@ type Props = {
   defaultTab: TabKey
   /** When present (self-serve funnel), auto-starts the Magic Wand on this URL. */
   autoCloneUrl?: string
+  /** False when this user has no ACTIVE WhatsApp identity → show the connect step. */
+  waConnected?: boolean
   siteDefaultLocale?: string
   /** Re-captures already consumed (freemium regeneration quota). */
   regenCount?: number
@@ -94,7 +96,7 @@ const CLIENT_MODULES_ENABLED = true
 export default function SiteDetailClient({
   siteId, siteName, siteCreatedAt, apiKey, subdomain,
   isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
-  initialStats, defaultTab, autoCloneUrl, siteDefaultLocale, regenCount = 0,
+  initialStats, defaultTab, autoCloneUrl, waConnected = true, siteDefaultLocale, regenCount = 0,
   initialModules = null, previewPostSlug,
 }: Props) {
   const { toast } = useToast()
@@ -266,6 +268,12 @@ export default function SiteDetailClient({
         <div className="space-y-6">
           <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} isSuperAdmin={isSuperAdmin} />
 
+          {/* Pas 3 de l'onboarding, sempre visible fins que es fa (o es descarta):
+              connectar l'agent de WhatsApp — la promesa central del producte. */}
+          {!waConnected && !showOnboarding && (
+            <ConnectAgentBanner hasPosts={initialPostsMeta.total > 0} />
+          )}
+
           <div className="min-w-0">
             {activeTab === 'resum' && (
               <Suspense fallback={<SectionSkeleton />}>
@@ -415,6 +423,81 @@ function SiteSectionCards({
         )
       })}
     </nav>
+  )
+}
+
+// ── Pas 3: connecta l'agent de WhatsApp ────────────────────────────────────────
+// El banner d'onboarding persistent (founder directive 2026-07-06): després de
+// clonar (pas 1) i importar (pas 2), connectar l'agent ha de ser IMPOSSIBLE de
+// no veure. Es mostra fins que l'usuari té una identitat activa o el descarta
+// (localStorage — reapareix en un altre navegador, i està bé: és la promesa
+// central del producte).
+const WA_BANNER_DISMISS_KEY = 'carma:wa-banner-dismissed'
+const emptySubscribe = () => () => {}
+
+function ConnectAgentBanner({ hasPosts }: { hasPosts: boolean }) {
+  // localStorage és un magatzem extern → useSyncExternalStore (hydration-safe:
+  // el servidor el considera descartat i el client corregeix al primer render).
+  const initiallyDismissed = useSyncExternalStore(
+    emptySubscribe,
+    () => { try { return localStorage.getItem(WA_BANNER_DISMISS_KEY) === '1' } catch { return false } },
+    () => true,
+  )
+  const [hiddenNow, setHiddenNow] = useState(false)
+  if (initiallyDismissed || hiddenNow) return null
+
+  const dismiss = () => {
+    setHiddenNow(true)
+    try { localStorage.setItem(WA_BANNER_DISMISS_KEY, '1') } catch { /* cosmètic */ }
+  }
+
+  const steps: { label: string; done: boolean }[] = [
+    { label: 'Blog creat', done: true },
+    { label: 'Articles', done: hasPosts },
+    { label: 'WhatsApp', done: false },
+  ]
+
+  return (
+    <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] relative overflow-hidden rounded-2xl border border-transparent bg-bg-elevated p-5 shadow-card sm:p-6">
+      <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ffd769] to-[#e6ad00] text-[#1a1400] shadow-[0_8px_20px_-8px_rgba(245,188,0,0.7)]">
+          <MessageCircle className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-extrabold tracking-tight text-text">
+            L&apos;últim pas: connecta l&apos;agent de WhatsApp
+          </p>
+          <p className="mt-0.5 text-sm leading-relaxed text-muted">
+            Envia-li una nota de veu i tindràs l&apos;article escrit, maquetat i a punt de publicar. És el teu blog escrivint-se sol.
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {steps.map((s, i) => (
+              <span
+                key={s.label}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-extrabold uppercase tracking-wider',
+                  s.done ? 'bg-success-soft text-success' : 'bg-accent-soft text-accent',
+                )}
+              >
+                {i + 1} · {s.label}{s.done ? ' ✓' : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button href="/dashboard/agent" glow iconLeft={<MessageCircle className="h-4 w-4" />}>
+            Connecta WhatsApp
+          </Button>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold text-subtle transition-colors hover:bg-surface-hover hover:text-text"
+          >
+            Més tard
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
