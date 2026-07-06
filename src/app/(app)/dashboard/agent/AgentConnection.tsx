@@ -158,7 +158,7 @@ export default function AgentConnection({ agentNumber, identities, sites, scopes
               Afegir número
             </Button>
           </div>
-          <p className="mt-2 text-xs text-subtle">Inclou el prefix del país. Després enviaràs un codi per WhatsApp per verificar-lo.</p>
+          <p className="mt-2 text-xs text-subtle">Els números espanyols no necessiten prefix. Després enviaràs un codi per WhatsApp per verificar-lo.</p>
         </div>
       </div>
     </div>

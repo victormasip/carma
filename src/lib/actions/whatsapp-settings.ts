@@ -83,7 +83,7 @@ export async function addPhoneNumber(raw: string): Promise<ActionResult> {
   if (!user) return { ok: false, error: 'No autenticat.' }
 
   const phone = normalizePhoneE164(raw)
-  if (!phone) return { ok: false, error: 'Número no vàlid. Inclou el prefix del país (ex. +34 600 00 00 00).' }
+  if (!phone) return { ok: false, error: 'Número no vàlid. Si no és espanyol, inclou el prefix del país (ex. +33 6 12 34 56 78).' }
 
   const admin = createAdminClient()
   const { data: existing } = await admin

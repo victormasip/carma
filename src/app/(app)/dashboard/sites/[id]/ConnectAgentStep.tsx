@@ -166,7 +166,7 @@ export default function ConnectAgentStep({ onClose }: {
                   Connectar el meu WhatsApp
                 </Button>
                 <p className="text-center text-xs text-subtle">
-                  Inclou el prefix del país. Rebràs un codi per verificar que el número és teu.
+                  Els números espanyols no necessiten prefix. Rebràs un codi per verificar que el número és teu.
                 </p>
               </div>
             </div>
