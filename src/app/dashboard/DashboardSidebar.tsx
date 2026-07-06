@@ -9,8 +9,9 @@ import UserMenu from './UserMenu'
 import KarmaWidget, { type KarmaWidgetData } from './KarmaWidget'
 import Wordmark from '@/components/ui/Wordmark'
 import { useT } from '@/lib/i18n/LocaleProvider'
+import type { SwitcherSite } from './SiteSwitcher'
 
-type Site = { id: string; name: string }
+type Site = SwitcherSite
 
 export default function DashboardSidebar({
   isSuperAdmin,

@@ -14,17 +14,26 @@ export default async function DashboardLayout({
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
 
-  // Sites for the left-hand hub: superadmins see all (admin client), clients see
-  // their assigned sites (RLS-scoped). Capped so the sidebar stays compact.
-  // Locale (cookie read) resolves in the same round trip.
-  const [{ data: sitesData }, locale, karma] = await Promise.all([
-    isSuperAdmin
-      ? createAdminClient().from('sites').select('id, name').order('created_at', { ascending: false }).limit(40)
-      : supabase.from('sites').select('id, name').order('name'),
+  // Sites for the switcher: superadmins see all (admin client), clients see
+  // their assigned sites (RLS-scoped). The popover searches client-side, so we
+  // can afford a higher cap than the old flat list. 42703-safe: subdomain (021)
+  // and logo_url (022) may not exist on an old database.
+  const fetchSites = async () => {
+    const sel = (cols: string) =>
+      isSuperAdmin
+        ? createAdminClient().from('sites').select(cols).order('created_at', { ascending: false }).limit(200)
+        : supabase.from('sites').select(cols).order('name')
+    let res = await sel('id, name, subdomain, logo_url')
+    if (res.error?.code === '42703') res = await sel('id, name')
+    return (res.data ?? []) as unknown as { id: string; name: string; subdomain?: string | null; logo_url?: string | null }[]
+  }
+
+  // Locale (cookie read) + karma balance resolve in the same round trip.
+  const [sites, locale, karma] = await Promise.all([
+    fetchSites(),
     getLocale(),
     getKarma(user.id),
   ])
-  const sites = (sitesData ?? []) as { id: string; name: string }[]
 
   return (
     <LocaleProvider initialLocale={locale}>

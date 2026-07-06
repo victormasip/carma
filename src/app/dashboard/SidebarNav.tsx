@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, FileText, Globe, Wand2, MessageCircle, Palette, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Settings, FileText, Wand2, MessageCircle, Palette, Sparkles, Users } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
+import SiteSwitcher, { type SwitcherSite } from './SiteSwitcher'
 
-type Site = { id: string; name: string }
+type Site = SwitcherSite
 
 export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: boolean; sites: Site[] }) {
   const pathname = usePathname()
@@ -46,38 +47,34 @@ export default function SidebarNav({ isSuperAdmin, sites }: { isSuperAdmin: bool
         label={t('nav.karma')}
       />
 
+      {/* Selector de llocs (popover amb cerca) — la llista plana que creixia
+          amb cada lloc clonat va morir aquí; una agència amb 60 llocs veu el
+          mateix sidebar que un client amb 1. */}
       {sites.length > 0 && (
         <div className="mt-6">
           <p className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-subtle">
             {t('nav.yourSites')}
           </p>
-          <div className="space-y-0.5 max-h-[42vh] overflow-y-auto pr-1">
-            {sites.map(site => {
-              const active = pathname.startsWith(`/dashboard/sites/${site.id}`)
-              return (
-                <NavItem
-                  key={site.id}
-                  href={`/dashboard/sites/${site.id}`}
-                  active={active}
-                  icon={<Globe className="w-4 h-4" />}
-                  label={site.name}
-                  title={site.name}
-                  truncate
-                />
-              )
-            })}
-          </div>
+          <SiteSwitcher sites={sites} isSuperAdmin={isSuperAdmin} />
         </div>
       )}
 
       <div className="mt-6 pt-4 border-t border-border space-y-0.5">
         {isSuperAdmin && (
-          <NavItem
-            href="/admin/grabber-lab"
-            active={pathname.startsWith('/admin/grabber-lab')}
-            icon={<Wand2 className="w-4 h-4" />}
-            label="Grabber Lab"
-          />
+          <>
+            <NavItem
+              href="/admin/users"
+              active={pathname.startsWith('/admin/users')}
+              icon={<Users className="w-4 h-4" />}
+              label="Usuaris"
+            />
+            <NavItem
+              href="/admin/grabber-lab"
+              active={pathname.startsWith('/admin/grabber-lab')}
+              icon={<Wand2 className="w-4 h-4" />}
+              label="Grabber Lab"
+            />
+          </>
         )}
         <NavItem
           href="/dashboard/settings"
