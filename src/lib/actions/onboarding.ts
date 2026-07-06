@@ -7,7 +7,13 @@ import { siteNameFromUrl } from '@/lib/onboarding/url'
 import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 import { revalidatePath } from 'next/cache'
 
-type ActionResult = { error?: string; id?: string; reused?: boolean }
+type ActionResult = {
+  error?: string
+  id?: string
+  reused?: boolean
+  /** Set when the user asked for a NEW blog but their plan is already full. */
+  limit?: { plan: KarmaPlan; max: number }
+}
 
 /**
  * Idempotent onboarding-site provisioning for the self-serve funnel.
@@ -61,9 +67,18 @@ export async function provisionOnboardingSite(cloneUrl?: string): Promise<Action
       const match = own.find(s => (s.origin_url ?? '').trim() === origin)
       if (match) return { id: match.id, reused: true }
     }
-    // At the plan's site limit: re-entering the funnel must never duplicate nor
-    // dead-end — reuse the oldest site (the classic free-tier behaviour).
-    if (own.length >= siteLimit) return { id: own[0].id, reused: true }
+    // At the plan's site limit:
+    //   • WITH a clone intent (landing funnel) → reuse the oldest site so the
+    //     funnel never dead-ends; the site page honours ?clone= by landing on
+    //     the Tema tab, where the re-capture (and its quota UX) lives.
+    //   • WITHOUT one ("Crear un nou blog" from the dashboard) → silently
+    //     dumping the user on their OLD site read as "creating is broken"
+    //     (founder report 2026-07-06). Tell the truth instead: plan limit
+    //     reached, with an upgrade path (BenvingudaClient renders it).
+    if (own.length >= siteLimit) {
+      if (origin) return { id: own[0].id, reused: true }
+      return { limit: { plan, max: SITE_LIMITS[plan] } }
+    }
 
     // ── Create a fresh site, stamping origin_url for future idempotency ──
     const name = origin ? siteNameFromUrl(origin) : 'El meu blog'

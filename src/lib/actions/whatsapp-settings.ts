@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mintVerifyCode, normalizePhoneE164 } from '@/lib/whatsapp/verify'
-import { WA_VERIFY_CODE_TTL_MIN } from '@/lib/whatsapp/config'
+import { WA_AGENT_NUMBER, WA_VERIFY_CODE_TTL_MIN } from '@/lib/whatsapp/config'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -29,6 +29,51 @@ function freshCode() {
   return {
     verify_code: mintVerifyCode(),
     verify_expires_at: new Date(Date.now() + WA_VERIFY_CODE_TTL_MIN * 60_000).toISOString(),
+  }
+}
+
+/**
+ * Live connection state for the current user — feeds the onboarding
+ * "Connecta l'agent" step (add number → show code → poll until the webhook
+ * flips it active). 42P01-safe: without the WhatsApp migrations it reports
+ * "not connected, nothing pending" and the step still renders (the code path
+ * simply won't complete, same as the Settings page).
+ */
+export type AgentConnectState = {
+  connected: boolean
+  agentNumber: string
+  pending: { id: string; code: string | null; expiresAt: string | null } | null
+}
+
+export async function getAgentConnectState(): Promise<AgentConnectState> {
+  const empty: AgentConnectState = { connected: false, agentNumber: WA_AGENT_NUMBER, pending: null }
+  const user = await requireUser()
+  if (!user) return empty
+
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('wa_identities')
+      .select('id, status, verify_code, verify_expires_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (error || !data) {
+      // 42P01 = pre-migration (expected fail-open); anything else is a real
+      // failure that must not be indistinguishable from "not connected yet".
+      if (error && error.code !== '42P01') console.error('[getAgentConnectState]', error.code, error.message)
+      return empty
+    }
+    const active = data.find((i) => i.status === 'active')
+    if (active) return { ...empty, connected: true }
+    const pending = data.find((i) => i.status === 'pending')
+    return {
+      ...empty,
+      pending: pending
+        ? { id: pending.id as string, code: (pending.verify_code as string | null), expiresAt: (pending.verify_expires_at as string | null) }
+        : null,
+    }
+  } catch {
+    return empty
   }
 }
 

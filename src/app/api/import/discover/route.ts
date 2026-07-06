@@ -45,12 +45,24 @@ function extractFeedLink(html: string): string | null {
 // sitemap can't produce a multi-megabyte payload or a runaway loop.
 const MAX_DISCOVER = 5000
 
+// Worst case walks 2 candidate bases × (wp-json + sitemap + feeds) against a
+// slow origin — well past the default serverless window. Fail with a clear
+// timeout instead of a platform 504.
+export const maxDuration = 60
+
 function titleFromUrl(url: string): string {
   try {
     const path = new URL(url).pathname
     const segments = path.split('/').filter(Boolean)
     return segments[segments.length - 1]?.replace(/[-_]/g, ' ') ?? url
   } catch { return url }
+}
+
+// Sitemaps and sitemap indexes routinely repeat URLs across sub-sitemaps; a
+// duplicate row would double-count in the UI and double-import on submit.
+function dedupeByUrl<T extends { url: string }>(items: T[]): T[] {
+  const seen = new Set<string>()
+  return items.filter(i => (seen.has(i.url) ? false : (seen.add(i.url), true)))
 }
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
@@ -69,14 +81,28 @@ export async function POST(request: NextRequest) {
   if (!isValidHttpUrl(rawUrl)) return NextResponse.json({ error: 'URL no vàlida' }, { status: 400 })
   if (!isSafeUrl(rawUrl)) return NextResponse.json({ error: 'URL no permesa' }, { status: 400 })
 
-  const base = new URL(rawUrl).origin
-  const wpApiBase = `${base}/wp-json/wp/v2`
+  // The blog often lives under a PATH (site.com/blog, site.com/news): its
+  // wp-json, sitemap and feeds live under that path, NOT at the root origin.
+  // Stripping to `origin` here used to make a subpath blog "discover" every
+  // page of the whole root site. So: try the full path first, then the origin.
+  const parsed = new URL(rawUrl)
+  const base = parsed.origin
+  const pathBase = `${base}${parsed.pathname.replace(/\/+$/, '')}`
+  const bases = pathBase !== base ? [pathBase, base] : [base]
 
   type DiscoveredItem = { url: string; title: string; language: string | null }
 
   // 1. Detectar WordPress via REST API — paginar TOTS els articles (sense límit de
   //    200). El sostre `MAX_DISCOVER` és només una xarxa de seguretat anti-runaway.
-  const wpCheck = await safeFetchJson(`${wpApiBase}/posts?per_page=1&status=publish&_fields=id`)
+  let wpApiBase = `${base}/wp-json/wp/v2`
+  let wpCheck: unknown = null
+  for (const b of bases) {
+    const candidate = `${b}/wp-json/wp/v2`
+    const check = await safeFetchJson(`${candidate}/posts?per_page=1&status=publish&_fields=id`)
+    // Non-EMPTY only: a valid-but-postless endpoint at the path (multisite stub)
+    // must not shadow a root wp-json that has the real articles.
+    if (Array.isArray(check) && check.length > 0) { wpApiBase = candidate; wpCheck = check; break }
+  }
   if (Array.isArray(wpCheck)) {
     const articles: DiscoveredItem[] = []
     let page = 1
@@ -97,51 +123,61 @@ export async function POST(request: NextRequest) {
     }
 
     if (articles.length > 0) {
-      return NextResponse.json({ method: 'wordpress', wpApiBase, articles: articles.slice(0, MAX_DISCOVER), count: articles.length })
+      const unique = dedupeByUrl(articles)
+      return NextResponse.json({ method: 'wordpress', wpApiBase, articles: unique.slice(0, MAX_DISCOVER), count: unique.length })
     }
   }
 
-  // 2. Intentar sitemap.xml
-  const sitemapXml = await safeFetchText(`${base}/sitemap.xml`)
-  if (sitemapXml) {
+  // 2. Intentar sitemap.xml — al path del blog primer; si caiem a l'arrel i el
+  //    blog viu sota un path, només comptem les URLs d'aquell path (l'arrel
+  //    sencera serien pàgines corporatives, no articles).
+  for (const b of bases) {
+    const sitemapXml = await safeFetchText(`${b}/sitemap.xml`)
+    if (!sitemapXml) continue
+    const keepUrl = (u: string) => b !== base || pathBase === base || u.startsWith(`${pathBase}/`) || u === pathBase
     const isSitemapIndex = sitemapXml.includes('<sitemapindex')
+    let items: DiscoveredItem[] = []
     if (isSitemapIndex) {
-      const subSitemaps = parseSitemapIndex(sitemapXml).slice(0, 50)
-      const allUrls: DiscoveredItem[] = []
+      // The sub-sitemap <loc> values come from FETCHED CONTENT, not the user —
+      // revalidate each one or a hostile sitemap index becomes an SSRF proxy
+      // into loopback/link-local/metadata targets.
+      const subSitemaps = parseSitemapIndex(sitemapXml)
+        .filter(u => isValidHttpUrl(u) && isSafeUrl(u))
+        .slice(0, 50)
       await Promise.all(
         subSitemaps.map(async (subUrl) => {
           const subXml = await safeFetchText(subUrl)
-          if (subXml) parseSitemapUrls(subXml).forEach(u => allUrls.push({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) }))
+          if (subXml) parseSitemapUrls(subXml).filter(keepUrl).forEach(u => items.push({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) }))
         })
       )
-      if (allUrls.length > 0) {
-        return NextResponse.json({ method: 'sitemap', articles: allUrls.slice(0, MAX_DISCOVER), count: allUrls.length })
-      }
     } else {
-      const urls = parseSitemapUrls(sitemapXml)
-      if (urls.length > 0) {
-        return NextResponse.json({
-          method: 'sitemap',
-          articles: urls.map(u => ({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) })).slice(0, MAX_DISCOVER),
-          count: urls.length,
-        })
-      }
+      items = parseSitemapUrls(sitemapXml).filter(keepUrl)
+        .map(u => ({ url: u, title: titleFromUrl(u), language: detectLangFromUrl(u) }))
+    }
+    const unique = dedupeByUrl(items)
+    if (unique.length > 0) {
+      return NextResponse.json({ method: 'sitemap', articles: unique.slice(0, MAX_DISCOVER), count: unique.length })
     }
   }
 
-  // 3. Intentar feeds RSS/Atom
-  const feedCandidates = [`${base}/feed`, `${base}/rss.xml`, `${base}/feed.xml`, `${base}/atom.xml`, `${base}/rss`]
+  // 3. Intentar feeds RSS/Atom — també amb el path del blog per davant.
+  const feedCandidates = bases.flatMap(b => [`${b}/feed`, `${b}/rss.xml`, `${b}/feed.xml`, `${b}/atom.xml`, `${b}/rss`])
   const homepage = await safeFetchText(rawUrl)
   if (homepage) {
+    // Same trust boundary as the sub-sitemaps: the <link rel=feed> href comes
+    // from the fetched page, so it must pass the SSRF guard before we fetch it.
     const linked = extractFeedLink(homepage)
-    if (linked) feedCandidates.unshift(linked.startsWith('http') ? linked : `${base}${linked}`)
+    if (linked) {
+      const abs = linked.startsWith('http') ? linked : `${base}${linked}`
+      if (isValidHttpUrl(abs) && isSafeUrl(abs)) feedCandidates.unshift(abs)
+    }
   }
 
   for (const feedUrl of feedCandidates) {
     const feedXml = await safeFetchText(feedUrl)
     if (!feedXml) continue
     if (!feedXml.includes('<item') && !feedXml.includes('<entry')) continue
-    const items = parseRssItems(feedXml)
+    const items = dedupeByUrl(parseRssItems(feedXml))
     if (items.length > 0) {
       return NextResponse.json({
         method: 'rss',

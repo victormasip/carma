@@ -219,7 +219,7 @@ export function ThemeStudioProvider({
   onCaptureSuccess?: (info: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => void
   // Fired when the user EXPLICITLY clicks the success CTA ("Comencem" / "Importa
   // els articles" / "Editar el tema") — the moment to advance the onboarding.
-  onCaptureProceed?: (info: { framework: string | null }) => void
+  onCaptureProceed?: (info: { framework: string | null; blogUrl: string | null }) => void
 }) {
   // Latest-ref so grab()'s memoized callback always sees the current handler
   // without taking it as a dependency.
@@ -637,9 +637,11 @@ export function ThemeStudioProvider({
   const closeCapture = useCallback(() => setCapture(c => ({ ...c, open: false })), [])
 
   // The user clicked the success CTA: close the modal AND advance the onboarding.
+  // blogUrl rides along so the article import can target the BLOG (site.com/blog),
+  // not the web root the capture ran against.
   const proceedFromCapture = useCallback(() => {
     setCapture(c => ({ ...c, open: false }))
-    onCaptureProceedRef.current?.({ framework: detectedFrameworkRef.current })
+    onCaptureProceedRef.current?.({ framework: detectedFrameworkRef.current, blogUrl: blogUrlRef.current.trim() || null })
   }, [])
 
   // Abort an in-flight capture and close the modal — no error UI, the user

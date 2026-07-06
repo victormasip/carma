@@ -7,8 +7,9 @@
 // under React 18/19 strict double-invocation, then we replace into the site.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Wand2, AlertCircle, ArrowRight } from 'lucide-react'
+import { Wand2, AlertCircle, ArrowRight, Crown, LayoutDashboard } from 'lucide-react'
 import Wordmark from '@/components/ui/Wordmark'
 import { provisionOnboardingSite } from '@/lib/actions/onboarding'
 
@@ -17,12 +18,17 @@ export default function BenvingudaClient({ cloneUrl }: { cloneUrl?: string }) {
   const ran = useRef(false)
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [limit, setLimit] = useState<{ plan: string; max: number } | null>(null)
 
   useEffect(() => {
     if (ran.current) return
     ran.current = true
     startTransition(async () => {
       const result = await provisionOnboardingSite(cloneUrl)
+      if (result.limit) {
+        setLimit(result.limit)
+        return
+      }
       if (result.error || !result.id) {
         setError(result.error ?? 'No s’ha pogut preparar el teu blog.')
         return
@@ -40,7 +46,35 @@ export default function BenvingudaClient({ cloneUrl }: { cloneUrl?: string }) {
       <div className="halo halo-drift-b" style={{ width: 420, height: 420, background: 'rgba(245,188,0,0.12)', bottom: -150, right: -70 }} aria-hidden />
       <Wordmark size="text-xl" className="relative" />
 
-      {error ? (
+      {limit ? (
+        <div className="relative flex max-w-md flex-col items-center gap-4">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+            <Crown className="h-6 w-6" />
+          </span>
+          <div>
+            <h1 className="text-lg font-extrabold tracking-tight text-text">Has arribat al límit del teu pla</h1>
+            <p className="mt-1.5 text-sm text-muted">
+              El pla <span className="font-semibold capitalize text-text">{limit.plan}</span> permet{' '}
+              {limit.max === 1 ? '1 blog' : `${limit.max} blogs`}. Passa a un pla superior per obrir-ne més,
+              o continua treballant amb {limit.max === 1 ? 'el teu blog actual' : 'els teus blogs actuals'}.
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-2 sm:flex-row">
+            <Link
+              href="/#preus"
+              className="btn-gold inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-extrabold no-underline"
+            >
+              <Crown className="h-4 w-4" /> Veure els plans
+            </Link>
+            <button
+              onClick={() => router.replace('/dashboard')}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-bold text-text transition-colors hover:bg-surface-hover"
+            >
+              <LayoutDashboard className="h-4 w-4" /> Anar al panell
+            </button>
+          </div>
+        </div>
+      ) : error ? (
         <div className="relative flex max-w-md flex-col items-center gap-4">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-soft text-danger">
             <AlertCircle className="h-6 w-6" />

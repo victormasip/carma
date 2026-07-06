@@ -35,6 +35,9 @@ const ModulesManager = lazy(() => import('./ModulesManager'))
 const ApiDocsCard = lazy(() => import('./ApiDocsCard'))
 const WordPressConnectCard = lazy(() => import('./WordPressConnectCard'))
 const PublishGuide = lazy(() => import('./PublishGuide'))
+// The agent step only mounts at the end of a completed onboarding — off the
+// default path, so it stays out of the initial bundle like its siblings above.
+const ConnectAgentStep = lazy(() => import('./ConnectAgentStep'))
 import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioContext'
 import type { PostsMeta } from './PostsManager'
 import type { PostListItem } from '@/lib/actions/posts'
@@ -111,6 +114,13 @@ export default function SiteDetailClient({
   // Onboarding is for any pristine site — superadmins provisioning a client site
   // AND self-serve users landing on their freshly-created first blog.
   const showOnboarding = isNewSite && !onboardingDone
+  // Últim pas de l'onboarding (founder 2026-07-06): connectar l'agent de
+  // WhatsApp com a PAS evident — però saltable. Només per a clients sense
+  // identitat activa; l'operador (superadmin) no el necessita.
+  const [agentStepVisible, setAgentStepVisible] = useState(false)
+  const maybeShowAgentStep = () => {
+    if (!waConnected && !isSuperAdmin) setAgentStepVisible(true)
+  }
   const wpImportIntent = useRef(false)
   // True while the post-clone onboarding sequence is running (capture → optional
   // article import → done). NO layout step: the clone replicates the source's
@@ -162,6 +172,7 @@ export default function SiteDetailClient({
     // so the Articles list (and everything else) shows the blog already alive.
     router.refresh()
     toast(`Plantilla «${templateName}» aplicada — el teu blog ja és viu ✨`, 'success')
+    maybeShowAgentStep()
   }
   const handleCaptureSuccess = ({ framework, url, logoUrl }: { framework: string | null; url: string; siteName: string | null; logoUrl: string | null }) => {
     // IMPORTANT: we deliberately do NOT rename the site from scraped metadata.
@@ -176,20 +187,21 @@ export default function SiteDetailClient({
 
   // Fired when the user clicks the capture success CTA ("Importa els articles" /
   // "Comencem" / "Editar el tema"). THIS is the moment we advance the onboarding.
-  const handleCaptureProceed = ({ framework }: { framework: string | null }) => {
-    const url = captureInfo.current.url
+  const handleCaptureProceed = ({ framework, blogUrl }: { framework: string | null; blogUrl: string | null }) => {
     void framework // import is no longer WP-only — discover handles WP API, RSS and HTML
     if (wpImportIntent.current) {
-      // Full-clone intent: open the article import (auto-discover runs against
-      // the source — WordPress API, RSS or HTML scraping, whichever it has).
+      // Full-clone intent: open the article import. Discovery targets the BLOG
+      // URL when the detector found one (site.com/blog) — the web root would
+      // "discover" corporate pages, not articles.
       wpImportIntent.current = false
-      setImportUrl(url)
+      setImportUrl(blogUrl || captureInfo.current.url)
       setShowImport(true)
     } else if (onboardingFlow.current) {
       // Styles-only clone: the captured design (cards included) IS the look —
       // nothing to choose. Done.
       onboardingFlow.current = false
       toast('El teu blog està llest ✨', 'success')
+      maybeShowAgentStep()
     }
   }
 
@@ -263,6 +275,19 @@ export default function SiteDetailClient({
             onTemplateApplied={handleTemplateApplied}
             onDismiss={() => setOnboardingDone(true)}
           />
+        )}
+
+        {agentStepVisible && (
+          <Suspense fallback={null}>
+            <ConnectAgentStep
+              onClose={(connected) => {
+                setAgentStepVisible(false)
+                // waConnected és un prop del servidor: refresquem perquè el
+                // recordatori (banner) desaparegui just després de connectar.
+                if (connected) router.refresh()
+              }}
+            />
+          </Suspense>
         )}
 
         <div className="space-y-6">
@@ -345,6 +370,7 @@ export default function SiteDetailClient({
                 onboardingFlow.current = false
                 router.refresh()
                 toast('El teu blog està llest ✨', 'success')
+                maybeShowAgentStep()
               }
             }}
           />

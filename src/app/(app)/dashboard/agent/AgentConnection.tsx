@@ -19,6 +19,7 @@ import { cn } from '@/lib/cn'
 import {
   addPhoneNumber, regenerateVerifyCode, removePhoneNumber, setIdentitySites,
 } from '@/lib/actions/whatsapp-settings'
+import { waMeLink } from '@/lib/whatsapp/waMe'
 
 export type Identity = {
   id: string
@@ -31,12 +32,6 @@ export type Identity = {
 }
 export type Site = { id: string; name: string }
 export type Scope = { identity_id: string; site_id: string }
-
-function waMeLink(agentNumber: string, prefill?: string): string | null {
-  const digits = agentNumber.replace(/[^\d]/g, '')
-  if (!digits) return null
-  return prefill ? `https://wa.me/${digits}?text=${encodeURIComponent(prefill)}` : `https://wa.me/${digits}`
-}
 
 export default function AgentConnection({ agentNumber, identities, sites, scopes }: {
   agentNumber: string
