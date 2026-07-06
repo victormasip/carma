@@ -45,16 +45,16 @@ export type LandingCopy = {
 
 const ca: LandingCopy = {
   meta: {
-    title: 'Carma — El blog que s’escriu per WhatsApp',
+    title: 'Carma — El blog per WhatsApp',
     description:
       'Envia una nota de veu i publica un article SEO al teu blog. La Carma clona l’estil de la teva web, escriu per tu i publica quan tu ho dius. Sense codi, sense ordinador.',
   },
   nav: { how: 'Com funciona', features: 'Funcions', blog: 'Blog', pricing: 'Preus', login: 'Entra', signup: 'Comença gratis', signupShort: 'Comença', menu: 'Menú' },
   hero: {
     badge: 'El teu blog, per WhatsApp',
-    h1a: 'Envia un àudio.',
+    h1a: 'Envia un WhatsApp.',
     h1b: 'Publica un article.',
-    sub: 'La Carma viu al teu WhatsApp: li envies una idea — escrita o xerrada — i et torna un article a punt de publicar, amb el teu estil i el SEO fet. Tu només dius «publica».',
+    sub: 'La Carma viu al teu WhatsApp: li envies una idea — escrita o per àudio — i et torna un article a punt de publicar, amb el teu estil i el SEO fet. Tu només dius «publica».',
     cta1: 'Crea el meu blog',
     cta2: 'Clona la meva web',
     chips: ['Gratis per començar', 'Sense targeta', 'Clavat a la teva web', 'En el teu idioma'],
@@ -165,7 +165,7 @@ const ca: LandingCopy = {
 
 const es: LandingCopy = {
   meta: {
-    title: 'Carma — El blog que se escribe por WhatsApp',
+    title: 'Carma — El blog por WhatsApp',
     description:
       'Envía una nota de voz y publica un artículo SEO en tu blog. Carma clona el estilo de tu web, escribe por ti y publica cuando tú lo dices. Sin código, sin ordenador.',
   },
