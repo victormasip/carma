@@ -336,6 +336,11 @@ a[role="button"]:active {
 .carma-editor .ProseMirror img { max-width: 100%; border-radius: var(--radius-md); margin: 1.5em 0; display: block; box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18); }
 .carma-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid var(--c-accent); outline-offset: 2px; }
 
+/* Focus mode — dim every top-level block except the one holding the caret
+   (Focus extension tags it `.carma-focused`). Toggled by `.carma-focus-mode`. */
+.carma-editor.carma-focus-mode .ProseMirror > * { opacity: 0.3; transition: opacity 0.25s ease; }
+.carma-editor.carma-focus-mode .ProseMirror > .carma-focused { opacity: 1; }
+
 /* Callout / highlight card */
 .carma-callout {
   position: relative;

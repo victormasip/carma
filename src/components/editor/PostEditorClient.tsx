@@ -17,7 +17,7 @@ import {
   User, FileText, Globe, CalendarDays, Settings2, Search, Target,
   CheckCircle2, AlertCircle, ExternalLink, Sparkles, Plus, Crown,
   RefreshCw, PanelRight, Bot, Languages, Upload,
-  Heading1, Heading2, Heading3, List, ListOrdered, Quote, Info, Images, Columns2, Minus, Type,
+  Heading1, Heading2, Heading3, List, ListOrdered, Quote, Info, Images, Columns2, Minus, Type, Focus,
 } from 'lucide-react'
 import type { Editor } from '@tiptap/core'
 import { uploadImage } from '@/lib/upload'
@@ -959,6 +959,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   const onEditorReady = useCallback((ed: Editor | null) => { editorInstanceRef.current = ed }, [])
 
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -1024,6 +1025,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     { id: 'hr', section: 'Insereix', label: 'Separador', keywords: 'divider hr línia', icon: <Minus className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setHorizontalRule().run() },
     { id: 'publish', section: 'Article', label: isPublished ? 'Torna a esborrany' : 'Publica', keywords: 'publish draft estat esborrany', icon: isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />, run: () => setIsPublished(!isPublished) },
     { id: 'view', section: 'Article', label: 'Veure en directe', keywords: 'preview render vista', icon: <ExternalLink className="h-3.5 w-3.5" />, run: openLivePreview },
+    { id: 'focus', section: 'Article', label: focusMode ? 'Desactiva el mode focus' : 'Mode focus', keywords: 'focus zen concentració', icon: <Focus className="h-3.5 w-3.5" />, run: () => setFocusMode(v => !v) },
     { id: 'save', section: 'Article', label: 'Desa ara', keywords: 'save desar', icon: <Save className="h-3.5 w-3.5" />, run: forceSave },
     { id: 'tab-settings', section: 'Panells', label: 'Obre Ajustos', keywords: 'settings contingut', icon: <Settings2 className="h-3.5 w-3.5" />, run: () => openDrawerTab('settings') },
     { id: 'tab-seo', section: 'Panells', label: 'Obre SEO', keywords: 'seo cerca', icon: <Search className="h-3.5 w-3.5" />, run: () => openDrawerTab('seo') },
@@ -1222,6 +1224,19 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
 
             <button
               type="button"
+              onClick={() => setFocusMode(v => !v)}
+              aria-pressed={focusMode}
+              title={focusMode ? 'Desactivar el mode focus' : 'Mode focus — atenua la resta'}
+              className={cn(
+                'cursor-pointer hidden sm:flex items-center justify-center w-8 h-8 rounded-md transition-colors',
+                focusMode ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text hover:bg-surface-hover',
+              )}
+            >
+              <Focus className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => setDrawerOpen(o => !o)}
               aria-pressed={drawerOpen}
               title={drawerOpen ? 'Amagar panell' : 'Mostrar panell'}
@@ -1380,6 +1395,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                     restoreCaretRef={restoreCaretRef}
                     onEditorReady={onEditorReady}
                     onAiRewrite={onAiRewrite}
+                    focusMode={focusMode}
                   />
                 </Suspense>
               </ErrorBoundary>

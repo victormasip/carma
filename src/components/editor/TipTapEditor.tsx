@@ -15,7 +15,7 @@ import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
-import { Placeholder } from '@tiptap/extensions'
+import { Placeholder, Focus } from '@tiptap/extensions'
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import {
@@ -83,9 +83,11 @@ type Props = {
   /** Inline AI rewrite of the current selection. Returns the rewritten text, or
       null when it couldn't run (not premium / error — the parent surfaces why). */
   onAiRewrite?: (text: string, mode: RewriteMode) => Promise<string | null>
+  /** Focus mode: dims every block except the one holding the caret. */
+  focusMode?: boolean
 }
 
-export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite }: Props) {
+export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite, focusMode }: Props) {
   const { toast } = useToast()
   const [linkUrl, setLinkUrl] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
@@ -118,6 +120,9 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
         },
       }),
       Underline,
+      // Adds `.carma-focused` to the top-level block holding the caret so focus
+      // mode can dim everything else (see globals.css `.carma-focus-mode`).
+      Focus.configure({ className: 'carma-focused', mode: 'shallowest' }),
       Figure,
       Columns,
       Column,
@@ -429,7 +434,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       )}
 
       {/* The canvas itself — full-bleed, no card border, no toolbar overhead. */}
-      <EditorContent editor={editor} className="carma-editor" />
+      <EditorContent editor={editor} className={cn('carma-editor', focusMode && 'carma-focus-mode')} />
     </div>
   )
 }
