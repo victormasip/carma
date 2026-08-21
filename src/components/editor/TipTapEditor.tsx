@@ -21,7 +21,7 @@ import type { Editor } from '@tiptap/core'
 import {
   Bold, Italic, UnderlineIcon, Strikethrough, Link2, Link2Off,
   Heading2, Heading3, Heading1, List, ListOrdered, Quote, Code, Minus,
-  ImageIcon, Plus, Info, Images, Columns2,
+  ImageIcon, Plus, Info, Images, Columns2, Video,
   Wand2, Sparkles, Minimize2, Maximize2, SpellCheck,
 } from 'lucide-react'
 import KnotSpinner from '@/components/ui/KnotSpinner'
@@ -29,6 +29,7 @@ import type { RewriteMode } from '@/lib/writing/rewrite'
 import { Callout } from './extensions/Callout'
 import { Gallery } from './extensions/Gallery'
 import { Figure } from './extensions/Figure'
+import { Embed, parseEmbedUrl } from './extensions/Embed'
 import { Columns, Column } from './extensions/Columns'
 import { HeadingId } from './extensions/HeadingId'
 import { Toggle, ToggleSummary } from './extensions/Toggle'
@@ -93,6 +94,8 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
+  const [videoUrl, setVideoUrl] = useState('')
+  const [showVideoInput, setShowVideoInput] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   // Which rewrite mode is in flight (drives the spinner + disables re-entry); null = idle.
   const [aiMode, setAiMode] = useState<RewriteMode | null>(null)
@@ -124,6 +127,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       // mode can dim everything else (see globals.css `.carma-focus-mode`).
       Focus.configure({ className: 'carma-focused', mode: 'shallowest' }),
       Figure,
+      Embed,
       Columns,
       Column,
       Toggle,
@@ -259,6 +263,14 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     setShowImageInput(false)
   }
 
+  const applyVideo = () => {
+    const parsed = parseEmbedUrl(videoUrl)
+    if (!parsed) { toast('Enganxa una URL de YouTube o Vimeo vàlida', 'error'); return }
+    editor.chain().focus().setEmbed({ provider: parsed.provider, embedId: parsed.id, url: videoUrl.trim() }).run()
+    setVideoUrl('')
+    setShowVideoInput(false)
+  }
+
   return (
     <div className="relative">
       {/* Block drag-handle gutter — appears on hover, no permanent UI. */}
@@ -370,8 +382,11 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={fbtn}>
           <Quote className="w-3.5 h-3.5 text-subtle" /> Cita
         </button>
-        <button type="button" onClick={() => { setShowImageInput(true); setShowLinkInput(false) }} className={fbtn}>
+        <button type="button" onClick={() => { setShowImageInput(true); setShowLinkInput(false); setShowVideoInput(false) }} className={fbtn}>
           <ImageIcon className="w-3.5 h-3.5 text-subtle" /> Imatge
+        </button>
+        <button type="button" onClick={() => { setShowVideoInput(true); setShowImageInput(false); setShowLinkInput(false) }} className={fbtn}>
+          <Video className="w-3.5 h-3.5 text-subtle" /> Vídeo
         </button>
         <button type="button" onClick={() => editor.chain().focus().setCallout({ variant: 'info' }).run()} className={fbtn}>
           <Info className="w-3.5 h-3.5 text-subtle" /> Targeta destacada
@@ -387,8 +402,8 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
         </button>
       </FloatingMenu>
 
-      {/* Tiny inline link/image inputs — anchored above the canvas, only when triggered */}
-      {(showLinkInput || showImageInput) && (
+      {/* Tiny inline link/image/video inputs — anchored above the canvas, only when triggered */}
+      {(showLinkInput || showImageInput || showVideoInput) && (
         <div className="sticky top-0 z-20 -mt-2 mb-3 mx-auto max-w-[44rem] flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated border border-border shadow-pop">
           {showLinkInput && (
             <>
@@ -426,6 +441,26 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
                 Inserir
               </button>
               <button type="button" onClick={() => setShowImageInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
+                Esc
+              </button>
+            </>
+          )}
+          {showVideoInput && (
+            <>
+              <Video className="w-3.5 h-3.5 text-subtle shrink-0" />
+              <input
+                autoFocus
+                type="url"
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyVideo() } if (e.key === 'Escape') setShowVideoInput(false) }}
+                placeholder="Enganxa una URL de YouTube o Vimeo"
+                className="flex-1 text-xs px-2 py-1.5 bg-transparent focus:outline-none text-text placeholder:text-subtle"
+              />
+              <button type="button" onClick={applyVideo} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
+                Inserir
+              </button>
+              <button type="button" onClick={() => setShowVideoInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
                 Esc
               </button>
             </>

@@ -422,6 +422,16 @@ a[role="button"]:active {
   content: 'Afegeix un peu de foto…'; color: var(--c-text-subtle); opacity: 0.7; font-style: italic; pointer-events: none;
 }
 
+/* Video embed — editor (WYSIWYG iframe; stored iframe-free) */
+.carma-editor .ProseMirror .carma-embed-editor { margin: 1.6em 0; }
+.carma-editor .ProseMirror .carma-embed-editor .carma-embed-frame {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-md); overflow: hidden;
+  background: var(--c-surface-hover); box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.18);
+}
+.carma-editor .ProseMirror .carma-embed-editor .carma-embed-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.carma-editor .ProseMirror .carma-embed-editor.is-selected .carma-embed-frame { outline: 3px solid var(--c-accent); outline-offset: 2px; }
+.carma-editor .ProseMirror .carma-embed-editor .carma-embed-fallback { display: grid; place-items: center; height: 100%; color: var(--c-text-subtle); font-size: 0.85rem; }
+
 /* Two-column grid — editor */
 .carma-editor .ProseMirror .carma-columns {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.4em 0;

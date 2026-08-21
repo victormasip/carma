@@ -283,6 +283,36 @@ function fillTableOfContents(html: string): string {
   }
 }
 
+// Turn video-embed placeholders (`<div data-carma-embed>`, stored iframe-free by
+// the editor) into a sandboxed iframe. The src is built ONLY from a strictly
+// validated provider + id — never from the raw pasted URL — so no arbitrary
+// iframe/URL is ever emitted. Unknown/invalid embeds render empty.
+function fillEmbeds(html: string): string {
+  if (!html.includes('data-carma-embed')) return html
+  try {
+    const root = parse(html)
+    const nodes = root.querySelectorAll('[data-carma-embed]')
+    if (nodes.length === 0) return html
+    for (const el of nodes) {
+      const provider = el.getAttribute('data-provider') ?? ''
+      const id = (el.getAttribute('data-embed-id') ?? '').trim()
+      let src = ''
+      if (provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(id)) src = `https://www.youtube-nocookie.com/embed/${id}`
+      else if (provider === 'vimeo' && /^\d+$/.test(id)) src = `https://player.vimeo.com/video/${id}`
+      if (!src) { el.set_content(''); continue }
+      el.set_content(
+        `<iframe src="${escapeAttr(src)}" title="Vídeo ${escapeAttr(provider)}" loading="lazy" ` +
+        `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ` +
+        `referrerpolicy="strict-origin-when-cross-origin" ` +
+        `sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowfullscreen></iframe>`,
+      )
+    }
+    return root.toString()
+  } catch {
+    return html
+  }
+}
+
 // Perceived lightness (0 = black … 1 = white) of a CSS colour, or null if we
 // can't parse it. Handles #hex (3/6/8) and rgb()/rgba(). Used to guarantee the
 // blog is legible regardless of what palette the source site (or a bad scrape)
@@ -631,6 +661,8 @@ ${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!i
 .carma-article-content .carma-toc li.lvl-3{padding-left:1.7rem!important;font-size:.95em!important}
 .carma-article-content .carma-toc a{color:var(--ct-text)!important;text-decoration:none!important}
 .carma-article-content .carma-toc a:hover{color:var(--ct-accent)!important;text-decoration:underline!important}
+.carma-article-content .carma-embed{position:relative!important;width:100%!important;aspect-ratio:16/9!important;margin:1.85rem 0!important;border-radius:var(--ct-radius)!important;overflow:hidden!important;background:var(--ct-surface)!important}
+.carma-article-content .carma-embed iframe{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important}
 .carma-article-content .carma-button-wrap{margin:1.6rem 0!important}
 .carma-article-content .carma-button-wrap[data-align=center]{text-align:center!important}
 .carma-article-content .carma-button-wrap[data-align=right]{text-align:right!important}
@@ -1304,7 +1336,7 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
 // (paywall transform, related, etc.) so we compute the content exactly once.
 function articleSetup(theme: Theme, siteId: string, post: Post, locale: Locale, extra?: ArticleExtra): ArticleModuleParts {
   const loc = localizePost(post, locale)
-  const baseContent = transformContentImages(fillTableOfContents(getContentHtml(loc)))
+  const baseContent = transformContentImages(fillEmbeds(fillTableOfContents(getContentHtml(loc))))
   return articleModuleParts(theme, siteId, post, locale, baseContent, extra)
 }
 
