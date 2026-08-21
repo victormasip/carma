@@ -22,7 +22,10 @@ import {
   Bold, Italic, UnderlineIcon, Strikethrough, Link2, Link2Off,
   Heading2, Heading3, Heading1, List, ListOrdered, Quote, Code, Minus,
   ImageIcon, Plus, Info, Images, Columns2,
+  Wand2, Sparkles, Minimize2, Maximize2, SpellCheck,
 } from 'lucide-react'
+import KnotSpinner from '@/components/ui/KnotSpinner'
+import type { RewriteMode } from '@/lib/writing/rewrite'
 import { Callout } from './extensions/Callout'
 import { Gallery } from './extensions/Gallery'
 import { Figure } from './extensions/Figure'
@@ -74,14 +77,23 @@ type Props = {
   /** One-shot caret restore on mount — set by the parent right before a
       content-identical remount (the auto language relabel), consumed here. */
   restoreCaretRef?: React.MutableRefObject<CaretPos | null>
+  /** Hands the live editor instance up so the parent's command palette can drive
+      it (insert blocks, change format). Called with null on unmount. */
+  onEditorReady?: (editor: Editor | null) => void
+  /** Inline AI rewrite of the current selection. Returns the rewritten text, or
+      null when it couldn't run (not premium / error — the parent surfaces why). */
+  onAiRewrite?: (text: string, mode: RewriteMode) => Promise<string | null>
 }
 
-export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef }: Props) {
+export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite }: Props) {
   const { toast } = useToast()
   const [linkUrl, setLinkUrl] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  // Which rewrite mode is in flight (drives the spinner + disables re-entry); null = idle.
+  const [aiMode, setAiMode] = useState<RewriteMode | null>(null)
   const editorRef = useRef<Editor | null>(null)
   // True until the first onUpdate of a content-seeded (re)mount. A freshly
   // remounted TipTap (its `key` changes on the parent's auto language relabel /
@@ -185,7 +197,30 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     }
   }, [editor, initialHtml])
 
+  // Publish the editor instance to the parent (command palette) and retract it on
+  // unmount / remount so a stale instance is never driven.
+  useEffect(() => {
+    onEditorReady?.(editor)
+    return () => onEditorReady?.(null)
+  }, [editor, onEditorReady])
+
   if (!editor) return null
+
+  // Rewrite the current selection in place via the parent's AI action.
+  const runAi = async (mode: RewriteMode) => {
+    if (!onAiRewrite || aiMode) return
+    const { from, to } = editor.state.selection
+    const text = editor.state.doc.textBetween(from, to, ' ').trim()
+    if (!text) { toast('Selecciona primer un fragment de text', 'info'); return }
+    setAiMode(mode)
+    try {
+      const out = await onAiRewrite(text, mode)
+      if (out) editor.chain().focus().insertContentAt({ from, to }, out).run()
+    } finally {
+      setAiMode(null)
+      setAiOpen(false)
+    }
+  }
 
   // Bubble-menu button on the dark floating pill.
   const bbtn = (active: boolean) => cn(
@@ -262,9 +297,48 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={bbtn(editor.isActive('blockquote'))} title="Cita">
           <Quote className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={openLinkInput} className={bbtn(editor.isActive('link'))} title="Enllaç (Ctrl/⌘+K)">
+        <button type="button" onClick={openLinkInput} className={bbtn(editor.isActive('link'))} title="Enllaç">
           {editor.isActive('link') ? <Link2Off className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
         </button>
+
+        {onAiRewrite && (
+          <>
+            <div className="w-px h-5 bg-white/15 mx-0.5" />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setAiOpen(o => !o)}
+                className={cn(
+                  'cursor-pointer flex items-center justify-center gap-1 h-8 px-2 rounded-md transition-colors',
+                  aiOpen || aiMode ? 'bg-accent text-on-accent' : 'text-white/70 hover:bg-white/15 hover:text-white',
+                )}
+                title="Reescriu la selecció amb IA"
+              >
+                {aiMode ? <KnotSpinner className="w-3.5 h-3.5" /> : <Wand2 className="w-3.5 h-3.5" />}
+                <span className="text-xs font-semibold">IA</span>
+              </button>
+              {aiOpen && !aiMode && (
+                <div className="absolute top-full right-0 mt-1.5 w-44 rounded-xl bg-text p-1 shadow-pop ring-1 ring-white/10">
+                  {([
+                    { mode: 'improve', label: 'Millora', icon: <Sparkles className="w-3.5 h-3.5" /> },
+                    { mode: 'fix', label: 'Corregeix', icon: <SpellCheck className="w-3.5 h-3.5" /> },
+                    { mode: 'shorten', label: 'Escurça', icon: <Minimize2 className="w-3.5 h-3.5" /> },
+                    { mode: 'expand', label: 'Amplia', icon: <Maximize2 className="w-3.5 h-3.5" /> },
+                  ] as const).map(o => (
+                    <button
+                      key={o.mode}
+                      type="button"
+                      onClick={() => { void runAi(o.mode) }}
+                      className="cursor-pointer flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-white/80 hover:bg-white/15 hover:text-white transition-colors"
+                    >
+                      <span className="text-white/60">{o.icon}</span> {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </BubbleMenu>
 
       {/* Floating insert menu on empty paragraphs */}

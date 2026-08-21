@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale } from '@/lib/i18n/config'
 import { translateFieldsWithClaude, type TranslatableFields } from '@/lib/i18n/translate'
 import { analyzeWriting, type WritingAnalysis } from '@/lib/writing/coach'
+import { rewriteSelection, type RewriteMode } from '@/lib/writing/rewrite'
 import { harvestSiteBrief, generateArticle, sanitizeHtml, type GeneratedArticle } from '@/lib/writing/generate'
 
 type ActionResult = { error?: string }
@@ -307,6 +308,11 @@ export async function updatePost(
   postId: string,
   siteId: string,
   data: PostData,
+  // Autosave hot-path hints: a body-only save keeps every slug + list-visible
+  // field identical, so the editor sets these false to skip the cross-locale slug
+  // query and the dashboard-cache revalidation. Default true → full path for any
+  // other caller.
+  opts: { checkSlug?: boolean; revalidateList?: boolean } = {},
 ): Promise<ActionResult> {
   try {
     const admin = await assertSiteAccess(siteId)
@@ -316,8 +322,11 @@ export async function updatePost(
     const slug = data.slug?.trim() ? data.slug.trim() : generateSlug(trimmed)
 
     // Cross-locale uniqueness — same rules as createPost, excluding this post.
-    const conflict = await findSlugConflict(admin, siteId, postId, collectPostSlugs(data, slug))
-    if (conflict) return { error: `El slug «${conflict}» ja existeix en un altre article d'aquest lloc.` }
+    // Skipped when the caller guarantees no slug changed (body-only autosave).
+    if (opts.checkSlug !== false) {
+      const conflict = await findSlugConflict(admin, siteId, postId, collectPostSlugs(data, slug))
+      if (conflict) return { error: `El slug «${conflict}» ja existeix en un altre article d'aquest lloc.` }
+    }
 
     const baseRow = {
       title: trimmed,
@@ -346,9 +355,15 @@ export async function updatePost(
       return { error: error.message }
     }
 
-    revalidatePath(`/dashboard/sites/${siteId}`)
+    // The public render is force-dynamic (reads the DB per request), so edits show
+    // immediately; revalidate only clears any data-cache entry keyed to it.
     revalidateRender(siteId)
-    revalidatePath(`/dashboard/sites/${siteId}/posts/${postId}/edit`)
+    // Only bust the dashboard/article-list cache when a list-visible field actually
+    // changed. A body-only autosave used to invalidate the whole dashboard route on
+    // every keystroke burst — that's why nothing stayed cached when you navigated back.
+    if (opts.revalidateList !== false) {
+      revalidatePath(`/dashboard/sites/${siteId}`)
+    }
     return {}
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -609,6 +624,32 @@ export async function analyzeArticleWriting(
     return { result }
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Error analitzant l'article" }
+  }
+}
+
+/**
+ * Inline AI rewrite for a text selection in the editor (the "✦ IA" bubble-menu
+ * action): improve / shorten / expand / fix a passage in place. Premium-gated to
+ * the same tier as translate / coach — it's a paid Anthropic call. The editor
+ * reinserts the returned text over the selection.
+ */
+export async function rewriteArticleSelection(
+  siteId: string,
+  locale: string,
+  text: string,
+  mode: RewriteMode,
+): Promise<ActionResult & { result?: string }> {
+  try {
+    const { isPremium } = await assertPremiumAccess(siteId)
+    if (!isPremium) {
+      return { error: 'La reescriptura amb IA és una funció Premium.' }
+    }
+    const clean = (text ?? '').trim()
+    if (!clean) return { error: 'Selecciona primer un fragment de text' }
+    const result = await rewriteSelection({ text: clean, locale: normalizeLocale(locale), mode })
+    return { result }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error reescrivint el text' }
   }
 }
 

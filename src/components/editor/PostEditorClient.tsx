@@ -17,9 +17,13 @@ import {
   User, FileText, Globe, CalendarDays, Settings2, Search, Target,
   CheckCircle2, AlertCircle, ExternalLink, Sparkles, Plus, Crown,
   RefreshCw, PanelRight, Bot, Languages, Upload,
+  Heading1, Heading2, Heading3, List, ListOrdered, Quote, Info, Images, Columns2, Minus, Type,
 } from 'lucide-react'
+import type { Editor } from '@tiptap/core'
 import { uploadImage } from '@/lib/upload'
-import { createPost, updatePost, translateArticle, analyzeArticleWriting, generateSeoArticle, type PostData, type LocalizedContent } from '@/lib/actions/posts'
+import { createPost, updatePost, translateArticle, analyzeArticleWriting, generateSeoArticle, rewriteArticleSelection, type PostData, type LocalizedContent } from '@/lib/actions/posts'
+import type { RewriteMode } from '@/lib/writing/rewrite'
+import CommandPalette, { type Command } from '@/components/editor/CommandPalette'
 import type { WritingAnalysis } from '@/lib/writing/coach'
 import { addSiteLocale } from '@/lib/actions/locales'
 import { LOCALES, DEFAULT_LOCALE, LOCALE_META, normalizeLocale, type Locale } from '@/lib/i18n/config'
@@ -38,6 +42,12 @@ const TipTapEditor = lazy(() => import('./TipTapEditor'))
 
 // Background autosave debounce — how long after the last edit we persist.
 const AUTOSAVE_MS = 900
+
+// How long after the last keystroke we flush the live body from its ref into
+// React state. Keeps continuous typing render-free (no per-keystroke re-render /
+// re-serialize of the whole document); the commit then feeds autosave + the
+// SEO/AI derivations.
+const BODY_COMMIT_MS = 250
 
 // Debounce so SEO analysis only runs when typing pauses (not on every keystroke).
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -257,6 +267,17 @@ function buildLlmsExcerpt(input: { title: string; description: string; contentHt
   ].join('\n')
 }
 
+// Compact signatures of the fields that gate server-side work on save: the
+// article-list cache (title/slug/image/published/categories) and every slug
+// (flat + i18n). A body-only autosave leaves both unchanged, letting runSave tell
+// the server to skip the slug-conflict query + the dashboard revalidation.
+function listSignature(d: PostData): string {
+  return JSON.stringify([d.title, d.slug ?? '', d.featured_image ?? '', d.is_published ?? false, d.categories ?? []])
+}
+function slugSignature(d: PostData): string {
+  return JSON.stringify([d.slug ?? '', ...Object.entries(d.i18n ?? {}).map(([l, v]) => `${l}:${v?.slug ?? ''}`)])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PostEditorClient({ siteId, siteName, post, siteDefaultLocale, canTranslate = false }: Props) {
@@ -312,9 +333,43 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   // render-time sync pattern below whenever the user switches tabs.
   const [dismissedFor, setDismissedFor] = useState<Locale | null>(null)
 
-  const pickLocale = useCallback((loc: Locale) => {
-    setActiveLocale(loc)
+  // ── Body input: ref-first, debounced state commit ─────────────────────────
+  // TipTap fires onChange per keystroke. Writing that straight into `localeData`
+  // re-rendered this whole (large) component AND re-serialized the entire document
+  // on every keystroke — the root cause of the laggy feel. Instead we stash the
+  // live HTML in a ref (O(1), no render) and flush it to state on a short settle
+  // debounce; that debounced commit is what drives autosave + the SEO/AI
+  // derivations. The ref carries the locale it was typed in, so switching tabs
+  // before the flush still commits to the correct language.
+  const liveBodyRef = useRef<{ locale: Locale; html: string } | null>(null)
+  const bodyCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const commitBody = useCallback(() => {
+    if (bodyCommitTimer.current) { clearTimeout(bodyCommitTimer.current); bodyCommitTimer.current = null }
+    const pending = liveBodyRef.current
+    liveBodyRef.current = null
+    if (!pending) return
+    setLocaleData(prev =>
+      prev[pending.locale].contentHtml === pending.html
+        ? prev
+        : { ...prev, [pending.locale]: { ...prev[pending.locale], contentHtml: pending.html } },
+    )
   }, [])
+
+  // A programmatic body write (AI generate / translate / apply suggestion /
+  // language relabel) voids any not-yet-committed keystroke edit so a stale ref
+  // can't clobber the value we just set.
+  const clearPendingBody = useCallback(() => {
+    if (bodyCommitTimer.current) { clearTimeout(bodyCommitTimer.current); bodyCommitTimer.current = null }
+    liveBodyRef.current = null
+  }, [])
+
+  const pickLocale = useCallback((loc: Locale) => {
+    // Flush the current tab's pending body BEFORE switching, so a fast tab change
+    // (or typing in the new tab within the debounce window) can't drop it.
+    commitBody()
+    setActiveLocale(loc)
+  }, [commitBody])
 
   // The query is reset by the toggle handler itself, so this effect only wires
   // the external listeners (focus, outside-click, Escape) while the menu is open.
@@ -361,6 +416,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   // flat columns stay populated. Destructive removals confirm first.
   const removeLanguage = async (loc: Locale) => {
     if (shownLocales.length <= 1) return
+    clearPendingBody()
     const f = localeData[loc]
     const hasContent = !!(f.title.trim() || f.contentHtml.trim() || f.excerpt.trim())
     if (hasContent) {
@@ -476,6 +532,8 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
         return
       }
       const a = res.result
+      // The generated body replaces the active locale — void any uncommitted keystrokes.
+      clearPendingBody()
       setLocaleData(prev => ({
         ...prev,
         [target]: {
@@ -509,9 +567,12 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   // over the HTML risks hitting tag attributes / class names; instead we walk
   // text-nodes via a DOMParser fallback to a guarded string replace).
   const applyWritingSuggestion = (before: string, after: string) => {
-    const html = cur.contentHtml
+    // Operate on the freshest text (live ref if a keystroke hasn't committed yet),
+    // then void the pending edit so it can't overwrite the suggestion we apply.
+    const html = liveBodyRef.current?.locale === activeLocale ? liveBodyRef.current.html : cur.contentHtml
     const trimmedBefore = before.trim()
     if (!trimmedBefore) return
+    clearPendingBody()
     // Fast path: an exact substring match in the HTML. Skip if `before` looks
     // like it could appear in a tag (contains < or >).
     if (!/[<>]/.test(trimmedBefore) && html.includes(trimmedBefore)) {
@@ -549,8 +610,10 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   }
 
   const handleContentChange = useCallback((html: string) => {
-    setLocaleData(prev => ({ ...prev, [activeLocale]: { ...prev[activeLocale], contentHtml: html } }))
-  }, [activeLocale])
+    liveBodyRef.current = { locale: activeLocale, html }
+    if (bodyCommitTimer.current) clearTimeout(bodyCommitTimer.current)
+    bodyCommitTimer.current = setTimeout(commitBody, BODY_COMMIT_MS)
+  }, [activeLocale, commitBody])
 
   const localeHasContent = (loc: Locale) => {
     const f = localeData[loc]
@@ -634,6 +697,10 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     // updates batch into one commit, and the re-run path null-detects, so it
     // cannot loop.
     const from = defaultLocale
+    // A relabel moves the base bucket's content to `target`; void any uncommitted
+    // keystroke so its late commit can't refill the now-emptied base bucket.
+    if (bodyCommitTimer.current) { clearTimeout(bodyCommitTimer.current); bodyCommitTimer.current = null }
+    liveBodyRef.current = null
     // Stash the live caret: the relabel changes the editor `key`, and the
     // remounted (content-identical) instance restores it in onCreate — the
     // switch is invisible to the writer.
@@ -703,6 +770,8 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
         return
       }
       const r = res.result
+      // The translated body replaces the active locale — void any uncommitted keystrokes.
+      clearPendingBody()
       setLocaleData(prev => {
         const existing = prev[target]
         return {
@@ -729,17 +798,24 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     }
   }
 
-  const buildData = (): PostData => {
+  const buildData = (bodyOverride?: { locale: Locale; html: string } | null): PostData => {
+    // Optionally merge a live (uncommitted) body edit over committed state, so a
+    // save triggered before the debounce flush (manual save, unmount) still
+    // captures the very latest text. Callers read the live ref in an event handler
+    // / effect and pass it in — we never read a ref during render (purity rule).
+    const bodyFor = (loc: Locale): string =>
+      bodyOverride && bodyOverride.locale === loc ? bodyOverride.html : localeData[loc].contentHtml
     const dl = localeData[defaultLocale]
     const i18n: Record<string, LocalizedContent> = {}
     for (const loc of LOCALES) {
       if (loc === defaultLocale) continue
       const f = localeData[loc]
-      if (f.title.trim() || f.contentHtml.trim() || f.excerpt.trim()) {
+      const body = bodyFor(loc)
+      if (f.title.trim() || body.trim() || f.excerpt.trim()) {
         i18n[loc] = {
           title: f.title,
           slug: f.slug || undefined,
-          content: { html: f.contentHtml },
+          content: { html: body },
           excerpt: f.excerpt || undefined,
           seo_title: f.seoTitle || undefined,
           seo_description: f.seoDescription || undefined,
@@ -749,7 +825,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     return {
       title: dl.title,
       slug: dl.slug,
-      content: { html: dl.contentHtml },
+      content: { html: bodyFor(defaultLocale) },
       excerpt: dl.excerpt || undefined,
       featured_image: featuredImage || undefined,
       categories,
@@ -776,6 +852,11 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   // create duplicates or drop the trailing change.
   const serialized = JSON.stringify(buildData())
   const lastSavedRef = useRef(serialized)
+  // Signatures of the last successfully-persisted slug + list-visible fields, so a
+  // plain body autosave can skip the slug-conflict query and dashboard revalidation
+  // server-side. Seeded null → the first save always runs the full path.
+  const lastSlugSigRef = useRef<string | null>(null)
+  const lastListSigRef = useRef<string | null>(null)
   // `latestRef` always mirrors the newest serialized document; it's updated inside
   // the effect below (never during render). `currentPostIdRef` is updated inside
   // runSave after a create (and re-initialised on the post-create remount).
@@ -794,9 +875,23 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
         if (!data.title?.trim()) break // a title is required before we persist
         setSaveState('saving')
         const pid = currentPostIdRef.current
-        const result: { error?: string; id?: string } = pid
-          ? await updatePost(pid, siteId, data)
-          : await createPost(siteId, data)
+        let result: { error?: string; id?: string }
+        if (pid) {
+          // A body-only autosave leaves the list-visible fields and every slug
+          // untouched, so we tell the server to skip the cross-locale slug query
+          // and the dashboard-cache revalidation — the expensive parts that used
+          // to fire on every keystroke burst.
+          const listSig = listSignature(data)
+          const slugSig = slugSignature(data)
+          result = await updatePost(pid, siteId, data, {
+            checkSlug: lastSlugSigRef.current === null || slugSig !== lastSlugSigRef.current,
+            revalidateList: lastListSigRef.current === null || listSig !== lastListSigRef.current,
+          })
+          if (!result.error) { lastSlugSigRef.current = slugSig; lastListSigRef.current = listSig }
+        } else {
+          result = await createPost(siteId, data)
+          if (!result.error) { lastSlugSigRef.current = slugSignature(data); lastListSigRef.current = listSignature(data) }
+        }
         if (result.error) { setSaveState('error'); return }
         lastSavedRef.current = payload
         if (!pid && result.id) {
@@ -824,6 +919,21 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     return () => clearTimeout(handle)
   }, [serialized, localeData, defaultLocale, runSave])
 
+  // Flush any uncommitted keystrokes to a save on unmount (navigating away) so the
+  // last edits inside the debounce window are never dropped. We keep a flush
+  // closure fresh via an effect (so we never touch refs during render); the
+  // unmount-only effect below runs it.
+  const flushOnExitRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    flushOnExitRef.current = () => {
+      const pending = liveBodyRef.current
+      if (!pending) return
+      latestRef.current = JSON.stringify(buildData(pending))
+      void runSave()
+    }
+  })
+  useEffect(() => () => flushOnExitRef.current(), [])
+
   // Reassurance affordance: clicking the status pill flushes a save immediately.
   // A missing default-locale title is the only hard requirement, surfaced inline.
   const forceSave = () => {
@@ -834,8 +944,93 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
       return
     }
     setError(null)
+    // Capture uncommitted keystrokes NOW (reading the ref here is fine — event
+    // handler, not render), then commit the ref into state for the UI.
+    latestRef.current = JSON.stringify(buildData(liveBodyRef.current))
+    commitBody()
     void runSave()
   }
+
+  // ── Editor instance handle · command palette · inline AI · live stats ──────
+  // The command palette drives the live TipTap instance, so we hold onto it (set
+  // on mount / cleared on remount by TipTapEditor's onEditorReady).
+  const editorInstanceRef = useRef<Editor | null>(null)
+  const onEditorReady = useCallback((ed: Editor | null) => { editorInstanceRef.current = ed }, [])
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+      }
+    }
+    // Capture so we win the key before ProseMirror / other handlers.
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true })
+  }, [])
+
+  // Inline AI rewrite of a selection (the "✦ IA" bubble action). Premium-gated —
+  // free clients get the upsell modal and a null result (no edit applied).
+  const onAiRewrite = useCallback(async (text: string, mode: RewriteMode): Promise<string | null> => {
+    if (!canTranslate) { setPremiumOpen(true); return null }
+    try {
+      const res = await rewriteArticleSelection(siteId, activeLocale, text, mode)
+      if (res.error || !res.result) { toast(res.error ?? 'No s’ha pogut reescriure', 'error'); return null }
+      return res.result
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error reescrivint el text', 'error')
+      return null
+    }
+  }, [canTranslate, siteId, activeLocale, toast])
+
+  // Open the live public render for the active locale — shared by the top-bar
+  // "Veure" link and the command palette.
+  const openLivePreview = useCallback(() => {
+    const localizedSlug = cur.slug?.trim()
+    const fallbackSlug = localeData[defaultLocale]?.slug?.trim() || ''
+    const slug = localizedSlug || fallbackSlug
+    const path = isNew || !slug ? `/render/${siteId}` : `/render/${siteId}/${slug}`
+    const needsLang = (!localizedSlug || isNew) && activeLocale !== defaultLocale
+    const qs = `v=${Date.now()}${needsLang ? `&lang=${activeLocale}` : ''}`
+    window.open(`${path}?${qs}`, '_blank', 'noopener,noreferrer')
+  }, [cur.slug, localeData, defaultLocale, isNew, siteId, activeLocale])
+
+  const openDrawerTab = useCallback((tab: DrawerTab) => { setDrawerTab(tab); setDrawerOpen(true) }, [])
+
+  // Live document stats (word count + reading time) — a standard modern-editor
+  // affordance. Driven by the already-debounced content so it's cheap.
+  const docStats = useMemo(() => {
+    const plain = debouncedContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    const words = plain ? plain.split(/\s+/).length : 0
+    return { words, minutes: Math.max(1, Math.round(words / 200)) }
+  }, [debouncedContent])
+
+  // Every high-value action, reachable from ⌘K. Cheap to rebuild each render; the
+  // palette only iterates it while open.
+  const ed = () => editorInstanceRef.current
+  const commands: Command[] = [
+    { id: 'h1', section: 'Format', label: 'Títol gran', keywords: 'heading h1 encapçalament', icon: <Heading1 className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleHeading({ level: 1 }).run() },
+    { id: 'h2', section: 'Format', label: 'Títol', keywords: 'heading h2', icon: <Heading2 className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleHeading({ level: 2 }).run() },
+    { id: 'h3', section: 'Format', label: 'Subtítol', keywords: 'heading h3', icon: <Heading3 className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleHeading({ level: 3 }).run() },
+    { id: 'p', section: 'Format', label: 'Text normal', keywords: 'paragraph paràgraf', icon: <Type className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setParagraph().run() },
+    { id: 'ul', section: 'Insereix', label: 'Llista', keywords: 'bullet vinyetes', icon: <List className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleBulletList().run() },
+    { id: 'ol', section: 'Insereix', label: 'Llista numerada', keywords: 'ordered numbers', icon: <ListOrdered className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleOrderedList().run() },
+    { id: 'quote', section: 'Insereix', label: 'Cita', keywords: 'blockquote citació', icon: <Quote className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().toggleBlockquote().run() },
+    { id: 'callout', section: 'Insereix', label: 'Targeta destacada', keywords: 'callout info destacat', icon: <Info className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setCallout({ variant: 'info' }).run() },
+    { id: 'gallery', section: 'Insereix', label: 'Galeria', keywords: 'images imatges', icon: <Images className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setGallery().run() },
+    { id: 'columns', section: 'Insereix', label: '2 columnes', keywords: 'columns columnes', icon: <Columns2 className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setColumns().run() },
+    { id: 'hr', section: 'Insereix', label: 'Separador', keywords: 'divider hr línia', icon: <Minus className="h-3.5 w-3.5" />, run: () => ed()?.chain().focus().setHorizontalRule().run() },
+    { id: 'publish', section: 'Article', label: isPublished ? 'Torna a esborrany' : 'Publica', keywords: 'publish draft estat esborrany', icon: isPublished ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />, run: () => setIsPublished(!isPublished) },
+    { id: 'view', section: 'Article', label: 'Veure en directe', keywords: 'preview render vista', icon: <ExternalLink className="h-3.5 w-3.5" />, run: openLivePreview },
+    { id: 'save', section: 'Article', label: 'Desa ara', keywords: 'save desar', icon: <Save className="h-3.5 w-3.5" />, run: forceSave },
+    { id: 'tab-settings', section: 'Panells', label: 'Obre Ajustos', keywords: 'settings contingut', icon: <Settings2 className="h-3.5 w-3.5" />, run: () => openDrawerTab('settings') },
+    { id: 'tab-seo', section: 'Panells', label: 'Obre SEO', keywords: 'seo cerca', icon: <Search className="h-3.5 w-3.5" />, run: () => openDrawerTab('seo') },
+    { id: 'tab-ai', section: 'Panells', label: 'Obre IA', keywords: 'ai assistent', icon: <Bot className="h-3.5 w-3.5" />, run: () => openDrawerTab('ai') },
+    { id: 'gen', section: 'IA', label: 'Genera un article SEO', keywords: 'magic generate generar', icon: <Sparkles className="h-3.5 w-3.5" />, run: () => { void handleGenerateArticle() } },
+    { id: 'coach', section: 'IA', label: 'Coach de redacció', keywords: 'writing analitza', icon: <Bot className="h-3.5 w-3.5" />, run: () => { openDrawerTab('ai'); void runWritingCoach() } },
+    { id: 'translate', section: 'IA', label: `Tradueix a ${LOCALE_META[activeLocale].native}`, keywords: 'translate traducció', icon: <Languages className="h-3.5 w-3.5" />, disabled: isDefault, run: () => { void handleTranslate() } },
+  ]
 
   const headerTitle = localeData[defaultLocale].title
   const previewTitle = (cur.seoTitle || cur.title || 'Títol del teu article').slice(0, 60)
@@ -991,16 +1186,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
 
             <a
               href="#"
-              onClick={(e) => {
-                e.preventDefault()
-                const localizedSlug = cur.slug?.trim()
-                const fallbackSlug = localeData[defaultLocale]?.slug?.trim() || ''
-                const slug = localizedSlug || fallbackSlug
-                const path = isNew || !slug ? `/render/${siteId}` : `/render/${siteId}/${slug}`
-                const needsLang = !localizedSlug && activeLocale !== defaultLocale
-                const qs = `v=${Date.now()}${needsLang ? `&lang=${activeLocale}` : ''}${isNew && activeLocale !== defaultLocale ? `&lang=${activeLocale}` : ''}`
-                window.open(`${path}?${qs}`, '_blank', 'noopener,noreferrer')
-              }}
+              onClick={(e) => { e.preventDefault(); openLivePreview() }}
               title={`Veure en ${LOCALE_META[activeLocale].native}`}
               className="cursor-pointer flex items-center gap-1.5 h-8 px-2.5 text-xs font-semibold text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors"
             >
@@ -1122,6 +1308,8 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                     siteId={siteId}
                     selectionRef={editorSelectionRef}
                     restoreCaretRef={restoreCaretRef}
+                    onEditorReady={onEditorReady}
+                    onAiRewrite={onAiRewrite}
                   />
                 </Suspense>
               </ErrorBoundary>
@@ -1131,7 +1319,32 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
 
         {/* ── DRAWER ────────────────────────────────────────────────────── */}
         {drawerOpen && (
-          <aside className="hidden lg:flex w-[380px] shrink-0 border-l border-border bg-bg-elevated flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+          <>
+            {/* Mobile backdrop — tap outside the sheet to dismiss it. */}
+            <div
+              className="lg:hidden fixed inset-0 z-40 bg-black/40 animate-in fade-in duration-150"
+              onClick={() => setDrawerOpen(false)}
+              aria-hidden
+            />
+            <aside className={cn(
+              'z-50 flex flex-col bg-bg-elevated overflow-hidden animate-in fade-in slide-in-from-bottom duration-200',
+              // Mobile: a bottom sheet so Ajustos / SEO / IA + publish are reachable on a phone.
+              'fixed inset-x-0 bottom-0 top-20 rounded-t-2xl border-t border-border shadow-pop',
+              // Desktop: the docked right panel, back in flow.
+              'lg:static lg:inset-auto lg:top-auto lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none lg:w-[380px] lg:shrink-0',
+            )}>
+              {/* Mobile grabber + close (the top-bar toggle also closes it). */}
+              <div className="lg:hidden relative flex items-center justify-center px-4 pt-2.5 pb-1">
+                <span className="h-1 w-10 rounded-full bg-border-strong" />
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(false)}
+                  aria-label="Tancar panell"
+                  className="absolute right-3 top-1.5 flex h-8 w-8 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-surface-hover hover:text-text"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             {/* Drawer tabs — prominent card-style switcher (not a faint pill row), so
                 Ajustos / SEO / IA read as real sections, not afterthoughts. */}
             <div className="shrink-0 border-b border-border p-3">
@@ -1222,8 +1435,27 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                 />
               )}
             </div>
-          </aside>
+            </aside>
+          </>
         )}
+      </div>
+
+      {/* Command palette (⌘K) + live document stats */}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} commands={commands} />}
+      <div className="pointer-events-none absolute bottom-0 left-0 z-20 flex items-center gap-2 px-4 py-2.5 text-[11px] font-medium text-subtle">
+        <span>{docStats.words} {docStats.words === 1 ? 'paraula' : 'paraules'}</span>
+        <span className="text-border-strong">·</span>
+        <span>~{docStats.minutes} min de lectura</span>
+        <span className="hidden sm:inline text-border-strong">·</span>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="pointer-events-auto hidden sm:inline-flex items-center gap-1 rounded font-semibold text-subtle transition-colors hover:text-text"
+          title="Obre la paleta d'ordres"
+        >
+          <kbd className="rounded bg-surface-subtle px-1 py-0.5 text-[10px]">⌘K</kbd>
+          ordres
+        </button>
       </div>
 
       {/* Premium upsell */}
