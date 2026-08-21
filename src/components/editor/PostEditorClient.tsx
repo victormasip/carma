@@ -459,10 +459,11 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   const [authorName, setAuthorName] = useState(post?.author_name ?? '')
   const [isPublished, setIsPublished] = useState(post?.is_published ?? false)
   const [date, setDate] = useState(post?.created_at ? post.created_at.slice(0, 10) : '')
-  const [drawerOpen, setDrawerOpen] = useState(true)
-  // The writing canvas is ALWAYS the primary view; the drawer is a secondary
-  // tool. It opens on Ajustos (content/settings) for both new and existing posts
-  // — never on AI, which is an assistive tool the user reaches for deliberately.
+  // Canvas-first: the writing surface is the whole view by default. The
+  // Ajustos/SEO/IA drawer is summoned on demand (top-bar toggle or ⌘K → "Obre …").
+  // A closed default also stops the mobile bottom sheet from covering the screen
+  // on load.
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('settings')
   const [error, setError] = useState<string | null>(null)
   // Autosave status — drives the top-bar indicator that replaced the Save button.
@@ -1032,6 +1033,23 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     { id: 'translate', section: 'IA', label: `Tradueix a ${LOCALE_META[activeLocale].native}`, keywords: 'translate traducció', icon: <Languages className="h-3.5 w-3.5" />, disabled: isDefault, run: () => { void handleTranslate() } },
   ]
 
+  // Cover image, edited directly in the canvas (Ghost/Notion style). Shares the
+  // `featuredImage` state with the drawer's field.
+  const coverFileRef = useRef<HTMLInputElement>(null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const uploadCover = async (file: File | undefined) => {
+    if (!file) return
+    setUploadingCover(true)
+    try {
+      const url = await uploadImage(file, siteId)
+      setFeaturedImage(url)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No s’ha pogut pujar la imatge', 'error')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
   const headerTitle = localeData[defaultLocale].title
   const previewTitle = (cur.seoTitle || cur.title || 'Títol del teu article').slice(0, 60)
   const previewDesc = (cur.seoDescription || cur.excerpt || 'Afegeix una meta descripció per controlar com es mostra aquest article als resultats de cerca.').slice(0, 160)
@@ -1174,15 +1192,23 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
             )}
           </div>
 
-          {/* Right: state pill + preview + drawer toggle + save */}
+          {/* Right: publish CTA + preview + drawer toggle + save */}
           <div className="flex items-center gap-1.5 shrink-0 flex-1 justify-end">
-            <span className={cn(
-              'hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold',
-              isPublished ? 'bg-success-soft text-success' : 'bg-surface-hover text-muted',
-            )}>
-              {isPublished ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              {isPublished ? 'Publicat' : 'Esborrany'}
-            </span>
+            {/* Primary publish action — a real button, not a passive pill. */}
+            <button
+              type="button"
+              onClick={() => setIsPublished(v => !v)}
+              title={isPublished ? 'Publicat · clica per tornar a esborrany' : 'Publica aquest article'}
+              className={cn(
+                'cursor-pointer flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors',
+                isPublished
+                  ? 'bg-success-soft text-success hover:bg-success/15'
+                  : 'bg-accent text-on-accent shadow-card hover:bg-accent-hover',
+              )}
+            >
+              {isPublished ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{isPublished ? 'Publicat' : 'Publica'}</span>
+            </button>
 
             <a
               href="#"
@@ -1227,6 +1253,48 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
               </div>
             )}
 
+            {/* Cover image — the article's visual anchor, at the top of the canvas. */}
+            {featuredImage ? (
+              <div className="group relative mb-6 aspect-[2.5/1] overflow-hidden rounded-2xl bg-surface-hover">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={featuredImage} alt="" className="h-full w-full object-cover" />
+                <div className="absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => coverFileRef.current?.click()}
+                    disabled={uploadingCover}
+                    className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition-colors hover:bg-black/75 disabled:opacity-60"
+                  >
+                    {uploadingCover ? 'Pujant…' : 'Canviar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeaturedImage('')}
+                    className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition-colors hover:bg-black/75"
+                  >
+                    Treure
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverFileRef.current?.click()}
+                disabled={uploadingCover}
+                className="mb-4 -ml-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-subtle transition-colors hover:bg-surface-hover hover:text-muted disabled:opacity-60"
+              >
+                {uploadingCover ? <KnotSpinner className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                Afegeix una portada
+              </button>
+            )}
+            <input
+              ref={coverFileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={e => { void uploadCover(e.target.files?.[0]); e.target.value = '' }}
+            />
+
             {/* Title — borderless, oversized, prosey */}
             <input
               type="text"
@@ -1237,24 +1305,26 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
               style={{ lineHeight: 1.1 }}
             />
 
-            {/* Slug — minimal monospace hint under the title; pen icon to manually edit */}
+            {/* Slug — editable inline under the title (click to edit; blends into the hint). */}
             {cur.title.trim() && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-subtle">
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-subtle">
                 <Globe className="w-3 h-3 shrink-0" />
-                <span className="font-mono truncate">{previewHost}/<span className="text-muted">{cur.slug || 'article'}</span></span>
+                <span className="font-mono shrink-0">{previewHost}/</span>
                 <input
                   type="text"
                   value={cur.slug}
                   onChange={e => patchLocale(activeLocale, { slugTouched: true, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
-                  className="sr-only"
+                  placeholder="article"
                   aria-label="Slug de l'article"
+                  spellCheck={false}
+                  className="min-w-0 flex-1 -mx-1 rounded px-1 bg-transparent font-mono text-muted outline-none transition-colors hover:bg-surface-hover focus:bg-surface-hover focus:text-text placeholder:text-subtle"
                 />
                 {cur.slugTouched && (
                   <button
                     type="button"
                     onClick={regenerateSlug}
                     title="Regenerar des del títol"
-                    className="cursor-pointer text-subtle hover:text-accent transition-colors"
+                    className="cursor-pointer shrink-0 text-subtle hover:text-accent transition-colors"
                   >
                     <RefreshCw className="w-3 h-3" />
                   </button>
