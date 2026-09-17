@@ -51,7 +51,7 @@ const aperture: BlogTemplate = {
   id: 'aperture',
   name: 'Aperture',
   tagline: 'Estudi minimalista: molt aire, tipografia precisa i un sol accent. Modern i atemporal.',
-  modules: ['search', 'readingProgress'],
+  modules: ['search', 'pullQuote', 'readingProgress', 'tableOfContents', 'prevNext', 'authorCard'],
   sectionTitle: 'Journal',
   fontLinks: [GF('Inter+Tight:wght@400;500;600;700;800'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -105,7 +105,7 @@ const editorial: BlogTemplate = {
   id: 'editorial',
   name: 'Editorial',
   tagline: 'Revista de luxe: serif de display, paper càlid i un masthead elegant. Per a publicacions amb veu.',
-  modules: ['newsletter', 'relatedPosts'],
+  modules: ['featuredHero', 'categoryFilters', 'pullQuote', 'keyTakeaways', 'authorCard', 'relatedPosts', 'newsletter'],
   sectionTitle: 'Actualitat',
   fontLinks: [GF('Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700'), GF('Inter:wght@400;500;600;700')],
   tokens: {
@@ -155,7 +155,7 @@ const beacon: BlogTemplate = {
   id: 'beacon',
   name: 'Beacon',
   tagline: 'Magazine atrevit: tipografia potent, una barra d’accent vibrant i graella de 3 columnes. Energètic.',
-  modules: ['search', 'categoryFilters'],
+  modules: ['featuredHero', 'categoryFilters', 'newsletter', 'whatsappShare', 'backToTop', 'socialShare'],
   sectionTitle: 'El blog',
   fontLinks: [GF('Archivo:wght@500;600;700;800;900'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -213,7 +213,7 @@ const noir: BlogTemplate = {
   id: 'noir',
   name: 'Noir',
   tagline: 'Mode fosc premium: negre profund, accent neó i tipografia geomètrica. Atrevit i tecnològic.',
-  modules: ['search', 'socialShare'],
+  modules: ['darkModeToggle', 'pullQuote', 'readingProgress', 'featuredHero', 'readNext', 'tableOfContents'],
   sectionTitle: 'Latest',
   fontLinks: [GF('Space+Grotesk:wght@500;600;700'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -267,7 +267,7 @@ const terra: BlogTemplate = {
   id: 'terra',
   name: 'Terra',
   tagline: 'Editorial càlid per a lifestyle i benestar: tons sorra, serif suau i molta calma. Acollidor.',
-  modules: ['newsletter', 'socialShare'],
+  modules: ['categoryFilters', 'whatsappShare', 'authorCard', 'newsletter', 'relatedPosts', 'prevNext'],
   sectionTitle: 'Stories',
   fontLinks: [GF('Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -320,7 +320,7 @@ const carma: BlogTemplate = {
   id: 'carma',
   name: 'Carma',
   tagline: 'La nostra identitat de casa: paper càlid, daurat i Plus Jakarta Sans. Premium, net i acollidor.',
-  modules: ['search', 'relatedPosts'],
+  modules: ['search', 'featuredHero', 'relatedPosts', 'keyTakeaways', 'pullQuote', 'whatsappShare', 'readNext', 'authorCard', 'readingProgress'],
   sectionTitle: 'El blog',
   fontLinks: [GF('Plus+Jakarta+Sans:wght@400;500;600;700;800')],
   tokens: {
@@ -379,7 +379,7 @@ const pulse: BlogTemplate = {
   id: 'pulse',
   name: 'Pulse',
   tagline: 'Tech i SaaS: tipografia geomètrica, degradat violeta i una interfície nítida. Ràpid i modern.',
-  modules: ['search', 'darkModeToggle'],
+  modules: ['search', 'tableOfContents', 'readingProgress', 'keyTakeaways', 'readNext', 'darkModeToggle', 'prevNext'],
   sectionTitle: 'Changelog & blog',
   fontLinks: [GF('Space+Grotesk:wght@500;600;700'), GF('Inter:wght@400;500;600')],
   tokens: {
@@ -438,7 +438,7 @@ const atelier: BlogTemplate = {
   id: 'atelier',
   name: 'Atelier',
   tagline: 'Luxe fred: serif enorme, marfil i tinta, filets fins i majúscules espaiades. Per a marques amb aura.',
-  modules: ['newsletter', 'socialShare'],
+  modules: ['pullQuote', 'authorCard', 'featuredHero', 'relatedPosts', 'socialShare'],
   sectionTitle: 'Le Journal',
   fontLinks: [GF('Cormorant+Garamond:wght@400;500;600'), GF('Jost:wght@300;400;500;600')],
   tokens: {

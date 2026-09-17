@@ -18,7 +18,8 @@ import { parse as nhp } from 'node-html-parser'
 import { splitPageChrome } from '@/lib/scrape/pageSplit.ts'
 import { detectBlogSignature } from '@/lib/scrape/blogDetect.ts'
 import { proxyFontsInCss, extractFontFaceCss, proxyUseHref } from '@/lib/scrape/clientCss.ts'
-import { buildArticlePage, buildListingPage } from '@/lib/render/theme.ts'
+import { buildArticlePage, buildListingPage, buildFeedItems } from '@/lib/render/theme.ts'
+import { buildRssFeed, isFeedPath, xmlEscape, feedText } from '@/lib/render/feed.ts'
 
 // ── tiny test framework ───────────────────────────────────────────────────────
 let pass = 0, fail = 0
@@ -561,6 +562,124 @@ section('readable chrome — page bg = source bg (not forced-light) + contrast g
   // The deterministic, free contrast guard ships on every render.
   ok(/getComputedStyle/.test(html) && /carma-embed-host/.test(html), 'render: client-side contrast guard present')
   assertWellFormedSandwich('dark-site', html)
+}
+
+
+// 19. RSS — a feed is a PUBLIC CONTRACT. It must parse, it must be absolute, and
+//     it must not leak. Distribution is a pillar and a malformed feed is
+//     invisible: readers reject the whole document, silently, forever.
+section('rss — well-formed, absolute, summaries only')
+{
+  ok(isFeedPath(['rss.xml']), 'rss: /rss.xml is the feed')
+  ok(isFeedPath(['es', 'rss.xml']), 'rss: /es/rss.xml is the localized feed')
+  ok(!isFeedPath(['hola-mon']), 'rss: an ordinary slug is not the feed')
+  ok(!isFeedPath([]), 'rss: the bare listing is not the feed')
+
+  // Escaping is the whole difference between a feed and a 500 in someone's app.
+  ok(xmlEscape('a & b <c> "d" \'e\'') === 'a &amp; b &lt;c&gt; &quot;d&quot; &apos;e&apos;', 'rss: XML escaping covers all five entities')
+  ok(!//.test(xmlEscape('badchar')), 'rss: forbidden control characters are stripped')
+
+  // Site-relative links (the subdomain LinkCtx) must come out absolute.
+  const items = buildFeedItems([POST], 'en', { base: '', siteDefault: 'en' }, 'https://blog.example.cat')
+  ok(items.length === 1, 'rss: one item per post')
+  ok(items[0].url === 'https://blog.example.cat/hello', `rss: relative link made absolute (got ${items[0].url})`)
+  ok(items[0].id === 'p1', 'rss: guid is the stable post id, not the slug')
+
+  // The canonical engine path keeps its prefix, still absolute.
+  const canonical = buildFeedItems([POST], 'en', { base: '/render/s1', siteDefault: 'en' }, 'https://carma.cat')
+  ok(canonical[0].url === 'https://carma.cat/render/s1/hello', `rss: engine-path link absolute (got ${canonical[0].url})`)
+
+  const xml = buildRssFeed({
+    siteName: 'Dark & Stormy <Blog>',
+    siteUrl: 'https://blog.example.cat',
+    feedUrl: 'https://blog.example.cat/rss.xml',
+    description: 'A description & more',
+    locale: 'en',
+    posts: items,
+  })
+
+  ok(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'), 'rss: XML declaration first (no leading whitespace)')
+  ok(/<rss version="2\.0"/.test(xml), 'rss: RSS 2.0')
+  ok(/<atom:link href="https:\/\/blog\.example\.cat\/rss\.xml" rel="self"/.test(xml), 'rss: atom:self link present')
+  ok(/<title>Dark &amp; Stormy &lt;Blog&gt;<\/title>/.test(xml), 'rss: channel title escaped')
+  ok(/<guid isPermaLink="false">p1<\/guid>/.test(xml), 'rss: guid is not a permalink (a renamed slug must not re-notify)')
+  ok(/<dc:creator>Ada<\/dc:creator>/.test(xml), 'rss: author as dc:creator')
+  ok(/<category>News<\/category>/.test(xml), 'rss: categories emitted')
+  ok(/<pubDate>.*GMT<\/pubDate>/.test(xml), 'rss: RFC-822 dates')
+
+  // NO BODY. A full-text feed would republish paywalled content with nothing to
+  // enforce it, so <description> carries the excerpt and only the excerpt.
+  ok(!/Body with/.test(xml), 'rss: the article body is NOT in the feed')
+  ok(/<description>An excerpt<\/description>/.test(xml), 'rss: the excerpt IS')
+
+  // Nothing unescaped survived anywhere: every `&` must be an entity.
+  ok(!/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;)/.test(xml), 'rss: no raw ampersands anywhere in the document')
+
+  // A feed with no posts is still a valid document (a brand-new blog).
+  const empty = buildRssFeed({
+    siteName: 'New', siteUrl: 'https://n.test', feedUrl: 'https://n.test/rss.xml',
+    description: 'New', locale: 'ca', posts: [],
+  })
+  ok(/<channel>/.test(empty) && /<\/rss>/.test(empty), 'rss: an empty blog still emits a valid channel')
+  ok(!/<item>/.test(empty), 'rss: …with no items')
+
+  // Summaries are capped, and the cap is applied to TEXT, never mid-tag.
+  const long = feedText('<p>' + 'word '.repeat(400) + '</p>')
+  ok(long.length <= 500, `rss: summary capped (got ${long.length})`)
+  ok(!/[<>]/.test(long), 'rss: summary carries no markup')
+
+  // Autodiscovery: the HTML must point at the feed, or nothing ever finds it.
+  const page = buildListingPage(
+    { extracted_head: '', extracted_header: '', extracted_footer: '', design_tokens: {}, default_locale: 'en' },
+    'Feed', 's1', [POST], 'en',
+  )
+  ok(/rel="alternate" type="application\/rss\+xml"/.test(page), 'rss: listing advertises the feed in <head>')
+  const art = buildArticlePage(
+    { extracted_head: '', extracted_header: '', extracted_footer: '', design_tokens: {}, default_locale: 'en' },
+    'Feed', 's1', POST, 'en',
+  )
+  ok(/rel="alternate" type="application\/rss\+xml"/.test(art), 'rss: article advertises the feed too')
+}
+
+// 20. THE COMMUNITY PAIR — comments and applause render as EMPTY SHELLS. The
+//     public document is cached, so anything server-rendered here would freeze
+//     the conversation until the next publish.
+section('community modules — comments + likes ship a shell, never stale content')
+{
+  const theme = {
+    extracted_head: '', extracted_header: '', extracted_footer: '',
+    design_tokens: {}, default_locale: 'en',
+    modules: {
+      likes: { enabled: true, variant: 'clap', options: { maxPerReader: 10 } },
+      comments: { enabled: true, variant: 'threaded', options: { title: 'The conversation' } },
+    },
+  }
+  const html = buildArticlePage(theme, 'Community', 's1', POST, 'en')
+
+  ok(/data-carma-like/.test(html), 'community: the applause button renders')
+  ok(/data-max="10"/.test(html), 'community: maxPerReader reaches the button')
+  ok(/data-carma-comments-root/.test(html), 'community: the comments section renders')
+  ok(/The conversation/.test(html), 'community: the configured title is used')
+  ok(/data-carma-comment-form/.test(html), 'community: the form renders')
+  ok(/carma-mod-comments-hp/.test(html), 'community: the honeypot field is present')
+  // The list ships EMPTY — filled from /api/interactions after load.
+  // (the renderer normalises boolean attributes to `attr=""`)
+  ok(/<ol class="carma-mod-comments-list" data-carma-comments-list(?:="")?><\/ol>/.test(html), 'community: the comment list ships empty (cache-safe)')
+  ok(/\/api\/interactions/.test(html), 'community: the runtime knows where to fetch')
+  ok(/postId=/.test(html) || /POST_ID/.test(html), 'community: the runtime is post-scoped')
+  // Moderation is the default: the SECTION must not carry data-auto. (The
+  // runtime script mentions the attribute by name — match the element, not the
+  // word, or this passes on the wrong string.)
+  ok(!/data-carma-comments-root[^>]*data-auto/.test(html), 'community: requireApproval defaults on (no data-auto on the section)')
+  assertWellFormedSandwich('community', html, { expectHeader: false, expectFooter: false })
+
+  // Off by default: a blog that never asked for them ships neither.
+  const plain = buildArticlePage(
+    { extracted_head: '', extracted_header: '', extracted_footer: '', design_tokens: {}, default_locale: 'en' },
+    'Plain', 's1', POST, 'en',
+  )
+  ok(!/data-carma-like/.test(plain), 'community: no applause when the module is off')
+  ok(!/data-carma-comments-root/.test(plain), 'community: no comments when the module is off')
 }
 
 // ── summary ───────────────────────────────────────────────────────────────────

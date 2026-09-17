@@ -12,12 +12,15 @@ import { useConfirm } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { formatDate, formatNumber } from '@/lib/format'
+import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
 
 export type SiteWithCounts = {
   id: string
   name: string
   created_at: string
   logo_url?: string | null
+  /** Its public address. Without it "Veure" falls back to the engine path. */
+  subdomain?: string | null
   total: number
   published: number
   views: number
@@ -114,6 +117,7 @@ function SiteCard({
   selected: boolean
   onToggle: () => void
 }) {
+  const openBlog = useOpenBlog(site)
   return (
     <div
       className={cn(
@@ -175,7 +179,8 @@ function SiteCard({
           <PenLine className="h-3.5 w-3.5" /> Escriure
         </Link>
         <a
-          href={`/render/${site.id}`}
+          href={blogHref(site)}
+          onClick={(e) => { e.preventDefault(); openBlog() }}
           target="_blank"
           rel="noopener noreferrer"
           title="Veure el lloc públic"

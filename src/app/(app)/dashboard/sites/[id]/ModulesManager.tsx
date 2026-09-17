@@ -24,13 +24,18 @@ import {
   Search, Filter, Star, Sparkles, ArrowLeftRight, Mail, UserCircle, BookOpen,
   Lock, Megaphone, ListTree, Share2, ArrowUp, MoonStar, Puzzle, Crown,
   Monitor, FileText, LayoutList, RotateCw, SlidersHorizontal, X, Check,
+  Heart, MessagesSquare, MessageCircle, Quote, ArrowRightCircle, ListChecks,
 } from 'lucide-react'
 import {
-  MODULES, CATEGORY_META, resolveModule,
+  MODULES, CATEGORY_META, resolveModule, moduleAllowedForPlan,
   type ModuleDef, type ModuleConfig, type SiteModules, type ModuleOption,
-  type ModuleCategory, type ModuleScope,
+  type ModuleCategory, type ModuleScope, type ModuleTier,
 } from '@/lib/modules/registry'
+import { getArchetype, archetypeModulesForPlan } from '@/lib/render/archetypes'
+import ArchetypePicker from './ArchetypePicker'
+import CommentsInbox from './CommentsInbox'
 import { saveSiteModules } from '@/lib/actions/modules'
+import { useOpenBlog } from '@/lib/sites/useBlogUrl'
 import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { Modal, ModalClose } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -47,9 +52,42 @@ const SAMPLE_ARTICLE_SLUG = '__carma_demo__'
 const ICONS: Record<string, typeof Puzzle> = {
   Search, Filter, Star, Sparkles, ArrowLeftRight, Mail, UserCircle, BookOpen,
   Lock, Megaphone, ListTree, Share2, ArrowUp, MoonStar,
+  Heart, MessagesSquare, MessageCircle, Quote, ArrowRightCircle, ListChecks,
 }
 
 const CATEGORY_ORDER: ModuleCategory[] = ['discovery', 'engagement', 'reading', 'growth']
+
+// What each paid step actually buys, in the owner's words. Keyed by TIER so the
+// upsell names the plan that unlocks the module the owner just clicked —
+// telling a Premium customer to "go Premium" is how a paywall loses trust.
+const UPSELL: Record<ModuleTier, { description: string; perks: string[] }> = {
+  free: {
+    description: 'Aquest mòdul ja el tens. Si veus aquest missatge, recarrega la pàgina.',
+    perks: [],
+  },
+  premium: {
+    description: 'Aquest mòdul forma part del pla Premium: la comunitat dins del teu blog i les eines de lectura llarga.',
+    perks: [
+      'Comentaris verificats i aplaudiments',
+      'Articles relacionats amb IA',
+      'Captació de newsletter i leads',
+      'Índex de continguts, mode fosc i barra d’anuncis',
+    ],
+  },
+  gold: {
+    description: 'Aquest mòdul forma part del pla Or: el blog com a negoci, no només com a publicació.',
+    perks: [
+      'Paywall estil Substack amb desbloqueig per correu',
+      'Tot el que inclou Premium',
+      'Fins a 10 blogs',
+      '1.800 punts cada mes',
+    ],
+  },
+  agency: {
+    description: 'Aquest mòdul forma part del pla Agència.',
+    perks: ['Fins a 100 blogs', '10 editors', '6.500 punts cada mes'],
+  },
+}
 
 const SCOPE_META: Record<ModuleScope, string> = {
   listing: 'Feed',
@@ -58,18 +96,25 @@ const SCOPE_META: Record<ModuleScope, string> = {
 }
 
 export default function ModulesManager({
-  siteId, isPremium, initialModules, previewPostSlug,
+  siteId, subdomain = null, isPremium, initialModules, plan = 'free', previewPostSlug,
 }: {
   siteId: string
+  /** sites.subdomain — so "obre en gran" opens the real blog, not the engine. */
+  subdomain?: string | null
   isPremium: boolean
   initialModules: SiteModules | null
+  /** The account's real plan — which modules and archetypes it can switch on. */
+  plan?: ModuleTier
   previewPostSlug?: string
 }) {
   const { toast } = useToast()
+  const openBlog = useOpenBlog({ id: siteId, subdomain })
   const [config, setConfig] = useState<SiteModules>(initialModules ?? {})
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [savedAt, setSavedAt] = useState(0)
-  const [blocked, setBlocked] = useState(false)
+  // The TIER the owner just bumped into (null = no upsell open), so the panel
+  // can name the right plan instead of always saying "Premium".
+  const [blocked, setBlocked] = useState<ModuleTier | null>(null)
   const [previewMode, setPreviewMode] = useState<'feed' | 'article'>('feed')
   const [iframeLoading, setIframeLoading] = useState(false)
   // The module whose configuration slide-over is open (null = closed).
@@ -126,16 +171,23 @@ export default function ModulesManager({
     else if (scope === 'listing') setPreviewMode('feed')
   }
 
+  // THE gate, and the same one the server applies (`sanitizeModules`). It used
+  // to be `def.premium && !isSuperAdmin`, which locked paying customers out of
+  // everything they had paid for and showed Gold modules as available to
+  // Premium — a lock that lies in both directions. `isPremium` survives only as
+  // the superadmin escape hatch for sites with no plan on the account.
+  const allows = (def: ModuleDef) => isPremium || moduleAllowedForPlan(def, plan)
+
   const toggle = (def: ModuleDef) => {
     const cur = resolveModule(config, def.id)!
-    if (!cur.enabled && def.premium && !isPremium) { setBlocked(true); return }
+    if (!cur.enabled && !allows(def)) { setBlocked(def.tier); return }
     const turningOn = !cur.enabled
     mutate(def.id, { enabled: turningOn })
     if (turningOn) syncPreview(def.scope)
   }
 
   const openConfig = (def: ModuleDef) => {
-    if (def.premium && !isPremium) { setBlocked(true); return }
+    if (!allows(def)) { setBlocked(def.tier); return }
     setSelectedId(def.id)
     syncPreview(def.scope)
   }
@@ -146,11 +198,27 @@ export default function ModulesManager({
   )
 
   const articleSlug = previewPostSlug ?? SAMPLE_ARTICLE_SLUG
+  // The IFRAME is the one place the engine path is correct: `?preview=1` carries
+  // unsaved module state and the frame must stay SAME-ORIGIN for the Studio to
+  // read it. It is never a link the owner can copy.
   const previewSrc = previewMode === 'article'
     ? `/render/${siteId}/${encodeURIComponent(articleSlug)}?preview=1&v=${savedAt}`
     : `/render/${siteId}?preview=1&v=${savedAt}`
 
-  const openDesktop = () => window.open(`/render/${siteId}?v=${Date.now()}`, '_blank', 'noopener,noreferrer')
+  // "Open in a new tab" IS a link the owner copies → the real public address.
+  const openDesktop = () => openBlog()
+
+  // The archetype was written server-side; mirror the SAME source of truth into
+  // local state so the switches and the preview update without a refetch. The
+  // plan filter is applied here too, so the UI can never show a module on that
+  // the server refused to store.
+  const applyArchetypeLocally = (archetypeId: string) => {
+    const a = getArchetype(archetypeId)
+    if (!a) return
+    setConfig(archetypeModulesForPlan(a, plan).modules)
+    setSelectedId(null)
+    syncPreview('both')
+  }
 
   const selectedDef = selectedId ? MODULES.find(m => m.id === selectedId) ?? null : null
 
@@ -182,6 +250,20 @@ export default function ModulesManager({
         </button>
       </div>
 
+      {/* The three ready-to-play archetypes. Above the catalogue on purpose:
+          "pick a blog" is a smaller question than "configure nineteen modules",
+          and the answer is one click. */}
+      <ArchetypePicker
+        siteId={siteId}
+        plan={plan}
+        activeCount={activeCount}
+        onApplied={applyArchetypeLocally}
+      />
+
+      {/* Moderation only exists where moderation is on. A queue for a feature
+          nobody enabled is noise; a feature with no queue is a black hole. */}
+      {resolveModule(config, 'comments')?.enabled && <CommentsInbox siteId={siteId} />}
+
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-6 items-start">
         {/* Bento control panel */}
         <div className="space-y-7 min-w-0">
@@ -201,7 +283,7 @@ export default function ModulesManager({
                       key={def.id}
                       def={def}
                       resolved={resolveModule(config, def.id)!}
-                      isPremium={isPremium}
+                      locked={!allows(def)}
                       onToggle={() => toggle(def)}
                       onConfigure={() => openConfig(def)}
                     />
@@ -273,20 +355,15 @@ export default function ModulesManager({
         )}
       </AnimatePresence>
 
-      {/* Premium upsell */}
+      {/* Plan upsell — names the plan that actually unlocks what was clicked. */}
       {blocked && (
-        <Modal open onClose={() => setBlocked(false)} size="lg">
+        <Modal open onClose={() => setBlocked(null)} size="lg">
           <div className="relative">
-            <div className="absolute top-3 right-3 z-20"><ModalClose onClose={() => setBlocked(false)} /></div>
+            <div className="absolute top-3 right-3 z-20"><ModalClose onClose={() => setBlocked(null)} /></div>
             <PremiumPanel
-              feature="Mòduls Premium"
-              description="Aquest mòdul forma part del pla Premium. Desbloqueja articles relacionats amb IA, newsletter, paywall, barra d’anuncis, índex de continguts i mode fosc per al teu blog."
-              perks={[
-                'Articles relacionats amb IA',
-                'Captació de newsletter i leads',
-                'Paywall estil Substack',
-                'Barra d’anuncis, índex i mode fosc',
-              ]}
+              feature={blocked === 'gold' ? 'Mòduls Or' : blocked === 'agency' ? 'Mòduls Agència' : 'Mòduls Premium'}
+              description={UPSELL[blocked].description}
+              perks={UPSELL[blocked].perks}
             />
           </div>
         </Modal>
@@ -313,16 +390,16 @@ function PreviewTab({ active, onClick, icon, label }: { active: boolean; onClick
 // ── Module card (compact — configuration lives in the slide-over) ──────────────
 
 function ModuleCard({
-  def, resolved, isPremium, onToggle, onConfigure,
+  def, resolved, locked, onToggle, onConfigure,
 }: {
   def: ModuleDef
   resolved: { enabled: boolean; variant: string; options: Record<string, unknown> }
-  isPremium: boolean
+  /** Decided by the caller from the account's plan — never re-derived here. */
+  locked: boolean
   onToggle: () => void
   onConfigure: () => void
 }) {
   const Icon = ICONS[def.icon] ?? Puzzle
-  const locked = def.premium && !isPremium
   const on = resolved.enabled
   const hasConfig = def.variants.length > 1 || !!def.options?.length
 
@@ -345,7 +422,7 @@ function ModuleCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <h4 className="text-sm font-bold text-text leading-tight">{def.name}</h4>
-            {def.premium && <LockBadge />}
+            {locked && <LockBadge />}
             {def.ai && (
               <span className="inline-flex items-center gap-0.5 text-xs font-bold uppercase tracking-wide text-accent bg-accent-soft border border-accent/20 rounded px-1 py-0.5">
                 <Sparkles className="w-2.5 h-2.5" /> IA

@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { updateTag } from 'next/cache'
+import { siteTag } from '@/lib/render/cache'
 import { DEFAULT_LOCALE, LOCALES, isLocale, normalizeLocale, type Locale } from '@/lib/i18n/config'
 
 // site_themes.default_locale / locales aren't present until migration 009.
@@ -70,7 +71,7 @@ async function writeConfig(
   )
   if (error?.code === UNDEFINED_COLUMN) return {} // columns missing — best-effort no-op
   if (error) return { error: error.message }
-  revalidatePath(`/render/${siteId}`)
+  updateTag(siteTag(siteId))
   return {}
 }
 

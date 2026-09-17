@@ -18,9 +18,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuid } from '@/lib/analytics/track'
 import { rateLimit, clientIp } from '@/lib/ratelimit'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',

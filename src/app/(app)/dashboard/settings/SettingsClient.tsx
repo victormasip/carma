@@ -2,24 +2,46 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Mail, KeyRound, Eye, EyeOff, MessageCircle, ArrowRight } from 'lucide-react'
+import {
+  User, Mail, KeyRound, Eye, EyeOff, MessageCircle, ArrowRight, MapPin,
+  Store, Check, AlertCircle, Sparkles,
+} from 'lucide-react'
 import Button from '@/components/ui/Button'
 import PageHeader from '@/components/ui/PageHeader'
 import EndlessKnot from '@/components/ui/EndlessKnot'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { updateDisplayName, updatePassword } from '@/lib/actions/account'
+import { updateDisplayName, updatePassword, updateTown } from '@/lib/actions/account'
+import { setSiteShowcase } from '@/lib/actions/showcase'
+import { KARMA_REWARDS } from '@/lib/karma/config'
+
+/** One of the owner's blogs, as the Aparador card needs to talk about it. */
+export type ShowcaseSite = {
+  id: string
+  name: string
+  showcase: boolean
+  /** Has a subdomain — without one the wall has nowhere to send a visitor. */
+  hasAddress: boolean
+  publishedPosts: number
+}
 
 type Props = {
   email: string
   displayName: string
+  /** profiles.town — what puts this member on the community map. */
+  town: string
   isSuperAdmin: boolean
+  showcaseSites: ShowcaseSite[]
+  /** False before migration 038 — the card says so instead of pretending. */
+  showcaseAvailable: boolean
 }
 
 // Shared field styling so every input on the page matches.
 const FIELD = 'h-11 w-full rounded-xl border border-border-strong bg-bg-elevated px-3 text-sm text-text outline-none transition-colors focus:border-accent'
 
-export default function SettingsClient({ email, displayName, isSuperAdmin }: Props) {
+export default function SettingsClient({
+  email, displayName, town, isSuperAdmin, showcaseSites, showcaseAvailable,
+}: Props) {
   // Left-aligned, full-width layout matching every other sidebar page (PageHeader
   // + space-y-8 sections). The WhatsApp agent now lives in its own sidebar space
   // (/dashboard/agent) — a pointer card below keeps old muscle memory working.
@@ -30,13 +52,177 @@ export default function SettingsClient({ email, displayName, isSuperAdmin }: Pro
       <section className="space-y-4">
         <SectionLabel icon={<User className="h-4 w-4" />}>Compte</SectionLabel>
         <div className="grid gap-4 lg:grid-cols-2">
-          <ProfileCard email={email} displayName={displayName} isSuperAdmin={isSuperAdmin} />
+          <ProfileCard email={email} displayName={displayName} town={town} isSuperAdmin={isSuperAdmin} />
           <PasswordCard />
         </div>
       </section>
 
+      {showcaseSites.length > 0 && (
+        <section className="space-y-4">
+          <SectionLabel icon={<Store className="h-4 w-4" />}>Comunitat</SectionLabel>
+          <ShowcaseCard sites={showcaseSites} available={showcaseAvailable} />
+        </section>
+      )}
+
       <AgentMovedCard />
     </div>
+  )
+}
+
+/* ─────────────────────────── L'APARADOR PÚBLIC ───────────────────────────
+ * The opt-in to the "Fet amb Carma" wall on the landing page.
+ *
+ * Until now the wall took every public blog that had published something. That
+ * was defensible — everything on it was already open to the internet — and it
+ * was still the wrong default: being on Carma's own front page is a decision,
+ * not a side effect of publishing. This card is where the decision is made.
+ *
+ * THREE THINGS THIS CARD REFUSES TO DO
+ *
+ *   · Default to on. Every switch starts off, for every blog, forever.
+ *   · Pretend a blog will appear when it cannot. The wall also needs a public
+ *     address and at least one published article, so a blog missing either says
+ *     so RIGHT THERE, next to its own switch, rather than leaving someone to
+ *     wonder for a week why they never showed up.
+ *   · Make the reward the reason. The +40 is mentioned once, under the
+ *     explanation, and it is never the headline — if the only argument for
+ *     appearing is the points, the opt-in is not informed consent.
+ * ────────────────────────────────────────────────────────────────────────── */
+const APARADOR = KARMA_REWARDS.find(r => r.key === 'aparador')!
+
+function ShowcaseCard({ sites, available }: { sites: ShowcaseSite[]; available: boolean }) {
+  const { toast } = useToast()
+  const [, startTransition] = useTransition()
+  const [state, setState] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(sites.map(s => [s.id, s.showcase])),
+  )
+  const [busyId, setBusyId] = useState<string | null>(null)
+  /** Already paid this session, so the flourish does not repeat on a re-toggle. */
+  const [rewarded, setRewarded] = useState(sites.some(s => s.showcase))
+
+  const toggle = (site: ShowcaseSite) => {
+    if (busyId || !available) return
+    const next = !state[site.id]
+    setBusyId(site.id)
+    // Optimistic: the switch is the answer to a question the person just asked.
+    setState(v => ({ ...v, [site.id]: next }))
+
+    startTransition(async () => {
+      const res = await setSiteShowcase(site.id, next)
+      if (!res.ok) {
+        setState(v => ({ ...v, [site.id]: !next }))
+        setBusyId(null)
+        toast(res.error, 'error')
+        return
+      }
+      setBusyId(null)
+      if (res.earned > 0) {
+        setRewarded(true)
+        toast(`Ja ets a l’aparador ✨ +${res.earned} Punts de Carma`, 'success')
+      } else if (next) {
+        toast('Fet: el teu blog pot sortir al mur de la portada 👋', 'success')
+      } else {
+        toast('Retirat de l’aparador. Cap problema.', 'success')
+      }
+    })
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
+      <div className="flex items-start gap-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Store className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-text">Aparador públic</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            El mur «Fet amb Carma» de la portada ensenya blogs de membres de veritat, pintats amb els seus
+            colors i la seva lletra, enllaçats al lloc real. Hi surts només si ho dius aquí, i te’n pots
+            fer enrere quan vulguis.
+          </p>
+          {!rewarded && available && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-bold text-accent">
+              <Sparkles className="h-3.5 w-3.5" /> La primera vegada et sumem +{APARADOR.amount} punts
+            </p>
+          )}
+        </div>
+      </div>
+
+      {!available && (
+        <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning-soft px-3.5 py-2.5 text-sm font-medium text-warning">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          L’aparador encara no està actiu en aquest entorn (migració 038 pendent).
+        </p>
+      )}
+
+      <ul className="mt-5 divide-y divide-border border-t border-border">
+        {sites.map(site => {
+          const on = state[site.id] === true
+          // The honest caveat, per blog. A blog can be opted in and still not
+          // appear, and the switch must not imply otherwise.
+          const missing = !site.hasAddress
+            ? 'Encara no té adreça pública'
+            : site.publishedPosts === 0
+              ? 'Encara no hi ha cap article publicat'
+              : null
+          return (
+            <li key={site.id} className="flex items-center gap-3 py-3.5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-text">{site.name}</span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                  {on
+                    ? <span className="inline-flex items-center gap-1 font-bold text-success"><Check className="h-3 w-3" strokeWidth={3} /> A l’aparador</span>
+                    : <span className="text-subtle">Fora de l’aparador</span>}
+                  {on && missing && <span className="text-warning">· {missing}, així que encara no hi apareixerà</span>}
+                  {!on && (
+                    <span className="text-subtle">
+                      · {site.publishedPosts} article{site.publishedPosts === 1 ? '' : 's'} publicat{site.publishedPosts === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </span>
+              </span>
+              <ShowcaseSwitch
+                checked={on}
+                busy={busyId === site.id}
+                disabled={!available || (!!busyId && busyId !== site.id)}
+                onClick={() => toggle(site)}
+                label={site.name}
+              />
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function ShowcaseSwitch({ checked, busy, disabled, onClick, label }: {
+  checked: boolean
+  busy: boolean
+  disabled: boolean
+  onClick: () => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      role="switch"
+      aria-checked={checked}
+      aria-label={`Aparador públic per a ${label}`}
+      title={checked ? 'Treure’l de l’aparador' : 'Posar-lo a l’aparador'}
+      className={cn(
+        'relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200',
+        checked ? 'bg-accent' : 'bg-border-strong',
+        (disabled || busy) && 'cursor-not-allowed opacity-60',
+      )}
+    >
+      <span className={cn(
+        'absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200',
+        checked && 'translate-x-5',
+      )} />
+    </button>
   )
 }
 
@@ -72,19 +258,33 @@ function AgentMovedCard() {
 }
 
 /* ───────────────────────────── Profile (name + email) ───────────────────────────── */
-function ProfileCard({ email, displayName, isSuperAdmin }: { email: string; displayName: string; isSuperAdmin: boolean }) {
+function ProfileCard({ email, displayName, town, isSuperAdmin }: { email: string; displayName: string; town: string; isSuperAdmin: boolean }) {
   const { toast } = useToast()
   const router = useRouter()
   const [name, setName] = useState(displayName)
+  const [place, setPlace] = useState(town)
   const [busy, startTransition] = useTransition()
-  const dirty = name.trim() !== displayName.trim()
+  const nameDirty = name.trim() !== displayName.trim()
+  const townDirty = place.trim() !== town.trim()
+  const dirty = nameDirty || townDirty
 
   const save = () => {
     if (!dirty) return
     startTransition(async () => {
-      const res = await updateDisplayName(name)
-      if (res.ok) { toast('Nom actualitzat.', 'success'); router.refresh() }
-      else toast(res.error, 'error')
+      // Two independent writes (auth metadata + profiles); only the dirty ones
+      // run, and the first failure is what the person is told about.
+      let failed: string | null = null
+      if (nameDirty) {
+        const res = await updateDisplayName(name)
+        if (!res.ok) failed = res.error
+      }
+      if (!failed && townDirty) {
+        const res = await updateTown(place)
+        if (!res.ok) failed = res.error
+      }
+      if (failed) { toast(failed, 'error'); return }
+      toast('Perfil actualitzat.', 'success')
+      router.refresh()
     })
   }
 
@@ -118,6 +318,30 @@ function ProfileCard({ email, displayName, isSuperAdmin }: { email: string; disp
             placeholder="Com t'has de mostrar"
             className={cn(FIELD, 'mt-1.5')}
           />
+        </div>
+
+        {/* THE TOWN. The community map on the landing plots one dot per member
+            town — it cannot exist until we ask, and this is the asking. Optional
+            on purpose: nobody is made to say where they live to use the product. */}
+        <div>
+          <label htmlFor="town" className="text-xs font-semibold text-muted">
+            El teu poble o ciutat
+          </label>
+          <div className={cn(FIELD, 'mt-1.5 flex items-center gap-2 px-3')}>
+            <MapPin className="h-4 w-4 shrink-0 text-subtle" />
+            <input
+              id="town"
+              value={place}
+              onChange={(e) => setPlace(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save() }}
+              placeholder="D'on escrius?"
+              maxLength={80}
+              className="h-full w-full bg-transparent text-sm text-text outline-none placeholder:text-subtle"
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-subtle">
+            Surts al mapa de la comunitat com un punt, sense nom ni adreça. Pots deixar-ho en blanc.
+          </p>
         </div>
 
         <div>

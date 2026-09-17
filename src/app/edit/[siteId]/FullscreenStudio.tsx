@@ -8,9 +8,11 @@
 import { ThemeStudioProvider, type Theme } from '@/app/(app)/dashboard/sites/[id]/ThemeStudioContext'
 import ThemeCaptureModal from '@/app/(app)/dashboard/sites/[id]/ThemeCaptureModal'
 import CarmaStudio from '@/app/(app)/dashboard/sites/[id]/studio/CarmaStudio'
+import { publicSiteUrl } from '@/lib/sites/domain'
 
-export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, defaultLocale, regenCount, exitHref }: {
+export default function FullscreenStudio({ siteId, subdomain = null, isSuperAdmin, initialTheme, defaultLocale, regenCount, exitHref }: {
   siteId: string
+  subdomain?: string | null
   isSuperAdmin: boolean
   initialTheme: Theme | null
   defaultLocale?: string
@@ -21,6 +23,7 @@ export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, d
     <div className="h-screen w-screen overflow-hidden bg-surface">
       <ThemeStudioProvider
         siteId={siteId}
+        subdomain={subdomain}
         initialTheme={initialTheme}
         defaultLocale={defaultLocale}
         canTranslate={isSuperAdmin}
@@ -28,7 +31,7 @@ export default function FullscreenStudio({ siteId, isSuperAdmin, initialTheme, d
         initialRegenCount={regenCount}
       >
         <ThemeCaptureModal isSuperAdmin={isSuperAdmin} />
-        <CarmaStudio isSuperAdmin={isSuperAdmin} fullscreen exitHref={exitHref ?? `/render/${siteId}`} />
+        <CarmaStudio isSuperAdmin={isSuperAdmin} fullscreen exitHref={exitHref ?? publicSiteUrl({ id: siteId, subdomain })} />
       </ThemeStudioProvider>
     </div>
   )

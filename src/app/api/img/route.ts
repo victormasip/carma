@@ -15,9 +15,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
 import { isSafeUrl } from '@/lib/scrape/http'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const MAX_WIDTH = 2400
 const MAX_BYTES_IN = 12 * 1024 * 1024   // refuse to fetch > 12 MB
 const DEFAULT_Q = 76

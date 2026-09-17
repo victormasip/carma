@@ -13,7 +13,13 @@
     "start": "next start",
     "lint": "eslint .",
     "test:render": "node --experimental-strip-types --import ./tests/register.mjs tests/render-stress.mjs",
-    "wa:replay": "node scripts/wa-replay.mjs"
+    "grabber:eval": "node --experimental-strip-types --import ./tests/register.mjs tests/grabber-eval.mjs",
+    "test:brain": "node --experimental-strip-types --import ./tests/register.mjs tests/brain-cortex.mjs",
+    "test:router": "node --experimental-strip-types --import ./tests/register.mjs tests/router-eval.mjs",
+    "wa:replay": "node scripts/wa-replay.mjs",
+    "test:fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/chrome-fidelity.mjs",
+    "test:brand": "node --experimental-strip-types --import ./tests/register.mjs tests/brand.mjs",
+    "test:landing": "node --experimental-strip-types --import ./tests/register.mjs tests/landing.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
@@ -34,10 +40,13 @@
     "framer-motion": "^12.40.0",
     "franc-min": "^6.2.0",
     "lucide-react": "^1.16.0",
+    "mammoth": "^1.12.3",
     "next": "16.2.6",
     "node-html-parser": "^7.1.0",
     "openai": "^6.45.0",
     "parse5": "^8.0.1",
+    "pdf-parse": "^2.4.5",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sharp": "^0.34.5",
@@ -46,6 +55,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

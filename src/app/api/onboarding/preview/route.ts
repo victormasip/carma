@@ -10,8 +10,6 @@ import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { isLocale, type Locale } from '@/lib/i18n/config'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 export const maxDuration = 45
 
 // Route the client's OWN stylesheets through /api/asset so the proxy rewrites

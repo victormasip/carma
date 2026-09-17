@@ -41,6 +41,7 @@ const metaFrom = (r: PostListResult): PostsMeta => ({
 
 export default function PostsManager({
   siteId,
+  subdomain = null,
   siteName,
   initialPosts,
   initialMeta,
@@ -48,6 +49,8 @@ export default function PostsManager({
   onImport,
 }: {
   siteId: string
+  /** sites.subdomain — each card's preview link goes to the live article. */
+  subdomain?: string | null
   siteName: string
   initialPosts: PostListItem[]
   initialMeta: PostsMeta
@@ -470,6 +473,7 @@ export default function PostsManager({
                   key={post.id}
                   post={post}
                   siteId={siteId}
+                  subdomain={subdomain}
                   selected={selected.has(post.id)}
                   uploading={uploadingIds.has(post.id)}
                   saveState={save.stateOf(post.id)}

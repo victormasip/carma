@@ -14,17 +14,21 @@ import { getSiteStats } from '@/lib/actions/analytics'
 import { formatNumber } from '@/lib/format'
 import type { SiteStats } from '@/lib/analytics/read'
 import { cn } from '@/lib/cn'
+import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
 
 type Range = 7 | 30 | 90
 
 export default function OverviewPanel({
-  siteId, totalArticles, publishedArticles, initialStats,
+  siteId, subdomain = null, totalArticles, publishedArticles, initialStats,
 }: {
   siteId: string
+  /** sites.subdomain — the top-posts list links to the live article. */
+  subdomain?: string | null
   totalArticles: number
   publishedArticles: number
   initialStats: SiteStats | null
 }) {
+  const openBlog = useOpenBlog({ id: siteId, subdomain })
   const [days, setDays] = useState<Range>(30)
   const [stats, setStats] = useState<SiteStats | null>(initialStats)
   const [loading, setLoading] = useState(false)
@@ -125,7 +129,8 @@ export default function OverviewPanel({
                 <span className="text-sm font-bold text-text tabular-nums shrink-0">{formatNumber(p.views)}</span>
                 {p.slug && (
                   <a
-                    href={`/render/${siteId}/${p.slug}`}
+                    href={blogHref({ id: siteId, subdomain }, `/${p.slug}`)}
+                    onClick={(e) => { e.preventDefault(); openBlog(`/${p.slug}`) }}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="cursor-pointer text-subtle hover:text-accent opacity-0 group-hover:opacity-100 transition-all shrink-0"

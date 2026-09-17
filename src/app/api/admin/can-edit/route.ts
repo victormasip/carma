@@ -8,7 +8,6 @@ import { isUuid, isAllowedAppOrigin } from '@/lib/sites/domain'
 // it only ever returns a boolean. CORS-enabled for our own apex + tenant subdomains
 // so a blog served on `<sub>.<root>` can ask the app (which holds the auth cookie)
 // with a credentialed cross-origin fetch.
-export const dynamic = 'force-dynamic'
 
 // Credentialed CORS: ACAO must echo a specific allowed origin (never '*'), + ACAC.
 function cors(origin: string | null): Record<string, string> {

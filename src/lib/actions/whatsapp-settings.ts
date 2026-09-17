@@ -77,6 +77,69 @@ export async function getAgentConnectState(): Promise<AgentConnectState> {
   }
 }
 
+/**
+ * THE CLAIM — a pending code with NO phone number attached yet.
+ *
+ * This is what makes the God-Mode step honest. That screen promises "press the
+ * button, WhatsApp opens with the code already typed, send it" — and it could
+ * never work, because the code it needs only existed after the owner had typed
+ * their phone number, which is the exact step the screen exists to remove. With
+ * no code the deep link was null, so the button was a dead anchor and the QR was
+ * never generated. Founder, 2026-09-16: "boto no funciona i no es genera qr".
+ *
+ * So: mint a code now, bind the number later. The owner sends "Carma 123456"
+ * from whatever handset they like and the webhook attaches that number to this
+ * claim (see the claim branch in api/whatsapp/webhook). They never tell us their
+ * number — they prove it.
+ *
+ * Idempotent: an existing live claim is returned as-is, so re-opening the step
+ * does not invalidate the code already showing on the owner's other device.
+ * Migration 035 is what allows the phone-less row and keeps live codes unique.
+ */
+export async function ensureAgentClaim(): Promise<AgentConnectState> {
+  const user = await requireUser()
+  if (!user) return { connected: false, agentNumber: WA_AGENT_NUMBER, pending: null }
+
+  const current = await getAgentConnectState()
+  if (current.connected) return current
+
+  // A pending row with a code that has not expired is still perfectly good.
+  const live = current.pending?.code
+    && current.pending.expiresAt
+    && new Date(current.pending.expiresAt).getTime() > Date.now()
+  if (live) return current
+
+  const admin = createAdminClient()
+  const fresh = freshCode()
+
+  try {
+    if (current.pending) {
+      // Re-issue onto the row that is already there (it may or may not have a
+      // phone on it — either way the owner asked for a new code).
+      const { error } = await admin
+        .from('wa_identities')
+        .update({ status: 'pending', ...fresh })
+        .eq('id', current.pending.id)
+      if (error) return current
+    } else {
+      const { error } = await admin
+        .from('wa_identities')
+        .insert({ user_id: user.id, phone_e164: null, status: 'pending', ...fresh })
+      // 23502 = the not-null constraint is still there, i.e. migration 035 has
+      // not been applied. Fail open: the manual phone field below still works,
+      // exactly as it did before this existed.
+      if (error) {
+        if (error.code !== '23502') console.error('[ensureAgentClaim]', error.code, error.message)
+        return current
+      }
+    }
+  } catch {
+    return current
+  }
+
+  return getAgentConnectState()
+}
+
 /** Add (or re-issue the code for) the owner's WhatsApp number → status `pending`. */
 export async function addPhoneNumber(raw: string): Promise<ActionResult> {
   const user = await requireUser()

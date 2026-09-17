@@ -31,6 +31,13 @@ export type AgentDraft = {
   tags: string[]
   niche: string
   strategy: string // shown to the owner in the WhatsApp reply — written in Catalan
+  /** The structure the editor chose. Drives the module suggestions below and the
+   *  one line the owner reads before opening anything. */
+  shape: string
+  /** Registry ids of the blog features this piece would genuinely benefit from
+   *  (index, key takeaways, pull quotes…). The worker enables the ones the
+   *  owner's plan allows; everything else is dropped silently. */
+  suggestedModules: string[]
 }
 
 export type AgentUsage = { in: number; out: number }
@@ -75,9 +82,35 @@ CLARIFICATION (decision='clarify'):
 
 ARTICLE (decision='draft'): write it in the ARTICLE LANGUAGE given in the request.
 - Use the BLOG CONTEXT when provided: match the blog's niche and voice, reuse its existing categories when they fit, avoid duplicating a recent article's angle (complement it instead), and let the brand hints colour the register — a rustic agroturisme does not read like a fintech.
-- 'content_html' is an HTML FRAGMENT using ONLY these tags: <h2> <h3> <p> <ul> <ol> <li> <strong> <em> <a href> <blockquote>. No <h1>, no inline styles, no <script>, no class attributes. 700-1100 words of genuinely useful, specific content with a clear intro, well-structured H2/H3 sections and a short conclusion. Avoid AI clichés ("En el món actual", "En conclusió"). Open and close every tag.
+- 'shape': pick the ONE structure this content actually wants, then commit to it. 'guide' (how to do a thing, in order) · 'list' (N things, each self-contained) · 'story' (something that happened, chronological) · 'analysis' (a claim, argued) · 'news' (what changed, what it means) · 'opinion' (a position, defended) · 'faq' (real questions, answered). A recipe is not an essay; a price explanation is not a listicle. The shape decides the furniture below.
+
+FORMATTING — YOU ARE A SENIOR EDITOR, NOT A MARKDOWN CONVERTER.
+'content_html' is an HTML FRAGMENT. 700-1100 words of genuinely useful, specific content. No <h1>, no inline styles, no <script>, no id attributes. Open and close every tag. Avoid AI clichés ("En el món actual", "En conclusió", "En resum, podem dir que").
+
+You have a REAL typographic palette — the blog styles every one of these. Use the ones the content earns and no others; furniture that decorates nothing is worse than plain paragraphs:
+- <h2> / <h3> — the section ladder. <h3> only under an <h2>, never to make text bigger.
+- <p> — the default. Two to four sentences. Vary the length.
+- <ul> / <ol> — a list ONLY when the items are genuinely parallel. Ordered when sequence matters (steps), unordered when it does not. Never a list of full paragraphs.
+- <strong> for the one phrase in a paragraph that carries it; <em> for a term being introduced. Never a whole sentence in bold.
+- <blockquote> — the single most quotable sentence in the piece, or a real quotation. At most two per article. This is also what the Pull Quote feature lifts, so make it worth lifting.
+- <table> with <thead>/<tbody>/<tr>/<th>/<td> — when you are comparing 2-4 things across 2-4 attributes. A comparison written as prose is a table the reader has to build themselves.
+- <p class="carma-callout" data-variant="info|success|warning|danger"> — ONE short block, used at most twice, for the thing that would cost the reader money or time if they missed it. 'warning' for a real risk, 'info' for a tip, 'success' for a rule of thumb, 'danger' for "never do this".
+- <details class="carma-toggle"><summary>Question</summary><p>Answer</p></details> — for FAQ shape, or for a digression the main line does not need.
+- <hr> — exactly one, and only when the piece genuinely turns a corner.
+- <a href="..."> — only to a URL that appeared in the brief or the blog context. NEVER invent a link.
+
+THE FURNITURE MUST MATCH THE SHAPE:
+- guide → <ol> for the steps, one <h2> per phase, a 'warning' callout on the step people get wrong.
+- list → one <h2> per item (not a bare <ul> of one-liners), a short <p> under each.
+- story → mostly <p>. One <blockquote>. No tables, no callouts — furniture kills a narrative.
+- analysis → <h2> per argument, a <table> if there is anything to compare, a closing <h2> that answers the question.
+- news → the change in the first paragraph, an <h2> for "what it means for you".
+- opinion → <p> and one <blockquote>. State the position in the first two sentences.
+- faq → <details class="carma-toggle"> per question, in the order a real reader would ask them.
+
+- 'suggested_modules': the blog features this specific piece would benefit from, as ids, 0-4 of them, ONLY when the article genuinely earns each: "tableOfContents" (5+ H2s), "keyTakeaways" (a guide or analysis with a real summary), "pullQuote" (you wrote a blockquote worth enlarging), "relatedPosts" (it continues a recent article), "socialShare" (it is shareable on its face), "newsletter" (it promises more of the same), "readingProgress" (long), "comments" (it asks the reader something). Empty array when none is earned — this switches things on in the owner's live blog, so it is a recommendation, not decoration.
 - 'title' compelling and includes the focus keyword. 'slug' lowercase, ASCII, hyphenated. 'excerpt' 1-2 sentences. 'seo_title' ~50-60 chars with the keyword. 'seo_description' ~140-160 chars with the keyword. 'focus_keyword' the 2-4 word target phrase (must appear in title, first paragraph and at least one H2). 'categories' 1-3 and 'tags' 3-6, in the article language; reuse the provided existing categories when they fit. 'niche' one sentence naming the site topic + audience.
-- 'strategy' is ONE short sentence in the OWNER'S language naming the chosen angle and the search intent — it is shown to the owner over WhatsApp, so keep it crisp and in your persona voice.
+- 'strategy' is ONE short sentence in the OWNER'S language naming the chosen angle, the shape you used and the search intent — it is shown to the owner over WhatsApp, so keep it crisp and in your persona voice ("Guia pas a pas, per a qui busca «X»").
 - SAFETY: never invent specific statistics, prices, dates or quotes attributed to real people. Leave 'clarification' as an empty string.
 
 Output ONLY the JSON object.`
@@ -103,10 +136,12 @@ const AGENT_SCHEMA = {
         tags: { type: 'array', items: { type: 'string' } },
         niche: { type: 'string' },
         strategy: { type: 'string' },
+        shape: { type: 'string', enum: ['guide', 'list', 'story', 'analysis', 'news', 'opinion', 'faq'] },
+        suggested_modules: { type: 'array', items: { type: 'string' } },
       },
       required: [
         'title', 'slug', 'excerpt', 'content_html', 'seo_title', 'seo_description',
-        'focus_keyword', 'categories', 'tags', 'niche', 'strategy',
+        'focus_keyword', 'categories', 'tags', 'niche', 'strategy', 'shape', 'suggested_modules',
       ],
     },
   },
@@ -158,7 +193,9 @@ function mockAgent(input: AgentInput): AgentResult {
     `Tema rebut: <strong>${topic}</strong>.</p>` +
     (editing ? `<p>Canvis aplicats: <em>${topic}</em>.</p>` : '') +
     `<h2>Per què és important ${focus}</h2><p>Contingut de mostra amb prou longitud per superar la validació del worker i renderitzar-se correctament a la pàgina de revisió. Pots aprovar-lo o editar-lo des de WhatsApp.</p>` +
-    `<h2>Com aplicar-ho</h2><ul><li>Primer pas de mostra.</li><li>Segon pas de mostra.</li><li>Tercer pas de mostra.</li></ul>` +
+    `<h2>Com aplicar-ho</h2><ol><li>Primer pas de mostra.</li><li>Segon pas de mostra.</li><li>Tercer pas de mostra.</li></ol>` +
+    `<p class="carma-callout" data-variant="warning">Això és un avís de mostra: el mode de proves no crida cap model.</p>` +
+    `<blockquote>Una frase prou bona per destacar-la.</blockquote>` +
     `<h3>Conclusió</h3><p>Aquest és un esborrany fictici. Desactiva WA_MOCK_AGENT per generar articles reals.</p>`
   return {
     kind: 'draft',
@@ -175,6 +212,8 @@ function mockAgent(input: AgentInput): AgentResult {
       tags: ['mock', 'whatsapp', 'carma'],
       niche: `Blog de mostra de ${input.siteName || 'Carma'}.`,
       strategy: editing ? 'He aplicat els teus canvis (mode de proves).' : 'Esborrany de prova per validar el flux.',
+      shape: 'guide',
+      suggestedModules: ['tableOfContents'],
     },
   }
 }
@@ -256,6 +295,10 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
       tags: strArr(a.tags).slice(0, 6),
       niche: str(a.niche).trim(),
       strategy: str(a.strategy).trim(),
+      shape: str(a.shape).trim() || 'guide',
+      // Sanitised again at the call site against the registry AND the plan; this
+      // is only the model's opinion, never an instruction the worker obeys blindly.
+      suggestedModules: strArr(a.suggested_modules).slice(0, 4),
     },
   }
 }

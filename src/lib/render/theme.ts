@@ -25,6 +25,7 @@
 //   the pre-pivot `{ html, css, mode:'shadow' }` JSON (degraded to its raw .html).
 
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
+import { embedSrc } from '@/lib/embed'
 import { feedLayoutCss } from '@/lib/render/feedLayouts'
 import {
   buildListingModuleParts, buildArticleModuleParts, modulesRuntimeScript,
@@ -33,11 +34,13 @@ import {
 import type { SiteModules } from '@/lib/modules/registry'
 import type { BlogSignature, CardStyle } from '@/lib/scrape/blogDetect'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
+import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
 import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
 import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } from './image'
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
 import { normalizeFragment } from '@/lib/scrape/headerFooter'
+import { FEED_PATH, type FeedPost } from '@/lib/render/feed'
 
 type ChromeI18nEntry = { header?: string | null; footer?: string | null; section_title?: string | null }
 
@@ -54,6 +57,9 @@ type Theme = {
   chrome_i18n?: Record<string, ChromeI18nEntry> | null // translated chrome per locale
   blog_signature?: BlogSignature | null // detected native article-card design to replicate
   modules?: SiteModules | null // Smart Modules config (migration 024); absent ⇒ no modules
+  // ── Chrome Compiler (migration 032) ──
+  compiled_chrome_css?: string | null    // critical CSS for the chrome; null ⇒ raw-injection fallback
+  chrome_scripts_enabled?: boolean | null // opt back in to the source's scripts (deferred)
 } | null
 
 // A resolved chrome region. `raw` = inject `html` verbatim into the light DOM
@@ -207,21 +213,131 @@ function slugForLocale(post: Post, locale: Locale): { slug: string; needsLang: b
   return { slug: post.slug, needsLang: true }
 }
 
-// URL for a given (post, locale) — the LOCALIZED slug is the URL.
-function articleUrl(siteId: string, post: Post, locale: Locale): string {
-  const { slug, needsLang } = slugForLocale(post, locale)
-  const path = `/render/${siteId}/${encodeURIComponent(slug)}`
-  return needsLang ? `${path}?lang=${locale}` : path
+// ─── Link context (clean URLs — Super MVP Fase 4) ─────────────────────────────
+//
+// Every URL the renderer emits is built from a LinkCtx, because the same markup
+// ships to three different address spaces:
+//
+//   · Public blog on a tenant subdomain → base '' → `/hola-mon`, `/es/hola-mundo`
+//     This is what visitors see and what search engines index.
+//   · Canonical / dashboard preview     → base '/render/<uuid>' (unchanged)
+//   · Embed fragment on the customer's own page → an ABSOLUTE blog origin, so a
+//     link inside their WordPress page still reaches the blog.
+//
+// The old code hardcoded `/render/${siteId}/…` into every link, which is why the
+// pretty subdomain URL existed but was never linked to: a visitor on
+// blog.carma.cat clicked an article and landed on
+// blog.carma.cat/render/8f3a…/hola-mon. The rewrite already worked; the links
+// didn't.
+export type LinkCtx = {
+  /** '' (site-relative), '/render/<uuid>', or an absolute origin. No trailing slash. */
+  base: string
+  /** The SITE's default locale — the one that gets the bare, canonical root URL. */
+  siteDefault?: Locale | null
 }
 
-// URL for the LISTING in a given locale. ALWAYS explicit `?lang=` — even for the
-// platform default. The previous "clean URL for the default locale" optimisation was
-// the root of the "clicking the language switcher does nothing" bug: a clean
-// `/render/<id>` resolves to the SITE's default locale, which is NOT always the
-// platform default, so clicking e.g. "Català" on a Spanish-default site landed back
-// on Spanish. An explicit `?lang=` makes every switch unambiguous.
-function listingUrl(siteId: string, locale: Locale): string {
-  return `/render/${siteId}?lang=${locale}`
+/** Default context — preserves the historic `/render/<uuid>` behaviour for every
+ *  caller that doesn't care (dashboard preview, grabber lab, template preview). */
+function defaultLink(siteId: string, theme?: Theme): LinkCtx {
+  return { base: `/render/${siteId}`, siteDefault: themeDefaultLocale(theme) }
+}
+
+/** The site's configured default locale, or null when the theme predates migration 008. */
+function themeDefaultLocale(theme?: Theme): Locale | null {
+  const dl = theme?.default_locale
+  return dl && isLocale(dl) ? (dl as Locale) : null
+}
+
+function joinPath(base: string, ...segs: string[]): string {
+  const b = base.replace(/\/+$/, '')
+  const p = segs.filter(Boolean).map(s => encodeURIComponent(s)).join('/')
+  if (!p) return b || '/'
+  return `${b}/${p}`
+}
+
+// URL for a given (post, locale) — the LOCALIZED slug is the URL.
+//
+// Locale is a PATH SEGMENT, never `?lang=`: `/es/hola-mundo`, not
+// `/hola-mon?lang=es`. Query-param locales gave us no clean hreflang structure
+// and are weak SEO. The default locale stays unprefixed.
+//
+// `needsLang` (no localized slug for this locale) is the one case that still
+// carries `?lang=`, because there is no distinct slug to route on — the flat slug
+// has to be told which language to render.
+function articleUrl(link: LinkCtx, post: Post, locale: Locale): string {
+  const { slug, needsLang } = slugForLocale(post, locale)
+  const isDefault = locale === postDefaultLocale(post)
+  if (needsLang) return `${joinPath(link.base, slug)}?lang=${locale}`
+  return isDefault ? joinPath(link.base, slug) : joinPath(link.base, locale, slug)
+}
+
+// URL for the LISTING in a given locale.
+//
+// History: this used to force `?lang=` on EVERY listing link — including the
+// platform default — because a bare `/render/<id>` resolves to the SITE's default
+// locale, which is not always the platform default, so "Català" on a Spanish site
+// landed back on Spanish. Locale path segments fix that at the source: `/es` is
+// unambiguous in a way `?lang=es` bolted onto a defaulting route never was.
+//
+// The site's own default locale gets the bare root, which is what we want
+// canonicalised and indexed.
+function listingUrl(link: LinkCtx, locale: Locale): string {
+  if (link.siteDefault && locale === link.siteDefault) return joinPath(link.base)
+  return joinPath(link.base, locale)
+}
+
+/**
+ * URL of the RSS feed for a locale — the listing URL plus `/rss.xml`.
+ *
+ * The default locale's feed sits at the blog root (`/rss.xml`), every other
+ * locale under its own prefix (`/es/rss.xml`), so a reader that subscribes to
+ * the Spanish blog gets Spanish articles and Spanish links.
+ */
+function feedUrl(link: LinkCtx, locale: Locale): string {
+  const base = listingUrl(link, locale)
+  return base === '/' ? `/${FEED_PATH}` : `${base}/${FEED_PATH}`
+}
+
+/**
+ * The feed's items for one locale, with FULLY QUALIFIED links.
+ *
+ * Lives here, beside `articleUrl`, on purpose: the feed must address articles
+ * exactly the way the HTML does — same localized slugs, same locale prefixes —
+ * or a subscriber's click lands on a 404 that nobody sees because it happened
+ * inside someone else's reader app.
+ */
+export function buildFeedItems(
+  posts: Post[],
+  locale: Locale,
+  link: LinkCtx,
+  /** Absolute origin (`https://blog.carma.cat`), prepended to every path. */
+  origin: string,
+): FeedPost[] {
+  const abs = (u: string) => (/^https?:\/\//i.test(u) ? u : `${origin.replace(/\/+$/, '')}${u.startsWith('/') ? u : `/${u}`}`)
+  return posts.map(post => {
+    const loc = localizePost(post, locale)
+    return {
+      id: post.id,
+      title: loc.title,
+      url: abs(articleUrl(link, post, locale)),
+      excerpt: loc.seo_description?.trim() || loc.excerpt || null,
+      author: loc.author_name,
+      categories: loc.categories,
+      date: loc.created_at,
+    }
+  })
+}
+
+/** The blog's own feed address for a locale, fully qualified. */
+export function feedUrlFor(link: LinkCtx, locale: Locale, origin: string): string {
+  const u = feedUrl(link, locale)
+  return /^https?:\/\//i.test(u) ? u : `${origin.replace(/\/+$/, '')}${u}`
+}
+
+/** The listing address for a locale, fully qualified. */
+export function listingUrlFor(link: LinkCtx, locale: Locale, origin: string): string {
+  const u = listingUrl(link, locale)
+  return /^https?:\/\//i.test(u) ? u : `${origin.replace(/\/+$/, '')}${u === '/' ? '' : u}` || origin
 }
 
 // Overlay a non-default locale's variant onto the post. Any field the variant
@@ -296,9 +412,7 @@ function fillEmbeds(html: string): string {
     for (const el of nodes) {
       const provider = el.getAttribute('data-provider') ?? ''
       const id = (el.getAttribute('data-embed-id') ?? '').trim()
-      let src = ''
-      if (provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(id)) src = `https://www.youtube-nocookie.com/embed/${id}`
-      else if (provider === 'vimeo' && /^\d+$/.test(id)) src = `https://player.vimeo.com/video/${id}`
+      const src = embedSrc(provider, id)
       if (!src) { el.set_content(''); continue }
       el.set_content(
         `<iframe src="${escapeAttr(src)}" title="Vídeo ${escapeAttr(provider)}" loading="lazy" ` +
@@ -782,13 +896,18 @@ function sanitizeInjectedHead(html: string): string {
     .replace(/<\/?(head|body|html)\b[^>]*>/gi, '')
 }
 
-function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: HeadSeo): string {
+function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: HeadSeo, feedHref?: string): string {
   const ogTitle = seo?.ogTitle ?? title
   const parts: string[] = [
     `<meta charset="utf-8" />`,
     `<meta name="viewport" content="width=device-width, initial-scale=1" />`,
     `<title>${escapeHtml(title)}</title>`,
   ]
+  // RSS AUTODISCOVERY. Without this line the feed exists and nothing finds it:
+  // readers, "follow" buttons and aggregators all look for exactly this tag.
+  if (feedHref) {
+    parts.push(`<link rel="alternate" type="application/rss+xml" title="${escapeAttr(title)}" href="${escapeAttr(feedHref)}" />`)
+  }
   // OUR SEO / social meta — applied from the post's SEO tab. These OWN the head
   // (the injected client head has its <title>/<meta> stripped).
   if (seo?.description) parts.push(`<meta name="description" content="${escapeAttr(seo.description)}" />`)
@@ -811,10 +930,32 @@ function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: Head
   // page background is the SOURCE's real bg (not the forced-light blog surface), so
   // light-on-dark chrome stays readable.
   parts.push(`<style>${buildPageResetCss(pageBackground(theme, tokens))}</style>`)
-  // THE CLIENT'S REAL HEAD — its stylesheets / fonts / scripts. This is what makes
-  // the injected light-DOM Top/Bottom look 1:1 with the source site.
-  const clientHead = sanitizeInjectedHead(theme?.extracted_head ?? '')
-  if (clientHead) parts.push(clientHead)
+
+  // THE CHROME'S STYLING — this is what makes the injected light-DOM Top/Bottom
+  // look 1:1 with the source site. Two paths:
+  //
+  //   · COMPILED (Super MVP Fase 4, the fast path): one inline <style> holding only
+  //     the rules the captured chrome actually uses, produced once at capture time
+  //     by scrape/chromeCompiler.ts. No cross-origin request, nothing
+  //     render-blocking, no third-party JS. This is the single biggest LCP win
+  //     available on a cloned WordPress site.
+  //   · RAW (the legacy path): the target's real <head> injected verbatim. Kept as
+  //     the fallback for every site captured BEFORE the compiler existed, so no
+  //     live blog changes appearance until its owner re-captures.
+  //
+  // `compiled_chrome_css` being non-null is the switch. A site whose menu genuinely
+  // needs JS sets `chrome_scripts_enabled` and gets its scripts back, deferred.
+  const compiled = (theme?.compiled_chrome_css ?? '').trim()
+  if (compiled) {
+    parts.push(`<style>${compiled}</style>`)
+    const residualHead = stripCompiledHead(theme?.extracted_head ?? '', {
+      keepScripts: theme?.chrome_scripts_enabled === true,
+    })
+    if (residualHead) parts.push(residualHead)
+  } else {
+    const clientHead = sanitizeInjectedHead(theme?.extracted_head ?? '')
+    if (clientHead) parts.push(clientHead)
+  }
   // Host box-guard — emitted LAST so it ALWAYS wins: the blog's shadow host stays a
   // normal full-width block wherever the source's wrappers drop it. (The blog's own
   // token-driven stylesheet lives INSIDE the shadow root, see renderBlogHost.)
@@ -1087,12 +1228,12 @@ function buildDemoBanner(locale: Locale): string {
 </div>`
 }
 
-function buildCard(post: Post, siteId: string, locale: Locale): string {
+function buildCard(post: Post, link: LinkCtx, locale: Locale): string {
   const loc = localizePost(post, locale)
   // Each card links to THIS post's slug in the listing's current language. The
   // localized slug (if any) becomes the URL — that's the canonical address of
   // the post in that language.
-  const href = articleUrl(siteId, post, locale)
+  const href = articleUrl(link, post, locale)
   const media = loc.featured_image
     ? `<div class="carma-card-media">${responsiveCardImage(loc.featured_image, loc.title)}</div>`
     : ''
@@ -1149,7 +1290,7 @@ function moduleHelpers(locale: Locale): ModuleHelpers {
   }
 }
 
-function toModulePost(post: Post, siteId: string, locale: Locale): ModulePost {
+function toModulePost(post: Post, link: LinkCtx, locale: Locale): ModulePost {
   const loc = localizePost(post, locale)
   return {
     id: post.id,
@@ -1160,24 +1301,24 @@ function toModulePost(post: Post, siteId: string, locale: Locale): ModulePost {
     tags: loc.tags ?? [],
     author: loc.author_name,
     date: loc.created_at,
-    url: articleUrl(siteId, post, locale),
+    url: articleUrl(link, post, locale),
   }
 }
 
-function listingModuleParts(theme: Theme, siteId: string, posts: Post[], locale: Locale): ListingModuleParts {
+function listingModuleParts(theme: Theme, siteId: string, link: LinkCtx, posts: Post[], locale: Locale): ListingModuleParts {
   return buildListingModuleParts(
     theme?.modules ?? null,
-    posts.map(p => toModulePost(p, siteId, locale)),
+    posts.map(p => toModulePost(p, link, locale)),
     locale,
     moduleHelpers(locale),
   )
 }
 
 function articleModuleParts(
-  theme: Theme, siteId: string, post: Post, locale: Locale, contentHtml: string, extra?: ArticleExtra,
+  theme: Theme, siteId: string, link: LinkCtx, post: Post, locale: Locale, contentHtml: string, extra?: ArticleExtra,
 ): ArticleModuleParts {
-  const cur = toModulePost(post, siteId, locale)
-  const sibsRaw = (extra?.siblings ?? []).map(p => toModulePost(p, siteId, locale))
+  const cur = toModulePost(post, link, locale)
+  const sibsRaw = (extra?.siblings ?? []).map(p => toModulePost(p, link, locale))
   // Ensure the current post is present, then order newest→oldest so prev/next is
   // correct regardless of how the route fetched the neighbours.
   const merged = sibsRaw.some(s => s.id === cur.id) ? sibsRaw.slice() : [...sibsRaw, cur]
@@ -1228,10 +1369,10 @@ ${safeInner}
 // OUR blog markup for the listing (the .carma-root <main>). Returned WITHOUT the
 // shadow host wrapper so it can be reused both inside renderBlogHost (full page)
 // and inside the embed loader's own shadow root (fragment).
-function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale, parts: ListingModuleParts): string {
+function listingBlogInner(theme: Theme, siteName: string, link: LinkCtx, posts: Post[], locale: Locale, parts: ListingModuleParts): string {
   const tokens = tokensOf(theme)
   const available = LOCALES.filter(l => posts.some(p => postLocales(p).includes(l)))
-  const urlForLocale = (l: Locale) => listingUrl(siteId, l)
+  const urlForLocale = (l: Locale) => listingUrl(link, l)
   // STRICT locale filtering (founder directive 2026-06-30): the feed shows ONLY the
   // posts that actually have content in the active language — a Spanish-only article
   // must never appear under the Catalan tab. If the active locale has no content but
@@ -1251,7 +1392,7 @@ function listingBlogInner(theme: Theme, siteName: string, siteId: string, posts:
   const demoBanner = isDemoFeed ? buildDemoBanner(locale) : ''
   const feed = visiblePosts.length === 0
     ? buildEmptyState(siteName, locale)
-    : `<div class="carma-grid">\n${visiblePosts.map(p => buildCard(p, siteId, feedLocale)).join('\n')}\n</div>`
+    : `<div class="carma-grid">\n${visiblePosts.map(p => buildCard(p, link, feedLocale)).join('\n')}\n</div>`
 
   const crumb = tokens.showBreadcrumb
     ? `<nav class="carma-breadcrumb"><a href="${escapeAttr(urlForLocale(locale))}">${escapeHtml(RENDER_STRINGS[uiLocale(locale)].home)}</a><span>›</span><span>${escapeHtml(sectionTitle)}</span></nav>`
@@ -1274,11 +1415,11 @@ ${parts.overlays}`
 
 // Full render body: the client's shell (LIGHT DOM) STITCHED around the blog
 // (SHADOW DOM) into one well-formed document, server-side.
-function listingBodyHtml(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale): string {
+function listingBodyHtml(theme: Theme, siteName: string, siteId: string, link: LinkCtx, posts: Post[], locale: Locale): string {
   const tokens = tokensOf(theme)
-  const parts = listingModuleParts(theme, siteId, posts, locale)
+  const parts = listingModuleParts(theme, siteId, link, posts, locale)
   const blog = renderBlogHost(
-    listingBlogInner(theme, siteName, siteId, posts, locale, parts),
+    listingBlogInner(theme, siteName, link, posts, locale, parts),
     tokens,
     // Native-card replication first, then the user-chosen structural feed layout,
     // then the enabled Smart Modules' CSS — all inherit the brand --ct-* tokens.
@@ -1289,7 +1430,7 @@ function listingBodyHtml(theme: Theme, siteName: string, siteId: string, posts: 
 
 // OUR blog markup for the article view (the .carma-root <main>), sans shadow host.
 // `parts` carries the Smart Modules HTML + the (possibly paywalled) content.
-function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Locale, parts: ArticleModuleParts): string {
+function articleBlogInner(theme: Theme, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const loc = localizePost(post, locale)
   const s = RENDER_STRINGS[uiLocale(locale)]
   const available = postLocales(post)
@@ -1297,7 +1438,7 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
   // switcher links to /render/<siteId>/<localized-slug-for-locale> directly,
   // so a Spanish user clicking "English" lands on the English slug — no
   // ?lang= juggling, no 404s, no slug↔URL drift.
-  const urlForLocale = (l: Locale) => articleUrl(siteId, post, l)
+  const urlForLocale = (l: Locale) => articleUrl(link, post, l)
   const bodySwitcher = buildLangSwitcher(available, locale, urlForLocale)
 
   const featured = loc.featured_image
@@ -1314,7 +1455,7 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
   return `${parts.top}
 <main class="carma-root carma-main">
   <article class="carma-article">
-    <a href="${escapeAttr(listingUrl(siteId, locale))}" class="carma-back" rel="up">${escapeHtml(s.back)}</a>
+    <a href="${escapeAttr(listingUrl(link, locale))}" class="carma-back" rel="up">${escapeHtml(s.back)}</a>
     ${bodySwitcher}
     <header class="carma-article-header">
       <h1 class="carma-article-title">${escapeHtml(loc.title)}</h1>
@@ -1334,35 +1475,36 @@ function articleBlogInner(theme: Theme, siteId: string, post: Post, locale: Loca
 
 // Build the base content (TOC fill + responsive images), then run the modules
 // (paywall transform, related, etc.) so we compute the content exactly once.
-function articleSetup(theme: Theme, siteId: string, post: Post, locale: Locale, extra?: ArticleExtra): ArticleModuleParts {
+function articleSetup(theme: Theme, siteId: string, link: LinkCtx, post: Post, locale: Locale, extra?: ArticleExtra): ArticleModuleParts {
   const loc = localizePost(post, locale)
   const baseContent = transformContentImages(fillEmbeds(fillTableOfContents(getContentHtml(loc))))
-  return articleModuleParts(theme, siteId, post, locale, baseContent, extra)
+  return articleModuleParts(theme, siteId, link, post, locale, baseContent, extra)
 }
 
-function articleBodyHtml(theme: Theme, siteId: string, post: Post, locale: Locale, parts: ArticleModuleParts): string {
+function articleBodyHtml(theme: Theme, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const tokens = tokensOf(theme)
-  const blog = renderBlogHost(articleBlogInner(theme, siteId, post, locale, parts), tokens, parts.css)
+  const blog = renderBlogHost(articleBlogInner(theme, link, post, locale, parts), tokens, parts.css)
   return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
 }
 
 // ─── Full standalone documents (used by the iframe embed + direct visit) ──────
 
-export function buildListingPage(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE): string {
+export function buildListingPage(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE, link?: LinkCtx): string {
   const tokens = tokensOf(theme)
+  const ctx = link ?? defaultLink(siteId, theme)
   const jsonLd = buildBlogJsonLd({
-    url: listingUrl(siteId, locale),
+    url: listingUrl(ctx, locale),
     name: siteName,
     locale,
   })
   return `<!doctype html>
 <html lang="${locale}">
 <head>
-${buildHead(theme, siteName, tokens)}
+${buildHead(theme, siteName, tokens, undefined, feedUrl(ctx, locale))}
 ${jsonLd}
 </head>
 ${bodyOpenTag(theme)}
-${listingBodyHtml(theme, siteName, siteId, posts, locale)}
+${listingBodyHtml(theme, siteName, siteId, ctx, posts, locale)}
 ${runtimeScript()}
 ${modulesRuntimeScript(theme?.modules ?? null, siteId)}
 ${contrastGuardScript()}
@@ -1371,13 +1513,14 @@ ${trackingScript(siteId, null, 'listing')}
 </html>`
 }
 
-export function buildArticlePage(theme: Theme, siteName: string, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra): string {
+export function buildArticlePage(theme: Theme, siteName: string, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra, link?: LinkCtx): string {
   const tokens = tokensOf(theme)
+  const ctx = link ?? defaultLink(siteId, theme)
   const loc = localizePost(post, locale)
   // Compute the module parts ONCE here so the structured data uses the VISIBLE
   // (post-paywall) content — a locked article must never leak its hidden body via
   // JSON-LD / FAQ schema. When unlocked, parts.content is the full article.
-  const parts = articleSetup(theme, siteId, post, locale, extra)
+  const parts = articleSetup(theme, siteId, ctx, post, locale, extra)
   const visibleContent = parts.content
   const m = (post.meta ?? {}) as Record<string, unknown>
   const seoTitle = loc.seo_title?.trim() || loc.title
@@ -1395,8 +1538,8 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
   // Structured data: Article + Breadcrumb + (optional) FAQ.
   // The Article schema is what powers both Google Search rich results AND
   // AI-chatbot citations (Perplexity/Claude/ChatGPT lean on these fields).
-  const articleHref = canonical ?? articleUrl(siteId, post, locale)
-  const listingHref = listingUrl(siteId, locale)
+  const articleHref = canonical ?? articleUrl(ctx, post, locale)
+  const listingHref = listingUrl(ctx, locale)
   const sectionTitle = localizedSectionTitle(theme, locale)
   const jsonLd = [
     buildArticleJsonLd({
@@ -1426,13 +1569,13 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
   return `<!doctype html>
 <html lang="${locale}">
 <head>
-${buildHead(theme, `${seoTitle} · ${siteName}`, tokens, seo)}
+${buildHead(theme, `${seoTitle} · ${siteName}`, tokens, seo, feedUrl(ctx, locale))}
 ${jsonLd}
 </head>
 ${bodyOpenTag(theme)}
-${articleBodyHtml(theme, siteId, post, locale, parts)}
+${articleBodyHtml(theme, ctx, post, locale, parts)}
 ${runtimeScript()}
-${modulesRuntimeScript(theme?.modules ?? null, siteId)}
+${modulesRuntimeScript(theme?.modules ?? null, siteId, post.id)}
 ${contrastGuardScript()}
 ${trackingScript(siteId, post.id, 'article')}
 </body>
@@ -1460,22 +1603,24 @@ function fragmentCss(t: DesignTokens, extraCss = ''): string {
 :host{display:block;color-scheme:light;background:var(--ct-bg);color:var(--ct-text);font-family:var(--ct-font-body);box-sizing:border-box}${extraCss}`
 }
 
-export function buildListingFragment(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE): RenderFragment {
+export function buildListingFragment(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE, link?: LinkCtx): RenderFragment {
   const tokens = tokensOf(theme)
-  const parts = listingModuleParts(theme, siteId, posts, locale)
+  const ctx = link ?? defaultLink(siteId, theme)
+  const parts = listingModuleParts(theme, siteId, ctx, posts, locale)
   return {
     css: fragmentCss(tokens, buildNativeCardCss(theme?.blog_signature?.card) + feedLayoutCss(tokens.feedLayout) + parts.css),
-    html: listingBlogInner(theme, siteName, siteId, posts, locale, parts),
+    html: listingBlogInner(theme, siteName, ctx, posts, locale, parts),
     fonts: collectFontHrefs(theme),
   }
 }
 
-export function buildArticleFragment(theme: Theme, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra): RenderFragment {
+export function buildArticleFragment(theme: Theme, siteId: string, post: Post, locale: Locale = DEFAULT_LOCALE, extra?: ArticleExtra, link?: LinkCtx): RenderFragment {
   const tokens = tokensOf(theme)
-  const parts = articleSetup(theme, siteId, post, locale, extra)
+  const ctx = link ?? defaultLink(siteId, theme)
+  const parts = articleSetup(theme, siteId, ctx, post, locale, extra)
   return {
     css: fragmentCss(tokens, parts.css),
-    html: articleBlogInner(theme, siteId, post, locale, parts),
+    html: articleBlogInner(theme, ctx, post, locale, parts),
     fonts: collectFontHrefs(theme),
   }
 }

@@ -10,6 +10,9 @@ type Result = { ok: true } | { ok: false; error: string }
 
 const MIN_PASSWORD = 8
 
+// `profiles.town` only exists after migration 036.
+const UNDEFINED_COLUMN = '42703'
+
 /** Update the display name (stored in auth user_metadata.full_name — no schema
  *  dependency). Shown in the dashboard sidebar + settings account card. */
 export async function updateDisplayName(name: string): Promise<Result> {
@@ -53,4 +56,40 @@ export async function updatePassword(currentPassword: string, newPassword: strin
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { ok: false, error: error.message }
   return { ok: true }
+}
+
+/**
+ * The town this person writes from.
+ *
+ * THE MAP CANNOT BE DRAWN FROM DATA WE NEVER ASK FOR. The community map on the
+ * landing page plots one soft dot per member town, and the interaction plan
+ * makes `perfil_complet` (+15 punts) depend on it — but nothing in the product
+ * had ever asked. This is that question, and it is the whole feature: one
+ * optional free-text field on the profile.
+ *
+ * It lives on `profiles`, not on `sites`: a person lives somewhere, a blog does
+ * not, and one person can own three blogs.
+ *
+ * Optional by design — an empty value clears it. We do not geocode, we do not
+ * infer from an IP, and we never show it next to anything the person did not opt
+ * into showing (`sites.showcase`).
+ */
+export async function updateTown(town: string, country?: string): Promise<Result & { town?: string }> {
+  const clean = town.trim().replace(/\s+/g, ' ').slice(0, 80)
+  const cleanCountry = (country ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'No autenticat.' }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ town: clean || null, ...(cleanCountry ? { country: cleanCountry } : {}) })
+    .eq('id', user.id)
+
+  if (error?.code === UNDEFINED_COLUMN) {
+    return { ok: false, error: 'El mapa de la comunitat encara no està actiu (migració 036 pendent).' }
+  }
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, town: clean }
 }

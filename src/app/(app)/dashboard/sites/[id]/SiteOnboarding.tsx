@@ -1,30 +1,65 @@
 'use client'
 
-// Full-page onboarding shown on a brand-new site (no theme, no posts).
+// Full-page onboarding shown on a brand-new site.
 //
-// Two entry paths, with AUTO-DETECTION in the middle of the first one:
-//   1. "La meva web" — one quick fetch (/api/onboarding/detect) answers whether
-//      the site HAS a blog. With a blog → choose "clone my ENTIRE blog"
-//      (design + cards + features + article import — no layout questions, the
-//      clone IS the answer) or "new blog with my web's styles". Without one →
-//      a single clear path (styles clone), plus a manual "my blog lives
-//      elsewhere" escape hatch.
-//   2. Templates — hand-designed premium identities, each shipping with its
-//      matching feed layout, Smart Modules AND starter articles, so a from-
-//      scratch blog is born alive, never empty.
+// ONE DOOR (Fase 1, 2026-09-16)
+// ─────────────────────────────
+// It used to be a two-card fork: "clone my web" (a URL field) beside "start from a
+// template". Two decisions before the owner had told us anything about themselves,
+// and a Brand Brain that stayed empty either way — so their agent met them knowing
+// nothing, which is exactly when knowing something matters most.
+//
+// Now there is one question — "Explica'ns qui sou" — and every answer is valid: a
+// URL, documents dropped anywhere on the surface, a voice note, or just typing.
+// Whatever they give goes into the Brand Brain BEFORE the first article, and the
+// template path survives as the honest escape hatch it always was ("I don't have a
+// website yet").
+//
+// SEQUENCING NOTE: the brand capture runs to completion BEFORE the visual clone
+// starts, rather than in parallel. Parallel would be ~20s faster, but the clone
+// owns its own full-screen progress modal (ThemeCaptureModal) and running both at
+// once puts two progress UIs on screen fighting each other. So each phase gets the
+// screen — and the brand phase earns it: it narrates real findings and ends by
+// quoting the owner's own sentences back to them.
 //
 // It lives INSIDE the ThemeStudioProvider so it can drive grab()/applyTemplate()
 // directly; the host (SiteDetailClient) coordinates dismissal, tab switching and
-// the post-capture import via callbacks.
+// the post-capture flow via callbacks.
 
-import { useState, useRef, useEffect } from 'react'
-import {
-  Wand2, Palette, Globe, ArrowRight, ArrowLeft, Sparkles, Check, X, Newspaper, Search, FileText,
-} from 'lucide-react'
+import { useCallback, useState, useRef, useEffect, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
+import { Wand2, Globe, ArrowRight, ArrowLeft, Check, X, Newspaper } from 'lucide-react'
 import { BLOG_TEMPLATES, type BlogTemplate } from '@/lib/render/templates'
+import { archetypeForTemplate } from '@/lib/render/archetypes'
 import { useThemeStudio } from './ThemeStudioContext'
 import Button from '@/components/ui/Button'
 import Wordmark from '@/components/ui/Wordmark'
+import BrandIntake, { type BrandIntakeValue } from '@/components/onboarding/BrandIntake'
+import {
+  clearDoorCarry, doorCarrySnapshot, doorCarryServerSnapshot, subscribeDoorCarry,
+} from '@/lib/onboarding/glimpse'
+
+/** The subset of the glimpse the capture actually needs. */
+type BrandSeedCarry = {
+  prose: string; siteName: string | null; locale: string | null
+  palette: string[]; fonts: string[]; pages: number
+}
+import BrandCaptureView from '@/components/onboarding/BrandCaptureView'
+import RewardTicker from '@/components/onboarding/RewardTicker'
+import { cn } from '@/lib/cn'
+
+/**
+ * True once we are running in the browser.
+ *
+ * useSyncExternalStore rather than an effect: the server snapshot is false and
+ * the client snapshot is true, which is exactly the shape this hook wants — and
+ * it keeps the component free of the setState-in-effect that react-hooks v6
+ * rejects.
+ */
+const noopSubscribe = () => () => {}
+function useIsClient(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false)
+}
 
 function normalizeUrl(raw: string): string {
   const v = raw.trim()
@@ -45,355 +80,395 @@ type Detected = {
 }
 
 export default function SiteOnboarding({
-  siteName, initialUrl, autoStart, onMagicWandStarted, onTemplateApplied, onDismiss,
+  siteId, siteName, initialUrl, autoStart, startOnTemplates = false,
+  onMagicWandStarted, onTemplateApplied, onDismiss,
 }: {
+  siteId: string
   siteName: string
-  /** Prefill the Magic Wand URL (carried from the public landing funnel). */
+  /** Prefill the intake (carried from the public landing funnel). */
   initialUrl?: string
-  /** Immediately fire the clone on mount (seamless funnel from registration). */
+  /** Immediately fire the capture on mount (seamless funnel from registration). */
   autoStart?: boolean
-  onMagicWandStarted: (opts?: { importArticles?: boolean }) => void
+  /** "Encara no tinc web" (?nova=1): skip the intake, open the gallery. */
+  startOnTemplates?: boolean
+  onMagicWandStarted: (opts?: { importArticles?: boolean; afterBrandRead?: boolean }) => void
   onTemplateApplied: (templateName: string) => void
   onDismiss: () => void
 }) {
   const { grab, applyTemplate, setBlogUrl } = useThemeStudio()
-  const [view, setView] = useState<'choose' | 'options' | 'templates'>('choose')
-  const [url, setUrl] = useState(initialUrl ?? '')
-  const [manualBlogUrl, setManualBlogUrl] = useState('')
-  const [applyingId, setApplyingId] = useState<string | null>(null)
-  const [detecting, setDetecting] = useState(false)
-  const [detectError, setDetectError] = useState('')
-  const [detected, setDetected] = useState<Detected | null>(null)
 
-  // Path 1, step 1: ONE quick look at the user's site → adaptive options.
-  const analyzeMyWeb = async () => {
-    const target = normalizeUrl(url)
-    if (!target || detecting) return
-    setDetecting(true)
-    setDetectError('')
+  // NO MICRO-FLASH ON THE SEAMLESS FUNNEL (founder, 2026-09-17: "fix the glitch
+  // where the 'explica'ns qui sou' screen flashes briefly during the 'estem
+  // coneixent qui sou' loading phase").
+  //
+  // The flash was structural, not a timing accident. `view` started at 'intake'
+  // and an effect called handleIntake() to move it on — so the first COMMITTED
+  // frame of a funnel arrival was always the question we already had the answer
+  // to, and 'capturing' only arrived one paint later.
+  //
+  // The fix is to boot into the phase the props already describe: when we were
+  // handed a URL and told to auto-start, the intake is DECIDED before the first
+  // render, so it is initial state rather than an effect's side effect. The
+  // effect that remains does only the things that genuinely cannot be synchronous
+  // (a network detect, clearing the carry).
+  //
+  // Reading the carry inside a lazy initializer is safe: the component renders
+  // null until `isClient`, so no server HTML depends on it, and readDoorCarry()
+  // is already guarded against sessionStorage not existing.
+  const bootUrl = autoStart && initialUrl && !startOnTemplates ? normalizeUrl(initialUrl) : ''
+  const boot = !!bootUrl
+  const [view, setView] = useState<'intake' | 'capturing' | 'confirm' | 'templates'>(
+    boot ? 'capturing' : startOnTemplates ? 'templates' : 'intake',
+  )
+  const [intake, setIntake] = useState<BrandIntakeValue | null>(() => {
+    if (!boot) return null
+    const carry = doorCarrySnapshot()
+    return { url: bootUrl, text: carry?.text ?? '', files: [], audio: null }
+  })
+  const [detected, setDetected] = useState<Detected | null>(null)
+  // Preselected so "Continua" is live the moment the gallery opens. It used to
+  // start null, which meant the primary CTA greeted every owner disabled.
+  const [selectedTpl, setSelectedTpl] = useState<string>(BLOG_TEMPLATES[0]?.id ?? '')
+  const [applying, setApplying] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  // THE DOOR'S CARRY. On the landing page the visitor already answered this exact
+  // question — pasted a URL, dropped a document, or talked. All of that was
+  // reduced to strings and left in sessionStorage (see lib/onboarding/glimpse),
+  // so the only sin left to commit would be asking them again.
+  //
+  // Read through useSyncExternalStore rather than an effect: the value exists
+  // only in the browser, it never changes after load, and setState-in-an-effect
+  // is both a wasted render and a react-hooks v6 error.
+  const carried = useSyncExternalStore(subscribeDoorCarry, doorCarrySnapshot, doorCarryServerSnapshot)
+
+  // The seed has to OUTLIVE the carry. clearDoorCarry() nulls the module
+  // snapshot, and useSyncExternalStore re-reads it on the very next render —
+  // so without this the glimpse would disappear between 'I accept the intake'
+  // and 'I render the capture view that needs it', which is one render apart.
+  const [seed, setSeed] = useState<BrandSeedCarry | null>(() => {
+    if (!boot) return null
+    const g = doorCarrySnapshot()?.glimpse
+    return g ? { prose: g.prose, siteName: g.siteName, locale: g.locale, palette: g.palette, fonts: g.fonts, pages: g.pages } : null
+  })
+
+  // One quick look at the site, purely to learn whether their articles can ride
+  // along. Cheap, and it runs while the owner is still reading the screen.
+  // useCallback so the seamless-funnel effect below can depend on it honestly
+  // instead of silencing the exhaustive-deps rule: it closes over nothing.
+  const runDetect = useCallback(async (url: string): Promise<Detected | null> => {
     try {
       const res = await fetch('/api/onboarding/detect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: target }),
+        body: JSON.stringify({ url }),
       })
       const data = (await res.json()) as Detected
-      if (!res.ok || !data.ok) {
-        setDetectError(data.error || 'No hem pogut llegir aquesta web. Comprova l’adreça.')
-        return
-      }
-      setDetected(data)
-      setView('options')
+      return res.ok && data.ok ? data : null
     } catch {
-      setDetectError('No hem pogut llegir aquesta web. Torna-ho a provar.')
-    } finally {
-      setDetecting(false)
+      return null
     }
+  }, [])
+
+  const handleIntake = async (value: BrandIntakeValue) => {
+    setBusy(true)
+    // Anything carried from the landing Door joins what they typed here. It is
+    // consumed once and cleared, so a second site does not inherit the first
+    // one's story.
+    const merged: BrandIntakeValue = carried?.text
+      ? { ...value, text: [value.text, carried.text].filter(Boolean).join('\n\n') }
+      : value
+    // NOTE: the carry is cleared from storage here, but `carried` is the
+    // module-level snapshot, so the seed handed to BrandCaptureView below is
+    // still the one the Door wrote. Clearing storage stops a SECOND site from
+    // inheriting this one's story; it must not erase this site's own.
+    if (carried?.glimpse) {
+      const g = carried.glimpse
+      setSeed({ prose: g.prose, siteName: g.siteName, locale: g.locale, palette: g.palette, fonts: g.fonts, pages: g.pages })
+    }
+    clearDoorCarry()
+    setIntake(merged)
+    if (merged.url) setDetected(await runDetect(merged.url))
+    setBusy(false)
+    setView('capturing')
   }
 
-  // Path 1a — FULL blog clone: design + features + the user's own articles.
-  const startFullClone = (blogOverride?: string) => {
-    if (!detected) return
-    setBlogUrl(blogOverride ?? detected.blogUrl ?? '')
-    onMagicWandStarted({ importArticles: true })
-    void grab(detected.url)
+  // The Brand Brain is written. Now the LOOK: clone their site, or — if they never
+  // gave us one — let them pick a template.
+  /**
+   * After the Brand Brain, the LOOK.
+   *
+   * When the owner came through the landing Door we already know their URL, we
+   * already read their site, and they already said yes once — so asking "shall
+   * we clone it?" is asking the same question a second time. Founder, 2026-09-16:
+   * "si dones continuar va a clonar la web quan ja hauria d'estar fet". It cannot
+   * already be done (the visual capture is a different pass from the brand read),
+   * but it can start without another click.
+   *
+   * The confirmation screen survives for everyone who typed a URL here, inside
+   * the app, where they have not agreed to anything yet.
+   */
+  const afterCapture = () => {
+    if (!intake?.url) { setView('templates'); return }
+    // ONE YES IS ENOUGH. Two paths arrive here having already agreed: the landing
+    // Door (we carry its glimpse) and the registration funnel (we were handed the
+    // URL and told to start). Showing either of them "shall we clone it?" is
+    // asking the same question a second time — the redundant screen the founder
+    // kept hitting on the way to the QR. Someone who typed a URL INSIDE the app
+    // has agreed to nothing yet, so they still get the confirmation.
+    if (boot || seed) { startClone(); return }
+    setView('confirm')
   }
 
-  // Path 1b — styles only: the web's identity, a blank blog.
-  const startStylesOnly = () => {
-    if (!detected) return
-    setBlogUrl('')
-    onMagicWandStarted({ importArticles: false })
-    void grab(detected.url)
+  const startClone = () => {
+    const target = intake?.url
+    if (!target) return
+    const blog = detected?.blogUrl ?? ''
+    setBlogUrl(blog)
+    // `afterBrandRead` is how the capture modal knows not to introduce itself
+    // ("Visitant el teu lloc") to someone who watched us read that very site
+    // thirty seconds ago. See CONTINUED_COPY in ZenCaptureModal.
+    onMagicWandStarted({ importArticles: !!blog, afterBrandRead: view === 'capturing' || !!seed })
+    void grab(target)
   }
 
-  // Seamless funnel: when arriving from registration with a target URL, kick the
-  // Magic Wand automatically so the user watches their site assemble itself.
+  // Seamless funnel: the capture is ALREADY running (see the `boot` note above —
+  // it is the first committed frame). All this effect still owns is the work
+  // that cannot happen during render: the one-shot blog detect, and retiring the
+  // carry so a second site never inherits this one's story.
   const fired = useRef(false)
   useEffect(() => {
-    if (autoStart && initialUrl && !fired.current) {
-      fired.current = true
-      onMagicWandStarted({ importArticles: true })
-      void grab(normalizeUrl(initialUrl))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart, initialUrl])
+    if (!bootUrl || fired.current) return
+    fired.current = true
+    clearDoorCarry()
+    void runDetect(bootUrl).then(setDetected)
+  }, [bootUrl, runDetect])
 
   // Applying a template also SEEDS the starter articles (awaited inside
-  // applyTemplate), so the button shows progress until the blog is truly alive.
-  const pickTemplate = async (tpl: BlogTemplate) => {
-    if (applyingId) return
-    setApplyingId(tpl.id)
+  // applyTemplate), so the CTA shows progress until the blog is truly alive.
+  const confirmTemplate = async () => {
+    const tpl = BLOG_TEMPLATES.find(t => t.id === selectedTpl)
+    if (!tpl || applying) return
+    setApplying(true)
     try {
       await applyTemplate(tpl, siteName)
       onTemplateApplied(tpl.name)
     } finally {
-      setApplyingId(null)
+      setApplying(false)
     }
   }
 
-  // Seamless funnel: the user arrived from signup with a target URL, so the
-  // capture has already started on mount. We never flash the chooser behind the
-  // Zen capture card — just a calm, breathing backdrop. Nothing to read, nothing
-  // to decide.
-  if (autoStart && initialUrl) {
-    return (
-      <div className="fixed inset-0 z-40 overflow-hidden bg-bg">
-        <div className="halo halo-drift-a" style={{ width: 460, height: 460, background: 'rgba(245,188,0,0.20)', top: -120, left: -80 }} aria-hidden />
-        <div className="halo halo-drift-b" style={{ width: 420, height: 420, background: 'rgba(245,188,0,0.14)', bottom: -140, right: -60 }} aria-hidden />
-        <div className="relative flex min-h-full flex-col items-center justify-center gap-4 px-6 text-center">
-          <Wordmark size="text-2xl" />
-          <p className="text-sm text-muted">
-            Estem creant <span className="font-semibold text-text">{siteName}</span>…
-          </p>
-        </div>
+  // THE OVERLAY GOES IN A PORTAL, ON document.body.
+  //
+  // Founder, 2026-09-16: "scroll de pàgina onboarding mostra fragments del fons
+  // i no ocupa del tot la pàgina". Two causes, and the portal kills both:
+  //
+  //   · `position: fixed` is relative to the VIEWPORT only while no ancestor
+  //     establishes a containing block. Any transform, filter, perspective or
+  //     `contain: paint` anywhere up the dashboard tree — today or in six
+  //     months — silently re-anchors it, and the overlay stops covering the
+  //     page. On document.body there is no ancestor left that can do that.
+  //   · the page behind kept its own scrollbar, so the wheel chained straight
+  //     through to the dashboard. Locking the body while this is open is what
+  //     stops the background moving underneath.
+  //
+  // `h-dvh` rather than a bare inset: on mobile the dynamic viewport unit
+  // follows the browser chrome as it collapses, which is the other way a strip
+  // of what is behind leaks into view.
+  const isClient = useIsClient()
+
+  useEffect(() => {
+    const body = document.body
+    const previous = body.style.overflow
+    body.style.setProperty('overflow', 'hidden')
+    return () => {
+      if (previous) body.style.setProperty('overflow', previous)
+      else body.style.removeProperty('overflow')
+    }
+  }, [])
+
+  if (!isClient) return null
+
+  return createPortal(
+    // overflow-x-clip: no decorative element or card can create sideways scroll.
+    <div className="fixed inset-0 z-[70] h-dvh w-screen overflow-y-auto overflow-x-clip bg-bg">
+      {/* fixed, not absolute: the halos must stay put while the panel scrolls,
+          or they slide away and leave a bare band at the bottom. */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
+        <div className="halo halo-drift-a" style={{ width: 480, height: 480, background: 'rgba(245,188,0,0.13)', top: -140, left: -100 }} />
+        <div className="halo halo-drift-b" style={{ width: 420, height: 420, background: 'rgba(245,188,0,0.09)', bottom: -150, right: -80 }} />
       </div>
-    )
-  }
 
-  return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-bg">
-      <div className="min-h-full flex flex-col items-center justify-center px-5 py-12">
+      <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-10 sm:px-5 sm:py-12">
         <div className="w-full max-w-4xl">
-          {/* Skip */}
-          <div className="flex justify-end mb-2">
-            <button
-              onClick={onDismiss}
-              className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-subtle hover:text-text hover:bg-surface-hover rounded-lg transition-colors"
-            >
-              Ho configuraré després <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {/* Skip — always available, never a dead end. Hidden mid-capture, where
+              abandoning would leave a half-written profile. */}
+          {view !== 'capturing' && (
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={onDismiss}
+                className="cursor-pointer flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-subtle transition-colors hover:bg-surface-hover hover:text-text"
+              >
+                Ho configuraré després <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
-          {view === 'choose' && (
+          {view === 'intake' && (
             <>
-              <div className="text-center mb-9">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent-soft text-accent text-xs font-semibold uppercase tracking-wider mb-4">
-                  <Sparkles className="w-3.5 h-3.5" /> Nou lloc
-                </span>
-                <h1 className="text-3xl sm:text-4xl font-bold text-text tracking-tight">
-                  Com vols començar amb <span className="text-accent">{siteName}</span>?
-                </h1>
-                <p className="text-sm text-muted mt-3 max-w-xl mx-auto leading-relaxed">
-                  Analitzem la teva web i te la clonem — blog inclòs, si en tens — o arrenca des d’una identitat premium amb articles de mostra ja dins.
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
-                {/* 1 · My web → detect first */}
-                <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] lift relative bg-surface border border-transparent rounded-2xl p-7 shadow-card flex flex-col">
-                  <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
-                    <Wand2 className="w-5 h-5" />
-                  </div>
-                  <h2 className="text-base font-semibold text-text mt-4">Clona la teva web</h2>
-                  <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    L&apos;analitzem: si ja tens blog, te&apos;l clonem sencer — targetes, categories, estructura i articles. Si no, el creem amb els teus estils.
-                  </p>
-                  <div className="mt-5 space-y-2.5">
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-subtle pointer-events-none" />
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={e => { setUrl(e.target.value); setDetectError('') }}
-                        onKeyDown={e => e.key === 'Enter' && void analyzeMyWeb()}
-                        placeholder="la-meva-web.com"
-                        className="w-full h-10 pl-9 pr-3 bg-surface-subtle border border-border rounded-lg focus:outline-none focus:border-accent focus:bg-surface text-sm text-text placeholder:text-subtle transition-colors"
-                      />
-                    </div>
-                    {detectError && <p className="text-xs font-medium text-danger">{detectError}</p>}
-                    <Button
-                      glow
-                      onClick={() => void analyzeMyWeb()}
-                      loading={detecting}
-                      disabled={!url.trim()}
-                      fullWidth
-                      iconLeft={<Search className="w-4 h-4" />}
-                    >
-                      Analitza la meva web
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 2 · Templates */}
-                <div className="lift relative bg-surface border border-border rounded-2xl p-7 shadow-card hover:border-border-strong flex flex-col">
-                  <div className="w-11 h-11 rounded-xl bg-text text-bg-elevated flex items-center justify-center">
-                    <Palette className="w-5 h-5" />
-                  </div>
-                  <h2 className="text-base font-semibold text-text mt-4">Comença amb una plantilla</h2>
-                  <p className="text-sm text-muted mt-1.5 flex-1 leading-relaxed">
-                    {BLOG_TEMPLATES.length} identitats completes: disposició pròpia, mòduls activats i articles de mostra ja publicats. Un blog viu des del primer segon.
-                  </p>
-                  <div className="mt-5 flex -space-x-2">
-                    {BLOG_TEMPLATES.map(t => (
-                      <span
-                        key={t.id}
-                        className="w-9 h-9 rounded-xl border-2 border-bg-elevated"
-                        style={{ background: t.swatch.bg }}
-                        title={t.name}
-                      >
-                        <span className="block w-full h-full rounded-[0.55rem]" style={{ background: `linear-gradient(135deg, ${t.swatch.surface} 55%, ${t.swatch.accent})` }} />
-                      </span>
-                    ))}
-                  </div>
-                  <Button
-                    onClick={() => setView('templates')}
-                    variant="secondary"
-                    fullWidth
-                    iconRight={<ArrowRight className="w-4 h-4" />}
-                    className="mt-5"
-                  >
-                    Veure plantilles
-                  </Button>
-                </div>
+              <BrandIntake
+                // Remounts once the carry lands, so a URL pasted on the landing
+                // is already in the field rather than arriving after the input
+                // has initialised its own state.
+                key={carried ? 'carried' : 'fresh'}
+                siteName={siteName}
+                initialUrl={initialUrl || carried?.url || undefined}
+                busy={busy}
+                onSubmit={(v) => { void handleIntake(v) }}
+                onNoWebsite={() => setView('templates')}
+              />
+              {/* Punts are front-loaded ON PURPOSE (Fase 2): the free tier is 100
+                  punts a month, and an owner who meets the wall before the magic
+                  churns. Surfacing the welcome + first-article rewards here means
+                  they publish twice in month one. */}
+              <div className="mx-auto mt-8 max-w-2xl">
+                <RewardTicker />
               </div>
             </>
           )}
 
-          {view === 'options' && detected && (
+          {view === 'capturing' && intake && (
+            <BrandCaptureView
+              seed={seed}
+              siteId={siteId}
+              siteName={siteName}
+              input={intake}
+              onContinue={afterCapture}
+            />
+          )}
+
+          {view === 'confirm' && (
             <>
-              <div className="flex items-center justify-between mb-7">
-                <Button onClick={() => setView('choose')} variant="ghost" size="sm" iconLeft={<ArrowLeft className="w-4 h-4" />}>
-                  Enrere
-                </Button>
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1">
-                    <Globe className="w-3 h-3 text-subtle" /> {detected.displayUrl}
+              <div className="mb-7 flex items-center justify-center">
+                <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted">
+                  <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1">
+                    <Globe className="h-3 w-3 shrink-0 text-subtle" />
+                    <span className="truncate">{detected?.displayUrl ?? intake?.url}</span>
                   </span>
-                  {detected.framework && (
-                    <span className="rounded-full bg-accent-soft px-2.5 py-1 text-accent">{detected.framework}</span>
+                  {detected?.framework && (
+                    <span className="hidden rounded-full bg-accent-soft px-2.5 py-1 text-accent sm:inline">{detected.framework}</span>
                   )}
                 </div>
-                <span className="w-20" />
               </div>
 
-              <div className="text-center mb-8">
-                <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">
-                  {detected.isBlog
-                    ? <>Hem trobat el teu blog<span className="text-accent">.</span></>
-                    : <>La teva web no té blog — encara<span className="text-accent">.</span></>}
+              <div className="mb-8 text-center">
+                <Wordmark size="text-lg" />
+                <h1 className="mt-4 text-2xl font-bold tracking-tight text-text sm:text-3xl">
+                  {detected?.isBlog
+                    ? <>Ara, el teu disseny<span className="text-accent">.</span></>
+                    : <>Ara, la teva identitat<span className="text-accent">.</span></>}
                 </h1>
-                <p className="text-sm text-muted mt-2.5 max-w-xl mx-auto leading-relaxed">
-                  {detected.isBlog
-                    ? `${detected.blogUrl ? `L'hem detectat a ${detected.blogUrl.replace(/^https?:\/\//, '')}. ` : ''}Tria què en vols portar a Carma.`
-                    : 'Cap problema: clonem la identitat de la teva web i el blog neix nou, a joc amb tot el que ja tens.'}
+                <p className="mx-auto mt-2.5 max-w-xl text-sm leading-relaxed text-muted">
+                  {detected?.isBlog
+                    ? 'Et clonem el disseny sencer i hi portem els teus articles.'
+                    : 'Clonem la identitat de la teva web i el blog neix nou, a joc amb tot el que ja tens.'}
                 </p>
               </div>
 
-              {detected.isBlog ? (
-                <div className="grid md:grid-cols-2 gap-5">
-                  {/* FULL clone */}
-                  <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] lift relative bg-surface border border-transparent rounded-2xl p-7 shadow-card flex flex-col">
-                    <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
-                      <Newspaper className="w-5 h-5" />
-                    </div>
-                    <h2 className="text-lg font-bold text-text mt-4">Clona el teu blog sencer</h2>
-                    <ul className="mt-3 space-y-2 flex-1">
-                      {['El disseny i la capçalera, idèntics', 'Les funcionalitats detectades, com a mòduls', 'Els teus articles, importats'].map(t => (
-                        <li key={t} className="flex items-start gap-2.5 text-sm text-muted">
-                          <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"><Check className="w-2.5 h-2.5" strokeWidth={3.5} /></span>
-                          {t}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button glow onClick={() => startFullClone()} fullWidth iconLeft={<Wand2 className="w-4 h-4" />} className="mt-5">
-                      Clonar-ho tot
-                    </Button>
+              <div className="mx-auto max-w-xl space-y-4">
+                <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] lift relative flex flex-col rounded-2xl border border-transparent bg-surface p-7 shadow-card">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-on-accent">
+                    {detected?.isBlog ? <Newspaper className="h-5 w-5" /> : <Wand2 className="h-5 w-5" />}
                   </div>
-
-                  {/* Styles only */}
-                  <div className="lift relative bg-surface border border-border rounded-2xl p-7 shadow-card hover:border-border-strong flex flex-col">
-                    <div className="w-11 h-11 rounded-xl bg-surface-subtle text-muted flex items-center justify-center">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <h2 className="text-lg font-bold text-text mt-4">Blog nou amb els teus estils</h2>
-                    <p className="text-sm text-muted mt-3 flex-1 leading-relaxed">
-                      Clonem la identitat de la web (capçalera, colors, tipografies) però el blog comença en blanc — sense importar els articles antics.
-                    </p>
-                    <Button onClick={startStylesOnly} variant="secondary" fullWidth iconLeft={<Sparkles className="w-4 h-4" />} className="mt-5">
-                      Començar de zero amb el meu estil
-                    </Button>
-                  </div>
+                  <h2 className="mt-4 text-lg font-bold text-text">
+                    {detected?.isBlog ? 'Clona el teu blog sencer' : 'Crea el blog amb la identitat de la teva web'}
+                  </h2>
+                  <ul className="mt-3 flex-1 space-y-2">
+                    {(detected?.isBlog
+                      ? ['El disseny i la capçalera, idèntics', 'Les funcionalitats detectades, com a mòduls', 'Els teus articles, importats']
+                      : ['Capçalera i peu, clonats', 'Colors i tipografies exactes', 'Funcionalitats detectades, com a mòduls']
+                    ).map(t => (
+                      <li key={t} className="flex items-start gap-2.5 text-sm text-muted">
+                        <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
+                          <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                        </span>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button glow size="lg" fullWidth className="mt-5" onClick={startClone} iconLeft={<Wand2 className="h-4 w-4" />}>
+                    {detected?.isBlog ? 'Clonar-ho tot' : 'Crear el meu blog'}
+                  </Button>
                 </div>
-              ) : (
-                <div className="max-w-xl mx-auto space-y-4">
-                  <div className="gold-trace gold-trace-aura [--gold-trace-w:1px] lift relative bg-surface border border-transparent rounded-2xl p-7 shadow-card flex flex-col">
-                    <div className="w-11 h-11 rounded-xl bg-accent text-on-accent flex items-center justify-center">
-                      <Wand2 className="w-5 h-5" />
-                    </div>
-                    <h2 className="text-lg font-bold text-text mt-4">Crea el blog amb els estils de la teva web</h2>
-                    <ul className="mt-3 space-y-2">
-                      {['Capçalera i peu, clonats', 'Colors i tipografies exactes', 'Funcionalitats detectades, com a mòduls'].map(t => (
-                        <li key={t} className="flex items-start gap-2.5 text-sm text-muted">
-                          <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"><Check className="w-2.5 h-2.5" strokeWidth={3.5} /></span>
-                          {t}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button glow onClick={startStylesOnly} fullWidth iconLeft={<Wand2 className="w-4 h-4" />} className="mt-5">
-                      Crear el meu blog
-                    </Button>
-                  </div>
 
-                  {/* Escape hatch: the detector missed it / the blog lives on another host. */}
-                  <div className="rounded-2xl border border-border bg-surface-subtle p-5">
-                    <p className="text-sm font-semibold text-text">El teu blog és en una altra adreça?</p>
-                    <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-                      <input
-                        type="url"
-                        value={manualBlogUrl}
-                        onChange={e => setManualBlogUrl(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && manualBlogUrl.trim() && startFullClone(normalizeUrl(manualBlogUrl))}
-                        placeholder="la-meva-web.com/blog"
-                        className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text outline-none transition-colors placeholder:text-subtle focus:border-accent"
-                      />
-                      <Button
-                        onClick={() => startFullClone(normalizeUrl(manualBlogUrl))}
-                        disabled={!manualBlogUrl.trim()}
-                        variant="secondary"
-                        iconLeft={<Newspaper className="w-4 h-4" />}
-                      >
-                        Clonar-lo sencer
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setView('templates')}
+                  className="mx-auto block cursor-pointer rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-hover hover:text-text"
+                >
+                  Prefereixo començar amb una plantilla
+                </button>
+              </div>
             </>
           )}
 
           {view === 'templates' && (
             <>
-              <div className="flex items-center justify-between mb-7">
+              <div className="mb-7 flex items-center justify-between">
+                {/* Arriving straight from "no tinc web" there is nowhere to go
+                    back TO — the intake was never shown. Offer it forward
+                    instead, so the owner who does have a site can still say so. */}
                 <Button
-                  onClick={() => setView('choose')}
+                  onClick={() => setView(intake?.url ? 'confirm' : 'intake')}
                   variant="ghost"
                   size="sm"
-                  iconLeft={<ArrowLeft className="w-4 h-4" />}
+                  disabled={applying}
+                  iconLeft={startOnTemplates && !intake ? undefined : <ArrowLeft className="h-4 w-4" />}
                 >
-                  Enrere
+                  {startOnTemplates && !intake ? 'Sí que en tinc, de web' : 'Enrere'}
                 </Button>
                 <h2 className="text-lg font-semibold text-text">Tria una plantilla</h2>
                 <span className="w-20" />
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-5">
+              {/* Card = the choice. One tap selects; the single CTA below confirms. */}
+              <div className="grid gap-5 pb-28 sm:grid-cols-2">
                 {BLOG_TEMPLATES.map(tpl => (
                   <TemplateCard
                     key={tpl.id}
                     tpl={tpl}
                     siteName={siteName}
-                    applying={applyingId === tpl.id}
-                    disabled={applyingId !== null}
-                    onPick={() => void pickTemplate(tpl)}
+                    selected={selectedTpl === tpl.id}
+                    disabled={applying}
+                    onPick={() => setSelectedTpl(tpl.id)}
                   />
                 ))}
+              </div>
+
+              <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/85 backdrop-blur-md">
+                <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-3.5 sm:px-5">
+                  <p className="min-w-0 truncate text-sm text-muted">
+                    Plantilla: <span className="font-bold text-text">{BLOG_TEMPLATES.find(t => t.id === selectedTpl)?.name}</span>
+                  </p>
+                  <Button
+                    glow
+                    size="lg"
+                    onClick={() => void confirmTemplate()}
+                    loading={applying}
+                    disabled={!selectedTpl}
+                    iconRight={<ArrowRight className="h-4 w-4" />}
+                    className="shrink-0"
+                  >
+                    {applying ? 'Preparant el teu blog…' : 'Continua'}
+                  </Button>
+                </div>
               </div>
             </>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -416,11 +491,15 @@ function TemplatePreview({ tpl, siteName }: { tpl: BlogTemplate; siteName: strin
   }, [])
 
   const src = `/api/theme/template-preview?tpl=${encodeURIComponent(tpl.id)}&name=${encodeURIComponent(siteName)}`
+  const h = Math.round(DESIGN_H * scale)
   return (
     <div
       ref={wrapRef}
-      className="relative w-full overflow-hidden border-b border-border"
-      style={{ height: Math.round(DESIGN_H * scale), background: tpl.swatch.bg }}
+      // content-visibility: an off-screen preview in the gallery costs nothing to
+      // render until it scrolls in. Eight live iframes is otherwise real work for a
+      // screen where the owner looks at two of them.
+      className="relative w-full overflow-hidden border-b border-border [content-visibility:auto]"
+      style={{ height: h, background: tpl.swatch.bg, containIntrinsicSize: `auto ${h}px` }}
     >
       <iframe
         src={src}
@@ -444,34 +523,59 @@ function TemplatePreview({ tpl, siteName }: { tpl: BlogTemplate; siteName: strin
   )
 }
 
-function TemplateCard({ tpl, siteName, applying, disabled, onPick }: {
+// The whole card is the toggle (aria-pressed): tap to choose, gold ring + badge
+// confirm the selection. No per-card buttons — one global "Continua" proceeds.
+function TemplateCard({ tpl, siteName, selected, disabled, onPick }: {
   tpl: BlogTemplate
   siteName: string
-  applying: boolean
+  selected: boolean
   disabled: boolean
   onPick: () => void
 }) {
+  const arch = archetypeForTemplate(tpl.id)
   return (
-    <div className="group bg-surface border border-border rounded-2xl overflow-hidden shadow-card hover:border-border-strong hover:shadow-pop transition-all flex flex-col">
+    <button
+      type="button"
+      onClick={onPick}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={cn(
+        'group relative cursor-pointer overflow-hidden rounded-2xl border bg-surface text-left shadow-card transition-all flex flex-col',
+        selected
+          ? 'border-accent ring-2 ring-accent/30 shadow-pop'
+          : 'border-border hover:border-border-strong hover:shadow-pop hover:-translate-y-0.5',
+        disabled && !selected && 'opacity-60',
+      )}
+    >
       <TemplatePreview tpl={tpl} siteName={siteName} />
 
-      <div className="p-5 flex flex-col flex-1">
-        <div className="flex items-center gap-2">
-          <span className="w-3.5 h-3.5 rounded-full ring-2 ring-bg-elevated shadow-sm" style={{ background: tpl.swatch.accent }} aria-hidden />
-          <h3 className="text-base font-semibold text-text">{tpl.name}</h3>
-        </div>
-        <p className="text-xs text-muted mt-1.5 flex-1 leading-relaxed">{tpl.tagline}</p>
-        <Button
-          onClick={onPick}
-          loading={applying}
-          disabled={disabled && !applying}
-          fullWidth
-          iconLeft={<Check className="w-4 h-4" />}
-          className="mt-4"
-        >
-          {applying ? 'Preparant el teu blog…' : `Usar «${tpl.name}»`}
-        </Button>
+      {/* Selection badge — pops in over the preview's corner. */}
+      <span
+        aria-hidden
+        className={cn(
+          'absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all',
+          selected
+            ? 'zen-pop border-accent bg-accent text-on-accent shadow-[0_4px_14px_-4px_rgba(245,188,0,0.7)]'
+            : 'border-border-strong bg-bg-elevated/80 text-transparent backdrop-blur-sm group-hover:border-accent/60',
+        )}
+      >
+        <Check className="h-4 w-4" strokeWidth={3} />
+      </span>
+
+      <div className="flex flex-1 items-center gap-2.5 p-4">
+        <span className="w-3.5 h-3.5 shrink-0 rounded-full ring-2 ring-bg-elevated shadow-sm" style={{ background: tpl.swatch.accent }} aria-hidden />
+        <span className="min-w-0">
+          <span className={cn('block text-base font-semibold', selected ? 'text-accent' : 'text-text')}>{tpl.name}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-muted">{tpl.tagline}</span>
+          {/* A look that backs one of the three archetypes says so: picking it
+              brings that whole module set, configured — not a bare skin. */}
+          {arch && (
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[0.62rem] font-extrabold uppercase tracking-wider text-accent">
+              {arch.name} · {Object.keys(arch.modules).length} mòduls
+            </span>
+          )}
+        </span>
       </div>
-    </div>
+    </button>
   )
 }

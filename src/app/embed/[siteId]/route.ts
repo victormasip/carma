@@ -27,8 +27,6 @@ import { tr } from '@/lib/i18n/messages'
 //     loader positions relative to its own <script> tag (document.currentScript),
 //     honouring an optional data-carma-target. Unchanged behaviour.
 
-export const dynamic = 'force-dynamic'
-
 function buildScript(origin: string, siteId: string, params: string, localesJson: string, uiLocale: string, msgJson: string): string {
   // Everything below is plain ES5-ish browser JS emitted as a string. We keep it
   // dependency-free and use string concatenation (no template literals) so it can

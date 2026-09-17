@@ -6,6 +6,7 @@ import {
   X, Globe, Search, CheckCircle2, XCircle, AlertCircle, Check,
   Upload, RotateCcw, Link2, Minimize2, Maximize2, StopCircle,
   Eye, RefreshCw, Filter, Newspaper, ChevronDown, ChevronUp,
+  Rss, Map as MapIcon, Sparkles,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { isLocale, LOCALE_META } from '@/lib/i18n/config'
@@ -22,7 +23,7 @@ type PreviewData = {
   selectorsUsed: Record<string, string>; language: string | null
 }
 
-type Phase = 'input' | 'discovering' | 'preview' | 'preview-manual' | 'importing' | 'done'
+type Phase = 'input' | 'discovering' | 'empty' | 'preview' | 'preview-manual' | 'importing' | 'done'
 
 const SELECTOR_FIELDS = [
   { key: 'title',      label: 'Títol' },
@@ -57,6 +58,8 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
   // Imported articles are published automatically by default (opt-out below).
   const [publish, setPublish] = useState(true)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
+  /** The friendly sentence the discovery route sends when it finds nothing. */
+  const [emptyNote, setEmptyNote] = useState<string | null>(null)
   const [langFilter, setLangFilter] = useState<string>('all')
 
   const [crawlUrl, setCrawlUrl] = useState('')
@@ -126,11 +129,17 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
       })
       const data = await res.json()
       if (!res.ok) { setDiscoverError(data.error ?? 'Error desconegut'); setPhase('input'); return }
-      setDiscovered(data.articles ?? [])
-      setMethod(data.method)
+      const articles: DiscoveredArticle[] = data.articles ?? []
+      setDiscovered(articles)
+      // 'none' is the discovery route's "nothing here" marker, not a method.
+      setMethod(data.method === 'none' ? null : data.method)
       setWpApiBase(data.wpApiBase ?? null)
       setLangFilter('all')
-      setSelected(new Set((data.articles ?? []).map((a: DiscoveredArticle) => a.url)))
+      setSelected(new Set(articles.map(a => a.url)))
+      // A SITE WITH NO ARTICLES IS A NORMAL SITE (founder, 2026-09-17).
+      // The discovery route no longer 404s on "nothing found", so this is the
+      // calm end of the road rather than a red box: say it, and let them out.
+      if (articles.length === 0) { setEmptyNote(typeof data.note === 'string' ? data.note : null); setPhase('empty'); return }
       setPhase('preview')
     } catch {
       setDiscoverError('Error de xarxa. Comprova la connexió.')
@@ -316,6 +325,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
             <p className="text-xs text-muted mt-0.5 truncate">
               {phase === 'input' && (isSuperAdmin ? 'Tria el mètode d\'importació' : 'Enganxa la teva web i tria què vols importar')}
               {phase === 'discovering' && 'Detectant articles…'}
+              {phase === 'empty' && 'Aquí no hi ha articles — i no passa res'}
               {phase === 'preview' && `${discovered.length} articles detectats via ${methodLabel}`}
               {phase === 'preview-manual' && `Vista prèvia · ${manualUrl}`}
               {phase === 'importing' && `${progress.done} / ${progress.total} · ${progress.current}`}
@@ -337,8 +347,14 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
+          {/* ── FASE: Discovering — transparent, animated, premium ── */}
+          {phase === 'discovering' && <DiscoveringView url={url} />}
+
+          {/* ── FASE: Empty — the graceful end, not a failure ── */}
+          {phase === 'empty' && <EmptyView url={url} note={emptyNote} onClose={onClose} />}
+
           {/* ── FASE: Input ── */}
-          {(phase === 'input' || phase === 'discovering') && (
+          {phase === 'input' && (
             <>
               <div className="space-y-3">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-subtle">
@@ -350,16 +366,16 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                     <input
                       type="url" value={url} onChange={e => setUrl(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-                      placeholder="https://example.com" disabled={phase === 'discovering'}
-                      className={`${INPUT} pl-9 disabled:opacity-60`}
+                      placeholder="https://example.com"
+                      className={`${INPUT} pl-9`}
                     />
                   </div>
                   <Button
                     glow
-                    onClick={() => handleDiscover()} disabled={!url.trim() || phase === 'discovering'}
-                    iconLeft={phase === 'discovering' ? <KnotSpinner className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                    onClick={() => handleDiscover()} disabled={!url.trim()}
+                    iconLeft={<Search className="w-4 h-4" />}
                   >
-                    {phase === 'discovering' ? 'Descobrint…' : 'Descobrir'}
+                    Descobrir
                   </Button>
                 </div>
                 {discoverError && <ErrorRow msg={discoverError} />}
@@ -547,6 +563,7 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
           {/* ── FASE: Preview (llista descoberta) ── */}
           {phase === 'preview' && (
             <div className="space-y-4">
+              <MethodBanner method={method} count={discovered.length} isSuperAdmin={isSuperAdmin} />
               {availableLangs.length > 1 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <Filter className="w-3.5 h-3.5 text-subtle shrink-0" />
@@ -674,6 +691,142 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Discovery: transparent, animated view ───────────────────────────────────
+// The discover call is ONE request, so the stepper advances on a calm timer and
+// the LAST step holds until the response lands (the view unmounts on phase
+// change). Honest about what the engine actually tries, in its real order.
+
+const DISCOVER_STEPS = [
+  'Connectant amb la teva web',
+  'Buscant WordPress (API oficial)',
+  'Llegint el sitemap i els feeds RSS',
+  'Preparant la llista d’articles',
+] as const
+
+function DiscoveringView({ url }: { url: string }) {
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => Math.min(s + 1, DISCOVER_STEPS.length - 1)), 1_700)
+    return () => clearInterval(t)
+  }, [])
+
+  let host = url
+  try { host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '') } catch { /* keep raw */ }
+
+  return (
+    <div className="flex flex-col items-center py-8 text-center">
+      <div className="relative">
+        <span className="absolute -inset-3 rounded-full bg-accent/20 blur-2xl zen-breathe" aria-hidden />
+        <KnotLoader size={64} />
+      </div>
+      <h3 className="mt-6 text-lg font-bold tracking-tight text-text">Descobrint els teus articles</h3>
+      <p className="mt-1 text-sm text-muted">des de <span className="font-semibold text-text">{host}</span></p>
+
+      <div className="mt-7 w-full max-w-xs space-y-2.5 text-left" role="status" aria-live="polite">
+        {DISCOVER_STEPS.map((label, i) => {
+          const done = i < step
+          const active = i === step
+          return (
+            <div key={label} className={cn('flex items-center gap-3 transition-opacity duration-500', !done && !active && 'opacity-35')}>
+              <span className={cn(
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors',
+                done ? 'bg-accent text-on-accent' : active ? 'bg-accent-soft text-accent' : 'bg-surface-subtle text-subtle',
+              )}>
+                {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : active ? <KnotSpinner className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+              </span>
+              <span className={cn('text-sm', active ? 'font-semibold text-text' : done ? 'text-muted' : 'text-subtle')}>
+                {label}{active && '…'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// After detection: say CLEARLY what we found, how we'll read the articles, and
+// what the user can expect — premium transparency instead of a bare count.
+function MethodBanner({ method, count, isSuperAdmin }: {
+  method: 'sitemap' | 'rss' | 'wordpress' | 'crawl' | null
+  count: number
+  isSuperAdmin: boolean
+}) {
+  if (!method || method === 'crawl') return null // crawl already has its own notice below
+
+  const M = {
+    wordpress: {
+      icon: <Sparkles className="h-4 w-4" />,
+      title: 'WordPress detectat',
+      body: `Llegim els ${count} articles per l’API oficial de WordPress: títols, contingut, imatges i categories arriben exactes. Tria quins vols portar i es publicaran al teu blog amb el teu disseny.`,
+      extra: isSuperAdmin ? null : 'Quan acabis, a «Publica» tens les opcions per servir el blog: el subdomini gratuït ja el tens actiu, i amb Premium el connectes al teu WordPress amb el plugin de Carma.',
+    },
+    sitemap: {
+      icon: <MapIcon className="h-4 w-4" />,
+      title: 'Sitemap detectat',
+      body: `Hem trobat ${count} pàgines al sitemap del lloc. Revisa la llista i desmarca el que no siguin articles (pàgines corporatives, etc.) abans d’importar.`,
+      extra: null,
+    },
+    rss: {
+      icon: <Rss className="h-4 w-4" />,
+      title: 'Feed RSS detectat',
+      body: `Llegim els ${count} articles del feed del teu lloc — els més recents primer. Tria quins vols portar al teu blog.`,
+      extra: null,
+    },
+  }[method]
+
+  return (
+    <div className="rounded-xl border border-accent/25 bg-accent-soft/50 p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent">{M.icon}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-text">{M.title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{M.body}</p>
+          {M.extra && <p className="mt-1.5 text-xs leading-relaxed text-subtle">{M.extra}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * NO ARTICLES FOUND — and that is a perfectly ordinary thing for a website.
+ *
+ * Founder, 2026-09-17: "if no articles are detected on their website during
+ * scraping, simply notify them gracefully and continue the flow without errors."
+ *
+ * This runs most often inside onboarding, where the import is auto-fired right
+ * after the clone: a shop with five pages and no blog used to meet a red 404
+ * box on their second minute in the product, for having a completely normal
+ * website. The honest reading is the opposite — nothing to import means the
+ * blog starts clean, which is the thing they came here to fix.
+ *
+ * So: the brand's own gold, one sentence, and a single way forward.
+ */
+function EmptyView({ url, note, onClose }: { url: string; note: string | null; onClose: () => void }) {
+  let host = url
+  try { host = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep the raw string */ }
+
+  return (
+    <div className="py-6 text-center">
+      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+        <Newspaper className="h-6 w-6" />
+      </span>
+      <h3 className="mt-4 text-lg font-bold tracking-tight text-text">
+        {host ? <>A {host} encara no hi ha articles</> : <>Encara no hi ha articles</>}
+      </h3>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
+        {note ?? 'No hi hem trobat res per importar. Cap problema: el blog comença buit i el primer article el pots escriure ara mateix.'}
+      </p>
+      <div className="mt-6 flex justify-center">
+        <Button glow onClick={onClose} iconLeft={<Sparkles className="h-4 w-4" />}>
+          Continuem
+        </Button>
       </div>
     </div>
   )

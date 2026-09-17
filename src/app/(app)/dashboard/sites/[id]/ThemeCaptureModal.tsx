@@ -23,11 +23,16 @@ import { useThemeStudio, type CaptureNotice } from './ThemeStudioContext'
  * Clients get the serene single-indicator <ZenCaptureModal/> instead: same live
  * state, no overwhelm.
  */
-export default function ThemeCaptureModal({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+export default function ThemeCaptureModal({ isSuperAdmin, continued = false }: {
+  isSuperAdmin: boolean
+  /** Passed through to the client-facing capture: this run is the continuation
+   *  of an onboarding the Brand Brain already started. */
+  continued?: boolean
+}) {
   const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework, isPremium } = useThemeStudio()
   const { open, phase, pct, steps, stepDetail, notices } = capture
 
-  if (!isSuperAdmin) return <ZenCaptureModal />
+  if (!isSuperAdmin) return <ZenCaptureModal continued={continued} />
 
   const isWordPress = (detectedFramework ?? '').toLowerCase() === 'wordpress'
 

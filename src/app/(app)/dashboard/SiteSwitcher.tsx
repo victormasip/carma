@@ -91,11 +91,20 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
     const r = triggerRef.current?.getBoundingClientRect()
     if (r) {
       // Escriptori (lg): flyout a la dreta del sidebar, alineat amb el trigger
-      // (i mai per sota del viewport). Mòbil: cau a sota, amplada del trigger.
+      // (i mai per sota del viewport). Mòbil: cau a sota — SEMPRE encaixat dins
+      // el viewport (abans un trigger estret/desplaçat el feia sortir per la
+      // dreta i creava scroll horitzontal — mobile QA 2026-07-13).
+      const vw = window.innerWidth
       const flyout = window.matchMedia('(min-width: 1024px)').matches
-      setPos(flyout
-        ? { mode: 'flyout', left: r.right + 12, top: Math.max(8, Math.min(r.top - 4, window.innerHeight - 440)), width: 304 }
-        : { mode: 'below', left: r.left, top: r.bottom + 8, width: r.width })
+      if (flyout) {
+        const width = 304
+        const left = Math.min(r.right + 12, vw - width - 8)
+        setPos({ mode: 'flyout', left, top: Math.max(8, Math.min(r.top - 4, window.innerHeight - 440)), width })
+      } else {
+        const width = Math.min(Math.max(r.width, 280), vw - 16)
+        const left = Math.min(Math.max(8, r.left), vw - width - 8)
+        setPos({ mode: 'below', left, top: r.bottom + 8, width })
+      }
     }
     setRecentIds(readRecents())
     setQuery('')
@@ -198,10 +207,16 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
       {/* ── Popover (flyout lateral en lg · a sota en mòbil) ── */}
       {open && pos && (
         <div
-          className="fixed z-[60] overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-premium"
+          className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-border bg-bg-elevated shadow-premium"
           role="listbox"
           onKeyDown={onKey}
-          style={{ left: pos.left, top: pos.top, width: pos.width, animation: 'toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1)' }}
+          style={{
+            left: pos.left, top: pos.top, width: pos.width,
+            // Mai per sota del viewport (landscape / pantalles baixes): la
+            // llista interna escrolleja, el popover no desborda.
+            maxHeight: `calc(100dvh - ${pos.top + 8}px)`,
+            animation: 'toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
         >
           {/* Cerca */}
           <div className="relative border-b border-border bg-surface-subtle/60">
@@ -216,7 +231,7 @@ export default function SiteSwitcher({ sites, isSuperAdmin, plan = 'free' }: {
           </div>
 
           {/* Llista (recents + tots) — alçada fixa, MAI creix amb el compte */}
-          <div ref={listRef} className="max-h-64 overflow-y-auto p-1.5">
+          <div ref={listRef} className="max-h-64 min-h-0 flex-1 overflow-y-auto p-1.5">
             {recents.length > 0 && (
               <>
                 <GroupLabel icon={<Clock className="h-3 w-3" />} label="Recents" />

@@ -16,8 +16,6 @@ import { sanitizeHtml } from '@/lib/writing/generate'
 import ReviewScreen, { StatusView } from './ReviewClient'
 import { buildArticleUrl } from './shared'
 
-export const dynamic = 'force-dynamic'
-
 // Review links must never be indexed (they carry a capability token).
 export const metadata: Metadata = {
   title: 'Revisa el teu esborrany · Carma',

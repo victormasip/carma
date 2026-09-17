@@ -180,12 +180,15 @@ function CopyButton({ text }: { text: string }) {
 export default function ApiDocsCard({
   apiKey,
   siteId,
+  subdomain = null,
   detectedFramework = null,
   detectedHosting = null,
   themeConfigured = false,
 }: {
   apiKey: string
   siteId: string
+  /** sites.subdomain — passed to the integration guide's proxy targets. */
+  subdomain?: string | null
   detectedFramework?: string | null
   detectedHosting?: string | null
   themeConfigured?: boolean
@@ -273,6 +276,7 @@ export default function ApiDocsCard({
       {/* Guia d'integració personalitzada */}
       <IntegrationGuide
         siteId={siteId}
+        subdomain={subdomain}
         apiKey={apiKey}
         detectedFramework={detectedFramework}
         detectedHosting={detectedHosting}

@@ -19,13 +19,14 @@ import { Copy, Check, Radio, RefreshCw, ExternalLink, Code2, SquareStack } from 
 import { tokensToParams } from '@/lib/render/embedParams'
 import { DEFAULT_TOKENS } from '@/lib/scrape/tokens'
 import { useThemeStudio } from './ThemeStudioContext'
+import { publicSiteUrl } from '@/lib/sites/domain'
 
 const PREVIEW_DEBOUNCE_MS = 700
 
 type Mode = 'script' | 'iframe'
 
 export default function LiveEmbedCard() {
-  const { siteId, tokens, hasTheme } = useThemeStudio()
+  const { siteId, subdomain, tokens, hasTheme } = useThemeStudio()
   const [mode, setMode] = useState<Mode>('script')
 
   const origin = useSyncExternalStore(
@@ -36,12 +37,17 @@ export default function LiveEmbedCard() {
 
   const params = tokensToParams(tokens, DEFAULT_TOKENS)
   const query = params ? `?${params}` : ''
+  // The LIVE PREVIEW below is ours and stays same-origin on the engine path.
   const renderUrl = `${origin}/render/${siteId}${query}`
   const embedUrl = `${origin}/embed/${siteId}${query}`
+  // The SNIPPET is pasted into someone else's website and will outlive this
+  // dashboard session, so it must carry the blog's real public address.
+  const publicUrl = publicSiteUrl({ id: siteId, subdomain }, { path: query || '/' })
+  const iframeSrc = publicUrl.startsWith('http') ? publicUrl : `${origin}${publicUrl}`
 
   const scriptSnippet = `<script src="${embedUrl}" defer></script>`
   const iframeSnippet = `<iframe
-  src="${renderUrl}"
+  src="${iframeSrc}"
   style="width:100%;min-height:900px;border:0"
   loading="lazy"
   title="Blog"

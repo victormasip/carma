@@ -16,13 +16,19 @@ export type WaThreadStatus = (typeof WA_THREAD_STATUS)[number]
 export const WA_MSG_DIRECTION = ['in', 'out'] as const
 export type WaMsgDirection = (typeof WA_MSG_DIRECTION)[number]
 
-export const WA_MSG_TYPE = ['text', 'audio', 'image'] as const
+// 'unsupported' tags media we can't act on yet (video / document / sticker /
+// location / contact). The webhook maps these here so the worker answers with a
+// friendly, specific, ZERO-LLM template instead of a confusing "no m'ha arribat res"
+// (B5). The wa_messages.msg_type column is CHECK-free TEXT (027), so this is additive.
+export const WA_MSG_TYPE = ['text', 'audio', 'image', 'unsupported'] as const
 export type WaMsgType = (typeof WA_MSG_TYPE)[number]
 
 export const REVIEW_TOKEN_STATUS = ['active', 'consumed', 'revoked', 'expired'] as const
 export type ReviewTokenStatus = (typeof REVIEW_TOKEN_STATUS)[number]
 
-export const REVIEW_TOKEN_ACTION = ['publish'] as const
+// 'publish' flips a draft live; 'apply_edit' copies a published post's staged
+// pending_content → content in place (E-11). The DB column is free TEXT (027).
+export const REVIEW_TOKEN_ACTION = ['publish', 'apply_edit'] as const
 export type ReviewTokenAction = (typeof REVIEW_TOKEN_ACTION)[number]
 
 export const JOB_KIND = ['agent_turn', 'transcribe', 'generate', 'send'] as const
@@ -53,8 +59,26 @@ export const WA_BUTTON = {
   coverYes: 'wa_cover_yes', // free-flow: "Sí, genera la portada"
   coverNo: 'wa_cover_no',   // free-flow: "No cal portada"
   translate: 'wa_translate', // foundations: offer translations
+  // THE OWNER'S OWN PHOTO (2026-09-17). They send a picture; we ask before doing
+  // anything with it, because a photo of the kitchen is not automatically the
+  // cover of the article about the kitchen — sometimes it is just a photo.
+  photoCover: 'wa_photo_cover', // "Sí, de portada"
+  photoSkip: 'wa_photo_skip',   // "Només te la guardo"
 } as const
 export type WaButtonId = (typeof WA_BUTTON)[keyof typeof WA_BUTTON]
+
+// A held action that survives across turns (§2.6). Generalises pending_brief so the
+// same "hold → resume/drop" machinery covers edit and theme, not just write. The
+// worker (not the model) decides resume/drop via a deterministic table (E-14).
+// [Dormant at P1 — the write path still uses pending_brief; full use lands in P3.]
+export interface WaPendingAction {
+  kind: 'write' | 'edit' | 'theme'
+  payload: string                 // brief / change request / design request
+  missing: 'site' | 'target_post' | 'confirm_transcript' | 'confirm_theme'
+  candidates?: string[]           // post titles or site names offered
+  site_id?: string                // the site this action is bound to (E-13)
+  held_at: string                 // ISO — expires after WA_HELD_ACTION_TTL_HOURS
+}
 
 export interface WaAgentState {
   phase: WaAgentPhase
@@ -77,6 +101,41 @@ export interface WaAgentState {
   // Free-flow cover step: the post id we've already offered a cover image for, so
   // the "Vols una portada?" Yes/No prompt is sent at most once per draft.
   cover_offered_for?: string
+  /**
+   * A photo the owner sent that has not been used yet.
+   *
+   * It is held on the THREAD rather than downloaded immediately on purpose: the
+   * bytes are the expensive part, and most photos arrive a beat before the idea
+   * they belong to ("[photo] … escriu-ne un article"). Holding the reference lets
+   * the very next turn attach it to a draft that did not exist when it arrived.
+   *
+   * Kapso media references expire, so this carries `at` and the worker treats
+   * anything older than WA_PENDING_IMAGE_TTL_HOURS as gone.
+   */
+  pending_image?: {
+    media_id?: string | null
+    media_url?: string | null
+    phone_number_id?: string | null
+    /** The caption that came with it, if any. */
+    caption?: string
+    at: string
+  }
+  // Generalised held action (§2.6) — dormant at P1, populated from P3.
+  pending_action?: WaPendingAction
+  // Nudge throttle persistence (§2.4.7 / E-21) — dormant at P1.
+  last_nudge?: { key: string; at: string }
+}
+
+// ─── Owner memory (wa_identities.memory JSONB, migration 030 · §2.3) ──────────
+// Standing preferences, kept and rendered as DATA (never as instructions that could
+// touch the L0 shell). FIFO-capped at WA_MEMORY_MAX_FACTS; eviction is announced.
+export interface WaMemoryFact {
+  text: string
+  learned_at: string
+  source_msg?: string
+}
+export interface WaOwnerMemory {
+  facts?: WaMemoryFact[]
 }
 
 // ─── Row types ────────────────────────────────────────────────────────────────
@@ -90,6 +149,7 @@ export interface WaIdentityRow {
   verify_expires_at: string | null
   verified_at: string | null
   opt_in_at: string | null
+  memory: WaOwnerMemory | null
   created_at: string
   updated_at: string
 }

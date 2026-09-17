@@ -67,7 +67,17 @@ type Strings = {
   emailPh: string
   top: string
   unlock: string
+  takeaways: string
+  readNext: string
+  waShare: string
   lightDark: string
+  likeOne: string
+  likeMany: (n: number) => string
+  likeThanks: string
+  cName: string
+  cEmail: string
+  cEmailHint: string
+  cSending: string
 }
 
 const STRINGS: Record<UiLocale, Strings> = {
@@ -77,6 +87,11 @@ const STRINGS: Record<UiLocale, Strings> = {
     copy: 'Copia l’enllaç', copied: 'Copiat!', by: 'Per', toc: 'En aquesta pàgina',
     subscribe: 'Subscriure’m', emailPh: 'El teu correu electrònic', top: 'A dalt',
     unlock: 'Desbloquejar', lightDark: 'Tema clar/fosc',
+    takeaways: 'Què hi trobaràs', readNext: 'Continua llegint', waShare: 'Envia-ho al teu grup',
+    likeOne: 'T’ha agradat?', likeMany: n => `${n} persones`, likeThanks: 'Gràcies!',
+    cName: 'El teu nom', cEmail: 'El teu correu (no es publica)',
+    cEmailHint: 'No el publiquem enlloc. Serveix per verificar que ets una persona.',
+    cSending: 'Enviant…',
   },
   es: {
     readMin: n => `${n} min de lectura`, searchPlaceholder: 'Busca artículos…', all: 'Todas',
@@ -84,6 +99,11 @@ const STRINGS: Record<UiLocale, Strings> = {
     copy: 'Copiar enlace', copied: '¡Copiado!', by: 'Por', toc: 'En esta página',
     subscribe: 'Suscribirme', emailPh: 'Tu correo electrónico', top: 'Arriba',
     unlock: 'Desbloquear', lightDark: 'Tema claro/oscuro',
+    takeaways: 'Qué encontrarás', readNext: 'Sigue leyendo', waShare: 'Envíalo a tu grupo',
+    likeOne: '¿Te ha gustado?', likeMany: n => `${n} personas`, likeThanks: '¡Gracias!',
+    cName: 'Tu nombre', cEmail: 'Tu correo (no se publica)',
+    cEmailHint: 'No lo publicamos en ningún sitio. Sirve para verificar que eres una persona.',
+    cSending: 'Enviando…',
   },
   en: {
     readMin: n => `${n} min read`, searchPlaceholder: 'Search articles…', all: 'All',
@@ -91,6 +111,11 @@ const STRINGS: Record<UiLocale, Strings> = {
     copy: 'Copy link', copied: 'Copied!', by: 'By', toc: 'On this page',
     subscribe: 'Subscribe', emailPh: 'Your email address', top: 'Top',
     unlock: 'Unlock', lightDark: 'Light/dark theme',
+    takeaways: 'What you will find', readNext: 'Read next', waShare: 'Send it to your group',
+    likeOne: 'Did you like it?', likeMany: n => `${n} people`, likeThanks: 'Thank you!',
+    cName: 'Your name', cEmail: 'Your email (never published)',
+    cEmailHint: 'We never publish it. It is how we know you are a person.',
+    cSending: 'Sending…',
   },
 }
 
@@ -404,6 +429,65 @@ export function buildArticleModuleParts(
   const dark = resolveModule(modules, 'darkModeToggle')
   if (dark?.enabled) { used = true; overlays.push(darkToggleHtml(dark.variant, dark.options, h, s)); css.push(DARK_CSS) }
 
+  // ── The WordPress-killer batch ────────────────────────────────────────────
+  // Ordered by where they land in the article, not by importance: takeaways sit
+  // above the text, pull quotes rewrite it, WhatsApp and read-next close it.
+
+  const tak = resolveModule(modules, 'keyTakeaways')
+  if (tak?.enabled) {
+    const heads = collectHeadings(content, 2)
+    const block = takeawaysHtml(tak.variant, tak.options, heads, h, s)
+    if (block) { used = true; before.push(block); css.push(TAKEAWAYS_CSS) }
+  }
+
+  const pq = resolveModule(modules, 'pullQuote')
+  if (pq?.enabled && unlocked) {
+    const next = insertPullQuotes(
+      content,
+      Math.max(1, Math.min(3, Number(pq.options.count) || 1)),
+      Math.max(40, Math.min(160, Number(pq.options.minChars) || 70)),
+      pq.variant, h,
+    )
+    if (next !== content) { used = true; content = next; css.push(PULLQUOTE_CSS) }
+  }
+
+  const wa = resolveModule(modules, 'whatsappShare')
+  if (wa?.enabled) {
+    used = true
+    const block = whatsappShareHtml(wa.variant, wa.options, h, s)
+    if (wa.variant === 'inline') before.push(block)
+    else if (wa.variant === 'float') overlays.push(block)
+    else after.push(block)
+    css.push(WASHARE_CSS)
+  }
+
+  const rn = resolveModule(modules, 'readNext')
+  if (rn?.enabled) {
+    const nav = prevNextOf(post, siblings)
+    const block = readNextHtml(rn.variant, rn.options, nav.next ?? nav.prev, h, s)
+    if (block) { used = true; after.push(block); css.push(READNEXT_CSS) }
+  }
+
+  // ── The community pair ────────────────────────────────────────────────────
+  // Both render an EMPTY shell: counts and comments arrive from
+  // /api/interactions after load, because this document is cached and a
+  // conversation is not. Suppressed on a locked article — there is nothing to
+  // applaud or discuss yet.
+  const likes = resolveModule(modules, 'likes')
+  if (likes?.enabled && !locked) {
+    used = true
+    const block = likesHtml(likes.variant, likes.options, h, s)
+    if (likes.variant === 'float') overlays.push(block); else after.push(block)
+    css.push(LIKES_CSS)
+  }
+
+  const comments = resolveModule(modules, 'comments')
+  if (comments?.enabled && !locked) {
+    used = true
+    after.push(commentsHtml(comments.variant, comments.options, h, s))
+    css.push(COMMENTS_CSS)
+  }
+
   return {
     content,
     top: top.join('\n'),
@@ -676,9 +760,15 @@ function prevNextOf(post: ModulePost, siblings: ModulePost[]): { prev: ModulePos
 
 // ─── Runtime (vanilla JS, reaches into the blog's shadow root) ─────────────────
 
-export function modulesRuntimeScript(modules: SiteModules | null | undefined, siteId: string): string {
+export function modulesRuntimeScript(
+  modules: SiteModules | null | undefined,
+  siteId: string,
+  /** The article being rendered, when there is one. Required by the community
+   *  pair (likes + comments), which addresses /api/interactions per post. */
+  postId?: string | null,
+): string {
   if (!modules || !Object.values(modules).some(m => m?.enabled)) return ''
-  // siteId is a UUID (injection-safe to interpolate).
+  // siteId and postId are UUIDs (injection-safe to interpolate).
   return `<script>(function(){
   function root(){var h=document.querySelector('.carma-embed-host');return h&&h.shadowRoot?h.shadowRoot:document;}
   function init(){
@@ -735,6 +825,96 @@ export function modulesRuntimeScript(modules: SiteModules | null | undefined, si
     R.querySelectorAll('[data-carma-share]').forEach(function(b){b.addEventListener('click',function(){var net=b.getAttribute('data-carma-share');var u=encodeURIComponent(shareUrl());var t=encodeURIComponent(document.title||'');var url='';if(net==='x')url='https://twitter.com/intent/tweet?url='+u+'&text='+t;else if(net==='facebook')url='https://www.facebook.com/sharer/sharer.php?u='+u;else if(net==='linkedin')url='https://www.linkedin.com/sharing/share-offsite/?url='+u;else if(net==='whatsapp')url='https://wa.me/?text='+t+'%20'+u;else if(net==='telegram')url='https://t.me/share/url?url='+u+'&text='+t;else if(net==='email'){location.href='mailto:?subject='+t+'&body='+u;return;}else if(net==='copy'){try{navigator.clipboard.writeText(shareUrl());var g=b.querySelector('.carma-mod-share-glyph');if(g){var old=g.textContent;g.textContent='✓';setTimeout(function(){g.textContent=old;},1400);}}catch(e){}return;}if(url)window.open(url,'_blank','noopener,noreferrer,width=600,height=520');});});
     // ── lead capture (newsletter + paywall email unlock) ──
     R.querySelectorAll('[data-carma-lead-form]').forEach(function(f){f.addEventListener('submit',function(e){e.preventDefault();var inp=f.querySelector('input[type=email]');var email=inp?inp.value.trim():'';if(!email)return;var src=f.getAttribute('data-source')||'newsletter';var post=f.getAttribute('data-post')||null;var st=f.parentNode.querySelector('[data-carma-lead-status]');var btn=f.querySelector('button');if(btn)btn.disabled=true;fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({siteId:'${siteId}',email:email,source:src,postId:post})}).then(function(r){return r.json().catch(function(){return{};});}).then(function(res){if(src==='paywall'){location.reload();return;}if(st){st.textContent=f.getAttribute('data-success')||(res&&res.message)||'✓';st.classList.add('is-ok');}f.reset();if(btn)btn.disabled=false;}).catch(function(){if(st){st.textContent='Hi ha hagut un error. Torna-ho a provar.';st.classList.add('is-err');}if(btn)btn.disabled=false;});});});
+    // ── the community pair: applause + verified comments ──
+    // The document is CACHED, so neither of these can be server-rendered without
+    // freezing the conversation until the next publish. One GET fills both.
+    var likeBtns=[].slice.call(R.querySelectorAll('[data-carma-like]'));
+    var cRoot=R.querySelector('[data-carma-comments-root]');
+    var POST_ID='${postId || ''}';
+    if((likeBtns.length||cRoot)&&POST_ID){
+      var API='/api/interactions?siteId=${siteId}&postId='+POST_ID;
+      function initials(n){var p=(n||'').trim().split(/\\s+/);return ((p[0]||'')[0]||'?')+((p[1]||'')[0]||'');}
+      function when(iso){try{return new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});}catch(e){return '';}}
+      function paintLikes(n,mine){
+        likeBtns.forEach(function(b){
+          var c=b.querySelector('[data-carma-like-count]');
+          if(c){if(n>0){c.hidden=false;c.textContent=String(n);}else{c.hidden=true;c.textContent='';}}
+          if(mine>0)b.classList.add('is-on');
+        });
+      }
+      function paintComments(list){
+        if(!cRoot)return;
+        var ol=cRoot.querySelector('[data-carma-comments-list]');
+        var empty=cRoot.querySelector('[data-carma-comments-empty]');
+        var cnt=cRoot.querySelector('[data-carma-comments-count]');
+        if(!ol)return;
+        ol.textContent='';
+        list.forEach(function(c){
+          var li=document.createElement('li');li.className='carma-mod-comment';
+          var av=document.createElement('span');av.className='carma-mod-comment-av';av.setAttribute('aria-hidden','true');av.textContent=initials(c.author);
+          var main=document.createElement('div');main.className='carma-mod-comment-main';
+          var head=document.createElement('p');head.className='carma-mod-comment-head';
+          var who=document.createElement('span');who.className='carma-mod-comment-who';who.textContent=c.author;
+          var ts=document.createElement('span');ts.className='carma-mod-comment-when';ts.textContent=when(c.created_at);
+          head.appendChild(who);head.appendChild(ts);
+          var bd=document.createElement('p');bd.className='carma-mod-comment-body';bd.textContent=c.body;
+          main.appendChild(head);main.appendChild(bd);
+          li.appendChild(av);li.appendChild(main);ol.appendChild(li);
+        });
+        if(empty)empty.hidden=list.length>0;
+        if(cnt){if(list.length){cnt.hidden=false;cnt.textContent=String(list.length);}else{cnt.hidden=true;}}
+      }
+      fetch(API).then(function(r){return r.json();}).then(function(d){
+        if(!d||!d.ok)return;
+        paintLikes(d.likes||0,d.mine||0);
+        paintComments(d.comments||[]);
+      }).catch(function(){});
+      likeBtns.forEach(function(b){
+        b.addEventListener('click',function(){
+          var max=parseInt(b.getAttribute('data-max')||'1',10)||1;
+          var c=b.querySelector('[data-carma-like-count]');
+          var cur=c&&c.textContent?parseInt(c.textContent,10)||0:0;
+          // Optimistic: the clap must feel instant, and a failed POST only means
+          // the number was never real — nothing was destroyed.
+          b.classList.add('is-on','is-pop');
+          setTimeout(function(){b.classList.remove('is-pop');},220);
+          if(c){c.hidden=false;c.textContent=String(cur+1);}
+          var mine=(parseInt(b.getAttribute('data-mine')||'0',10)||0)+1;
+          if(mine>max)mine=max;
+          b.setAttribute('data-mine',String(mine));
+          fetch('/api/interactions',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({siteId:'${siteId}',postId:POST_ID,action:'like',count:mine,max:max})})
+            .then(function(r){return r.json();}).then(function(d){if(d&&d.ok)paintLikes(d.likes||0,d.mine||0);})
+            .catch(function(){});
+        });
+      });
+      var cForm=cRoot?cRoot.querySelector('[data-carma-comment-form]'):null;
+      if(cForm){
+        cForm.addEventListener('submit',function(e){
+          e.preventDefault();
+          var st=cRoot.querySelector('[data-carma-comments-status]');
+          var btn=cForm.querySelector('button[type=submit]');
+          var f=function(n){var el=cForm.querySelector('[name='+n+']');return el?el.value.trim():'';};
+          var payload={siteId:'${siteId}',postId:POST_ID,action:'comment',author:f('author'),email:f('email'),body:f('body'),website:f('website')};
+          if(cRoot.hasAttribute('data-auto'))payload.autoApprove=true;
+          if(!payload.author||!payload.email||!payload.body)return;
+          if(btn)btn.disabled=true;
+          if(st){st.textContent='';st.classList.remove('is-ok','is-err');}
+          fetch('/api/interactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+            .then(function(r){return r.json().catch(function(){return{};});})
+            .then(function(d){
+              if(btn)btn.disabled=false;
+              if(!d||!d.ok){if(st){st.textContent=(d&&d.error)||'No s\\u2019ha pogut publicar.';st.classList.add('is-err');}return;}
+              cForm.reset();
+              if(st){st.textContent=cForm.getAttribute('data-success')||'\\u2713';st.classList.add('is-ok');}
+              // Auto-approved comments are live now; moderated ones are not, and
+              // pretending otherwise would be a lie the reader notices tomorrow.
+              if(!d.pending)fetch(API).then(function(r){return r.json();}).then(function(x){if(x&&x.ok)paintComments(x.comments||[]);}).catch(function(){});
+            })
+            .catch(function(){if(btn)btn.disabled=false;if(st){st.textContent='Hi ha hagut un error. Torna-ho a provar.';st.classList.add('is-err');}});
+        });
+      }
+    }
     // paywall (no email) — best-effort soft unlock by reload (server sets cookie elsewhere)
     R.querySelectorAll('[data-carma-unlock]').forEach(function(b){b.addEventListener('click',function(){fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({siteId:'${siteId}',source:'paywall',anon:true})}).then(function(){location.reload();}).catch(function(){location.reload();});});});
   }
@@ -970,3 +1150,271 @@ const DARK_CSS = `
 .carma-mod-dark-switch .carma-mod-dark-moon{background:transparent!important;color:var(--ct-muted)!important}
 :host([data-carma-theme="dark"]) .carma-mod-dark-switch .carma-mod-dark-sun{background:transparent!important;color:var(--ct-muted)!important}
 :host([data-carma-theme="dark"]) .carma-mod-dark-switch .carma-mod-dark-moon{background:var(--ct-accent)!important;color:#fff!important}`.trim()
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE WORDPRESS-KILLER BATCH (2026-09-16)
+ *
+ * Four modules that on WordPress would be four plugins, four update cycles and
+ * four security surfaces. Here they are four functions that return a string.
+ *
+ * Every one of them is DERIVED — from the article's own headings, its own
+ * sentences, its own siblings. None of them asks the owner to write anything, or
+ * configure anything, to look good. That is the difference between a module and
+ * a settings page.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * "Què hi trobaràs" — the key-takeaways box, built from the article's own H2s.
+ *
+ * Not AI, and deliberately so: the headings ARE the author's outline, so the box
+ * is always accurate, costs nothing, and can never invent a claim the article
+ * does not make. It also turns a plain post into a magazine spread for the price
+ * of a list.
+ */
+function takeawaysHtml(
+  variant: string,
+  o: Record<string, unknown>,
+  headings: { id: string; text: string; level: number }[],
+  h: ModuleHelpers,
+  s: Strings,
+): string {
+  const heading = optStr(o, 'heading') || s.takeaways
+  const max = Math.max(3, Math.min(8, Number(o.max) || 5))
+  const linked = optBool(o, 'linked', true)
+  const items = headings.slice(0, max).map(x => {
+    const body = h.esc(x.text)
+    const inner = linked ? '<a href="#' + h.escAttr(x.id) + '">' + body + '</a>' : body
+    return '<li>' + inner + '</li>'
+  }).join('')
+  if (!items) return ''
+  return '<aside class="carma-mod-tak carma-mod-tak-' + variant + '" aria-label="' + h.escAttr(heading) + '">'
+    + '<p class="carma-mod-tak-head">' + h.esc(heading) + '</p>'
+    + '<ul class="carma-mod-tak-list">' + items + '</ul></aside>'
+}
+
+/**
+ * Pull quotes — promote the article's strongest sentences into display type.
+ *
+ * A CONTENT TRANSFORM, so it is the one module here that rewrites the body. The
+ * rules that keep it safe and tasteful:
+ *   · it only ever inserts BETWEEN top-level paragraphs, never inside markup;
+ *   · the quote is escaped plain text, so it can carry no tags and no script;
+ *   · it skips the first and last paragraph (a pull quote at either end reads as
+ *     a mistake) and spaces multiple quotes at least three paragraphs apart;
+ *   · below six paragraphs it does nothing at all — a pull quote sitting next to
+ *     its own sentence looks like a bug, because it is one.
+ */
+function insertPullQuotes(html: string, count: number, minChars: number, variant: string, h: ModuleHelpers): string {
+  const parts = html.split(/(<\/p>)/i)
+  const paras: number[] = []
+  for (let i = 1; i < parts.length; i += 2) paras.push(i)
+  if (paras.length < 6) return html
+
+  const picked: { at: number; text: string }[] = []
+  let lastIdx = -99
+  for (let n = 1; n < paras.length - 1 && picked.length < count; n++) {
+    if (n - lastIdx < 3) continue
+    const text = plainText(parts[paras[n]! - 1] ?? '')
+    const sentence = text
+      .split(/(?<=[.!?])\s+/)
+      .map(x => x.trim())
+      .find(x => x.length >= minChars && x.length <= 220)
+    if (!sentence) continue
+    picked.push({ at: paras[n]!, text: sentence })
+    lastIdx = n
+  }
+  if (!picked.length) return html
+
+  for (const q of picked) {
+    parts[q.at] += '<figure class="carma-mod-pq carma-mod-pq-' + variant + '">'
+      + '<blockquote>' + h.esc(q.text) + '</blockquote></figure>'
+  }
+  return parts.join('')
+}
+
+/**
+ * "Continua llegint" — retention without a pop-up.
+ *
+ * The bar variant is `position: sticky; bottom`, so it rides the bottom of the
+ * viewport as the reader approaches the end and settles into the flow at the
+ * very end. No scroll listener, no JavaScript, no layout shift.
+ */
+function readNextHtml(variant: string, o: Record<string, unknown>, next: ModulePost | null, h: ModuleHelpers, s: Strings): string {
+  if (!next) return ''
+  const label = optStr(o, 'heading') || s.readNext
+  const thumb = optBool(o, 'showImage', true) && next.image
+    ? '<span class="carma-mod-rn-thumb">' + h.img(next.image, next.title) + '</span>'
+    : ''
+  return '<a class="carma-mod-rn carma-mod-rn-' + variant + '" href="' + h.escAttr(next.url) + '">'
+    + thumb
+    + '<span class="carma-mod-rn-text">'
+    + '<span class="carma-mod-rn-label">' + h.esc(label) + '</span>'
+    + '<span class="carma-mod-rn-title">' + h.esc(next.title) + '</span>'
+    + '</span><span class="carma-mod-rn-go" aria-hidden="true">&rarr;</span></a>'
+}
+
+/**
+ * "Envia-ho al teu grup" — the WhatsApp share.
+ *
+ * For a Catalan small business, WhatsApp groups ARE distribution: the village
+ * association, the parents' chat, the trade group. Carma already lives there, so
+ * this is the one share button on the page that matches how the audience
+ * actually passes things along.
+ *
+ * A BUTTON, not an anchor: the same blog is served from a subdomain, a custom
+ * domain and the embed, so the canonical URL is only knowable at click time. The
+ * existing share runtime already reads location.href and already knows the
+ * `whatsapp` network, so this reuses it rather than shipping a second copy of
+ * the same logic.
+ */
+function whatsappShareHtml(variant: string, o: Record<string, unknown>, h: ModuleHelpers, s: Strings): string {
+  const label = optStr(o, 'label') || s.waShare
+  return '<div class="carma-mod-wa carma-mod-wa-' + variant + '">'
+    + '<button type="button" class="carma-mod-wa-btn" data-carma-share="whatsapp" aria-label="' + h.escAttr(label) + '">'
+    + '<span class="carma-mod-wa-icon" aria-hidden="true">&#9679;</span>'
+    + '<span class="carma-mod-wa-label">' + h.esc(label) + '</span>'
+    + '</button></div>'
+}
+
+const TAKEAWAYS_CSS = [
+  '.carma-mod-tak{margin:0 0 2rem;padding:1.15rem 1.35rem;border-radius:var(--radius-lg,16px);background:color-mix(in oklab,var(--accent,#f5bc00) 7%,transparent);border-left:3px solid var(--accent,#f5bc00)}',
+  '.carma-mod-tak-minimal{background:none;border-left:none;padding:0 0 0 .2rem}',
+  '.carma-mod-tak-card{background:var(--surface,#fff);border-left:none;box-shadow:0 10px 30px -18px rgba(0,0,0,.35);border:1px solid var(--border,#e5e5e5)}',
+  '.carma-mod-tak-head{margin:0 0 .6rem;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
+  '.carma-mod-tak-list{margin:0;padding:0;list-style:none;display:grid;gap:.45rem}',
+  '.carma-mod-tak-list li{position:relative;padding-left:1.35rem;font-size:1rem;line-height:1.5}',
+  '.carma-mod-tak-list li::before{content:"";position:absolute;left:.25rem;top:.6em;width:6px;height:6px;border-radius:999px;background:var(--accent,#f5bc00)}',
+  '.carma-mod-tak-list a{color:inherit;text-decoration:none;border-bottom:1px solid transparent}',
+  '.carma-mod-tak-list a:hover{border-bottom-color:var(--accent,#f5bc00)}',
+].join('\n')
+
+const PULLQUOTE_CSS = [
+  '.carma-mod-pq{margin:2.2rem 0;padding:0}',
+  '.carma-mod-pq blockquote{margin:0;font-family:var(--font-heading,inherit);font-size:clamp(1.3rem,1.05rem + 1vw,1.9rem);line-height:1.25;font-weight:700;letter-spacing:-.02em;color:var(--text,#111)}',
+  '.carma-mod-pq-center{text-align:center;padding:0 clamp(0px,4vw,3rem)}',
+  '.carma-mod-pq-center blockquote::before{content:"";display:block;width:44px;height:3px;border-radius:3px;background:var(--accent,#f5bc00);margin:0 auto 1rem}',
+  '.carma-mod-pq-rule{border-top:1px solid var(--border,#e5e5e5);border-bottom:1px solid var(--border,#e5e5e5);padding:1.4rem 0}',
+  '.carma-mod-pq-side blockquote{border-left:3px solid var(--accent,#f5bc00);padding-left:1.1rem;text-align:left}',
+  '@media (min-width:1100px){.carma-mod-pq-side{float:right;width:min(42%,22rem);margin:.4rem -8% 1.4rem 2rem}}',
+].join('\n')
+
+const READNEXT_CSS = [
+  '.carma-mod-rn{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit;border:1px solid var(--border,#e5e5e5);background:var(--surface,#fff);border-radius:var(--radius-lg,16px);padding:.7rem .9rem;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}',
+  '.carma-mod-rn:hover{border-color:var(--accent,#f5bc00);transform:translateY(-2px);box-shadow:0 14px 34px -22px rgba(0,0,0,.45)}',
+  '.carma-mod-rn-bar{position:sticky;bottom:12px;z-index:30;margin:2.5rem 0 0;box-shadow:0 18px 40px -26px rgba(0,0,0,.55)}',
+  '.carma-mod-rn-card{margin:2.5rem 0 0;padding:1rem}',
+  '.carma-mod-rn-thumb{flex:0 0 auto;width:66px;height:46px;border-radius:10px;overflow:hidden;background:var(--muted-bg,#f3f3f3)}',
+  '.carma-mod-rn-thumb img{width:100%;height:100%;object-fit:cover;display:block}',
+  '.carma-mod-rn-text{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:.15rem}',
+  '.carma-mod-rn-label{font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
+  '.carma-mod-rn-title{font-weight:700;font-size:1rem;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}',
+  '.carma-mod-rn-go{flex:0 0 auto;font-size:1.15rem;color:var(--accent,#f5bc00)}',
+].join('\n')
+
+const WASHARE_CSS = [
+  '.carma-mod-wa-btn{display:inline-flex;align-items:center;gap:.55rem;cursor:pointer;border:0;font:inherit;font-weight:700;font-size:.95rem;border-radius:999px;padding:.6rem 1.1rem;background:#25d366;color:#0b3d21;transition:transform .15s ease,filter .15s ease}',
+  '.carma-mod-wa-btn:hover{transform:translateY(-1px);filter:brightness(1.04)}',
+  '.carma-mod-wa-icon{font-size:.7rem;line-height:1}',
+  '.carma-mod-wa-end{margin:2rem 0 0}',
+  '.carma-mod-wa-inline{margin:.2rem 0 1.4rem}',
+  '.carma-mod-wa-float{position:fixed;right:18px;bottom:76px;z-index:40;box-shadow:0 14px 34px -14px rgba(37,211,102,.75)}',
+].join('\n')
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE COMMUNITY PAIR (2026-09-17)
+ *
+ * A blog nobody can answer is a noticeboard. These two are the smallest possible
+ * way to make one a conversation: a clap and a sentence.
+ *
+ * Both render as EMPTY SHELLS on purpose. The public document is cached
+ * (`use cache`, tagged `site:<id>`), so baking a comment list into it would mean
+ * a reader's comment appears only after the next publish. The shell ships with
+ * the page; the content arrives from /api/interactions on load. The page stays
+ * fast and cacheable, the conversation stays live, and the two never fight.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+function likesHtml(variant: string, o: Record<string, unknown>, h: ModuleHelpers, s: Strings): string {
+  const label = optStr(o, 'label') || s.likeOne
+  const showCount = optBool(o, 'showCount', true)
+  const max = Math.max(1, Math.min(50, optNum(o, 'maxPerReader', 1)))
+  const glyph = variant === 'clap' ? '👏' : '♥'
+  const count = showCount ? '<span class="carma-mod-like-count" data-carma-like-count hidden></span>' : ''
+  return `<div class="carma-mod-likes carma-mod-likes-${variant}">
+  <button class="carma-mod-like-btn" type="button" data-carma-like data-max="${max}" aria-label="${h.escAttr(label)}">
+    <span class="carma-mod-like-glyph" aria-hidden="true">${glyph}</span>
+    <span class="carma-mod-like-label">${h.esc(label)}</span>
+    ${count}
+  </button>
+</div>`
+}
+
+function commentsHtml(variant: string, o: Record<string, unknown>, h: ModuleHelpers, s: Strings): string {
+  const title = optStr(o, 'title', 'Comentaris')
+  const placeholder = optStr(o, 'placeholder') || s.cName
+  const button = optStr(o, 'buttonText', 'Publicar')
+  const empty = optStr(o, 'emptyMessage')
+  const sent = optStr(o, 'closedMessage')
+  // requireApproval defaults ON. The client only ever ASKS for auto-approval;
+  // /api/interactions is what decides, and it defaults to moderated.
+  const auto = optBool(o, 'requireApproval', true) ? '' : ' data-auto="1"'
+  return `<section class="carma-mod-comments carma-mod-comments-${variant}" data-carma-comments-root${auto}>
+  <h2 class="carma-mod-comments-title">${h.esc(title)}<span class="carma-mod-comments-n" data-carma-comments-count hidden></span></h2>
+  <ol class="carma-mod-comments-list" data-carma-comments-list></ol>
+  <p class="carma-mod-comments-empty" data-carma-comments-empty hidden>${h.esc(empty)}</p>
+  <form class="carma-mod-comments-form" data-carma-comment-form${sent ? ` data-success="${h.escAttr(sent)}"` : ''}>
+    <div class="carma-mod-comments-row">
+      <input class="carma-mod-comments-input" type="text" name="author" required maxlength="80" placeholder="${h.escAttr(s.cName)}" aria-label="${h.escAttr(s.cName)}" />
+      <input class="carma-mod-comments-input" type="email" name="email" required maxlength="200" placeholder="${h.escAttr(s.cEmail)}" aria-label="${h.escAttr(s.cEmail)}" />
+    </div>
+    <textarea class="carma-mod-comments-area" name="body" required rows="4" maxlength="4000" placeholder="${h.escAttr(placeholder)}" aria-label="${h.escAttr(placeholder)}"></textarea>
+    <input class="carma-mod-comments-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+    <div class="carma-mod-comments-actions">
+      <span class="carma-mod-comments-hint">${h.esc(s.cEmailHint)}</span>
+      <button class="carma-mod-comments-btn" type="submit">${h.esc(button)}</button>
+    </div>
+  </form>
+  <p class="carma-mod-comments-status" data-carma-comments-status role="status" aria-live="polite"></p>
+</section>`
+}
+
+const LIKES_CSS = `
+.carma-mod-likes{margin:2rem 0 0!important;display:flex!important}
+.carma-mod-likes-float{position:fixed!important;right:1.5rem!important;bottom:5.2rem!important;z-index:43!important;margin:0!important}
+.carma-mod-like-btn{display:inline-flex!important;align-items:center!important;gap:.55rem!important;height:46px!important;padding:0 1.15rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;background:var(--ct-surface)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.9rem!important;font-weight:700!important;cursor:pointer!important;transition:border-color .15s ease,transform .12s ease,background .15s ease!important;box-shadow:0 10px 26px -20px rgba(0,0,0,.45)!important}
+.carma-mod-like-btn:hover{border-color:var(--ct-accent)!important}
+.carma-mod-like-btn:active{transform:scale(.96)!important}
+.carma-mod-like-btn.is-on{background:color-mix(in srgb,var(--ct-accent) 12%,var(--ct-surface))!important;border-color:var(--ct-accent)!important;color:var(--ct-accent)!important}
+.carma-mod-like-glyph{font-size:1.05rem!important;line-height:1!important;transition:transform .2s cubic-bezier(.2,1.6,.4,1)!important}
+.carma-mod-like-btn.is-pop .carma-mod-like-glyph{transform:scale(1.35)!important}
+.carma-mod-like-count{font-variant-numeric:tabular-nums!important;font-weight:800!important;color:var(--ct-muted)!important}
+.carma-mod-like-btn.is-on .carma-mod-like-count{color:var(--ct-accent)!important}`.trim()
+
+const COMMENTS_CSS = `
+.carma-mod-comments{margin:3rem auto 0!important;max-inline-size:46rem!important;padding-top:2rem!important;border-top:1px solid var(--ct-border)!important}
+.carma-mod-comments-title{font-family:var(--ct-font-heading)!important;font-size:1.35rem!important;font-weight:800!important;color:var(--ct-text)!important;margin:0 0 1.25rem!important;display:flex!important;align-items:baseline!important;gap:.5rem!important}
+.carma-mod-comments-n{font-size:.95rem!important;font-weight:700!important;color:var(--ct-muted)!important;font-variant-numeric:tabular-nums!important}
+.carma-mod-comments-list{list-style:none!important;margin:0 0 1.5rem!important;padding:0!important;display:flex!important;flex-direction:column!important;gap:1rem!important}
+.carma-mod-comment{display:flex!important;gap:.85rem!important;padding:1rem 1.1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;background:var(--ct-surface)!important}
+.carma-mod-comments-compact .carma-mod-comment{border:0!important;border-radius:0!important;background:transparent!important;padding:.6rem 0!important;border-bottom:1px solid var(--ct-border)!important}
+.carma-mod-comment-av{flex:0 0 auto!important;width:38px!important;height:38px!important;border-radius:9999px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;background:color-mix(in srgb,var(--ct-accent) 14%,var(--ct-surface))!important;color:var(--ct-accent)!important;font-weight:800!important;font-size:.8rem!important;text-transform:uppercase!important}
+.carma-mod-comments-compact .carma-mod-comment-av{display:none!important}
+.carma-mod-comment-main{min-width:0!important;flex:1 1 auto!important}
+.carma-mod-comment-head{display:flex!important;flex-wrap:wrap!important;align-items:baseline!important;gap:.5rem!important;margin:0 0 .3rem!important}
+.carma-mod-comment-who{font-weight:800!important;font-size:.9rem!important;color:var(--ct-text)!important}
+.carma-mod-comment-when{font-size:.78rem!important;color:var(--ct-muted)!important}
+.carma-mod-comment-body{margin:0!important;font-size:.95rem!important;line-height:1.6!important;color:var(--ct-text)!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+.carma-mod-comments-empty{margin:0 0 1.5rem!important;font-size:.92rem!important;color:var(--ct-muted)!important}
+.carma-mod-comments-form{display:flex!important;flex-direction:column!important;gap:.65rem!important}
+.carma-mod-comments-row{display:flex!important;gap:.65rem!important;flex-wrap:wrap!important}
+.carma-mod-comments-input{flex:1 1 200px!important;min-width:0!important;height:46px!important;padding:0 1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius)!important;background:var(--ct-bg)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.93rem!important;outline:none!important}
+.carma-mod-comments-area{width:100%!important;padding:.8rem 1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius)!important;background:var(--ct-bg)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.95rem!important;line-height:1.6!important;outline:none!important;resize:vertical!important}
+.carma-mod-comments-input:focus,.carma-mod-comments-area:focus{border-color:var(--ct-accent)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--ct-accent) 20%,transparent)!important}
+.carma-mod-comments-hp{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+.carma-mod-comments-actions{display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:space-between!important;gap:.75rem!important}
+.carma-mod-comments-hint{font-size:.78rem!important;color:var(--ct-muted)!important;flex:1 1 200px!important}
+.carma-mod-comments-btn{height:46px!important;padding:0 1.5rem!important;border:0!important;border-radius:var(--ct-radius)!important;background:var(--ct-accent)!important;color:#fff!important;font-family:var(--ct-font-body)!important;font-weight:800!important;font-size:.93rem!important;cursor:pointer!important;transition:opacity .2s ease!important}
+.carma-mod-comments-btn:hover{opacity:.9!important}
+.carma-mod-comments-btn:disabled{opacity:.6!important;cursor:default!important}
+.carma-mod-comments-status{margin:.7rem 0 0!important;font-size:.85rem!important;font-weight:700!important;min-height:1em!important}
+.carma-mod-comments-status.is-ok{color:var(--ct-accent)!important}
+.carma-mod-comments-status.is-err{color:#dc2626!important}`.trim()

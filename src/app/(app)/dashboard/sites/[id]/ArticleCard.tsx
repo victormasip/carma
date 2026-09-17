@@ -22,6 +22,7 @@ import type { PostListItem } from '@/lib/actions/posts'
 import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { cn } from '@/lib/cn'
 import { formatDate } from '@/lib/format'
+import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
 
 // ── Inline, click-to-edit text field ─────────────────────────────────────────
 function InlineEdit({
@@ -156,12 +157,14 @@ function DateEdit({ value, onCommit }: { value: string; onCommit: (iso: string) 
 }
 
 export default function ArticleCard({
-  post, siteId, selected, uploading, saveState, busy,
+  post, siteId, subdomain = null, selected, uploading, saveState, busy,
   onToggleSelect, onCommitTitle, onCommitSlug, onCommitDate, onPickThumbnail, onRemoveThumbnail,
   onTogglePublish, onDelete,
 }: {
   post: PostListItem
   siteId: string
+  /** sites.subdomain — the card's "preview" opens the real article URL. */
+  subdomain?: string | null
   selected: boolean
   uploading: boolean
   saveState: SaveState
@@ -176,6 +179,7 @@ export default function ArticleCard({
   onDelete: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const openBlog = useOpenBlog({ id: siteId, subdomain })
   const published = post.is_published
 
   const pick = () => fileRef.current?.click()
@@ -314,7 +318,8 @@ export default function ArticleCard({
               </span>
             </button>
             <a
-              href={`/render/${siteId}/${post.slug}`}
+              href={blogHref({ id: siteId, subdomain }, `/${post.slug}`)}
+              onClick={(e) => { e.preventDefault(); openBlog(`/${post.slug}`) }}
               target="_blank"
               rel="noopener noreferrer"
               title="Previsualitzar al lloc"

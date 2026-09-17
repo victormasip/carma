@@ -17,12 +17,15 @@ export default async function BenvingudaPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const { url: qUrl } = await searchParams
+  const { url: qUrl, nova: qNova } = await searchParams
   const cloneUrl = typeof qUrl === 'string' && qUrl ? qUrl : undefined
+  // "No website": provision the same way, but tell the site page to open the
+  // onboarding on the template picker instead of the "paste your site" intake.
+  const noWeb = qNova === '1'
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect(cloneUrl ? `/registre?url=${encodeURIComponent(cloneUrl)}` : '/login')
 
-  return <BenvingudaClient cloneUrl={cloneUrl} />
+  return <BenvingudaClient cloneUrl={cloneUrl} noWeb={noWeb} />
 }

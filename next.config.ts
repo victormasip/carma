@@ -15,6 +15,22 @@ const TUNNEL_ORIGINS = [
 ];
 
 const nextConfig: NextConfig = {
+  // ── Cache Components (Next 16) ──────────────────────────────────────────────
+  // The keystone of the 2026-09-16 Super MVP plan. Turns rendering from
+  // "static OR dynamic, per route" into a per-component spectrum with Partial
+  // Prerendering as the default, and unlocks the three primitives the render
+  // engine now depends on:
+  //   · `use cache`  — cache the document build itself (render/theme.ts is a pure
+  //                    function of (site, posts, theme, locale), so it caches
+  //                    perfectly).
+  //   · `cacheTag`   — tag those entries `site:<id>` / `post:<id>:<slug>`.
+  //   · `updateTag`  — invalidate them the instant an article publishes. This is
+  //                    what finally makes the ~8 revalidate call sites REAL; they
+  //                    were no-ops against the old `force-dynamic` routes.
+  // Cost of the switch: any uncached data access outside <Suspense> is now a build
+  // error. The app group streams behind its shell skeleton (see (app)/layout.tsx).
+  cacheComponents: true,
+
   // `next dev` blocks cross-origin requests to dev endpoints (incl. Server Actions)
   // unless the origin is allow-listed here.
   allowedDevOrigins: TUNNEL_ORIGINS,
@@ -25,7 +41,17 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: TUNNEL_ORIGINS,
     },
+    // Barrel-file tree-shaking. lucide-react re-exports ~1000 icons from one entry;
+    // without this every route that imports a single icon pulls the whole barrel
+    // through the compiler. Same story for the TipTap entrypoints in the editor.
+    optimizePackageImports: [
+      "lucide-react",
+      "@tiptap/react",
+      "@tiptap/starter-kit",
+      "@tiptap/extensions",
+    ],
   },
+
   // Production hardening.
   poweredByHeader: false,
   reactStrictMode: true,

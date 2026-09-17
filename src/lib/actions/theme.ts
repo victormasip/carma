@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { siteTag } from '@/lib/render/cache'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
 import { normalizeLocale } from '@/lib/i18n/config'
@@ -33,6 +34,10 @@ export type ThemeData = {
   section_title?: string | null
   chrome_i18n?: Record<string, ChromeI18nEntry>
   blog_signature?: BlogSignature | null
+  /** Chrome Compiler output (migration 032). */
+  compiled_chrome_css?: string | null
+  chrome_compile_stats?: unknown
+  chrome_scripts_enabled?: boolean | null
 }
 
 async function assertSuperAdmin() {
@@ -98,6 +103,14 @@ export async function saveTheme(siteId: string, data: ThemeData): Promise<Action
       chrome_i18n: data.chrome_i18n ?? {},
       extracted_body_attrs: data.extracted_body_attrs ?? null,
       blog_signature: data.blog_signature ?? null,
+      // Migration 032. A NULL compiled blob is meaningful: it tells the render to
+      // use the legacy raw-injection path, which is how every site captured before
+      // the compiler keeps rendering identically until its owner re-captures.
+      compiled_chrome_css: data.compiled_chrome_css ?? null,
+      chrome_compile_stats: data.chrome_compile_stats ?? null,
+      ...(data.chrome_scripts_enabled === undefined
+        ? {}
+        : { chrome_scripts_enabled: data.chrome_scripts_enabled === true }),
     }
 
     let { error } = await admin.from('site_themes').upsert(fullRow, { onConflict: 'site_id' })
@@ -108,7 +121,10 @@ export async function saveTheme(siteId: string, data: ThemeData): Promise<Action
     if (error) return { error: error.message }
 
     revalidatePath(`/dashboard/sites/${siteId}`)
-    revalidatePath(`/render/${siteId}`)
+    // A theme save changes the chrome on EVERY page of the blog — expire the whole
+    // site tag, not a path (the old revalidatePath was a no-op against the
+    // force-dynamic render).
+    updateTag(siteTag(siteId))
     return {}
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }
@@ -212,7 +228,7 @@ export async function deleteTheme(siteId: string): Promise<ActionResult> {
     const { error } = await admin.from('site_themes').delete().eq('site_id', siteId)
     if (error) return { error: error.message }
     revalidatePath(`/dashboard/sites/${siteId}`)
-    revalidatePath(`/render/${siteId}`)
+    updateTag(siteTag(siteId))
     return {}
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconegut' }

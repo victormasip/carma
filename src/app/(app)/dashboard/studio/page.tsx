@@ -7,7 +7,6 @@ import PageHeader from '@/components/ui/PageHeader'
 
 // Studio hub — the sidebar entry point for the fullscreen editor. One site →
 // straight into it (zero decisions); several → a chooser of premium cards.
-export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Studio · Carma' }
 

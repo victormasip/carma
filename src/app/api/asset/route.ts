@@ -16,9 +16,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isSafeUrl } from '@/lib/scrape/http'
 import { absolutiseCssUrls, proxyFontsInCss } from '@/lib/scrape/clientCss'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const MAX_BYTES = 8 * 1024 * 1024
 const CORS = { 'Access-Control-Allow-Origin': '*' }
 

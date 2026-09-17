@@ -145,7 +145,12 @@ export function isSafeUrl(raw: string): boolean {
   }
 }
 
-type FetchOpts = { accept?: string; timeout?: number }
+type FetchOpts = { accept?: string; timeout?: number; retries?: number }
+
+// A browser always sends Accept-Language; a header-less fetch is a bot "tell"
+// that some WAFs/CDNs block or serve degraded HTML to. Catalan/Spanish first —
+// the sites Carma clones — with an English fallback.
+const SCRAPER_ACCEPT_LANGUAGE = 'ca,es;q=0.9,en;q=0.8'
 
 // ─── Charset-aware decoding ───────────────────────────────────────────────────
 // Per the Fetch spec, Response.text() ALWAYS decodes as UTF-8, ignoring the
@@ -217,31 +222,46 @@ export function fixMojibake(s: string): string {
   }
 }
 
-/** Fetch a URL with a timeout. Returns body + headers, or null on any failure. */
+/**
+ * Fetch a URL with a timeout. Returns body + headers, or null on any failure.
+ * TRANSIENT failures (network hiccup, 5xx, 429) are retried ONCE with a short
+ * backoff — a single flaky hop must not sink a whole capture/import. A timeout
+ * is NOT retried (a slow origin would just burn the deadline twice), and 4xx
+ * responses are final.
+ */
 export async function safeFetch(
   url: string,
   opts: FetchOpts = {},
 ): Promise<{ body: string; headers: Headers } | null> {
-  const { accept = 'text/html,application/xml,*/*', timeout = DEFAULT_TIMEOUT } = opts
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeout)
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { 'User-Agent': SCRAPER_UA, Accept: accept },
-    })
-    if (!res.ok) return null
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    const raw = decodeBytes(bytes, sniffCharset(bytes, res.headers.get('content-type')))
-    // Defense-in-depth: if the page mis-declared its charset and we ended up
-    // with "Ã©"-style mojibake, recover it (UTF-8 bytes-as-Latin-1 → re-decode
-    // as UTF-8). No-op when the text is already clean.
-    const body = fixMojibake(raw)
-    return { body, headers: res.headers }
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timer)
+  const { accept = 'text/html,application/xml,*/*', timeout = DEFAULT_TIMEOUT, retries = 1 } = opts
+
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeout)
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { 'User-Agent': SCRAPER_UA, Accept: accept, 'Accept-Language': SCRAPER_ACCEPT_LANGUAGE },
+      })
+      if (!res.ok) {
+        const transient = res.status >= 500 || res.status === 429
+        if (transient && attempt < retries) { await new Promise(r => setTimeout(r, 250)); continue }
+        return null
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      const raw = decodeBytes(bytes, sniffCharset(bytes, res.headers.get('content-type')))
+      // Defense-in-depth: if the page mis-declared its charset and we ended up
+      // with "Ã©"-style mojibake, recover it (UTF-8 bytes-as-Latin-1 → re-decode
+      // as UTF-8). No-op when the text is already clean.
+      const body = fixMojibake(raw)
+      return { body, headers: res.headers }
+    } catch {
+      // Our own timeout abort ⇒ the origin is slow, not flaky — don't retry.
+      if (!ctrl.signal.aborted && attempt < retries) { await new Promise(r => setTimeout(r, 250)); continue }
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
   }
 }
 
@@ -259,7 +279,7 @@ export async function safeFetchJson(url: string, opts: { timeout?: number } = {}
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { 'User-Agent': SCRAPER_UA, Accept: 'application/json' },
+      headers: { 'User-Agent': SCRAPER_UA, Accept: 'application/json', 'Accept-Language': SCRAPER_ACCEPT_LANGUAGE },
     })
     if (!res.ok) return null
     return await res.json()

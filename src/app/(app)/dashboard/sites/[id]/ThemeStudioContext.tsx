@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
-import { enableModules } from '@/lib/actions/modules'
+import { enableModules, applyArchetype } from '@/lib/actions/modules'
 import { getStudioArticle, getPostContent, updatePostFields, seedSamplePosts } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
@@ -21,6 +21,7 @@ import {
   type AnalyzeResult, type CaptureEvent, type CaptureStepId, type CaptureStepStatus,
 } from '@/lib/render/captureProgress'
 import { templateChromeJson, type BlogTemplate } from '@/lib/render/templates'
+import { archetypeForTemplate } from '@/lib/render/archetypes'
 
 type ChromeI18n = Record<string, { header?: string; footer?: string; section_title?: string }>
 
@@ -45,6 +46,9 @@ export type Theme = {
   default_locale?: string | null
   chrome_i18n?: ChromeI18n | null
   blog_signature?: BlogSignature | null
+  /** Chrome Compiler (migration 032) — see scrape/chromeCompiler.ts. */
+  compiled_chrome_css?: string | null
+  chrome_compile_stats?: unknown
 }
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -86,6 +90,9 @@ const CAPTURE_STALL_MS = 60_000
 
 type ThemeStudio = {
   siteId: string
+  /** The site's PUBLIC address label. Every "obre el blog" button inside the
+   *  Studio builds its href from this, never from `/render/<siteId>`. */
+  subdomain: string | null
   // identity / lifecycle
   hasTheme: boolean
   saveStatus: SaveStatus
@@ -200,11 +207,13 @@ const AUTOSAVE_MS = 700
 const FREE_REGENS = 1
 
 export function ThemeStudioProvider({
-  siteId, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
+  siteId, subdomain = null, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
   isPremium = false, initialRegenCount = 0,
   onCaptureSuccess, onCaptureProceed,
 }: {
   siteId: string
+  /** sites.subdomain — the blog's public address. */
+  subdomain?: string | null
   initialTheme: Theme | null
   children: ReactNode
   defaultLocale?: string
@@ -318,6 +327,12 @@ export function ThemeStudioProvider({
   const [externalScripts, setExternalScripts] = useState<string[]>(initialTheme?.external_scripts ?? [])
   const [fontLinks, setFontLinks] = useState<string[]>(initialTheme?.font_links ?? [])
   const [baseUrl, setBaseUrl] = useState(initialTheme?.base_url ?? '')
+  // Chrome Compiler output (migration 032). Produced at capture, saved with the
+  // theme, and read by the render to replace the target's whole injected <head>
+  // with one inline critical-CSS blob. Empty ⇒ the render keeps using the legacy
+  // raw-injection path, so a site captured before the compiler is untouched.
+  const [compiledChromeCss, setCompiledChromeCss] = useState(initialTheme?.compiled_chrome_css ?? '')
+  const [chromeCompileStats, setChromeCompileStats] = useState<unknown>(initialTheme?.chrome_compile_stats ?? null)
   const [detectedFramework, setDetectedFramework] = useState<string | null>(initialTheme?.detected_framework ?? null)
   // Latest-ref mirror so proceedFromCapture (memoized, [] deps) reads the current
   // framework without re-creating the callback on every capture.
@@ -359,10 +374,13 @@ export function ThemeStudioProvider({
     section_title: sectionTitle.trim() || null,
     chrome_i18n: chromeI18n,
     blog_signature: blogSignature,
+    compiled_chrome_css: compiledChromeCss || null,
+    chrome_compile_stats: chromeCompileStats,
   }), [
     url, extractedHead, extractedHeader, extractedFooter, extractedBodyAttrs, extractedCard, extractedScripts,
     externalStyles, externalScripts, fontLinks, baseUrl, detectedFramework,
     detectedHosting, tokens, sectionTitle, chromeI18n, blogSignature,
+    compiledChromeCss, chromeCompileStats,
   ])
 
   // ── Debounced real-time autosave ──
@@ -476,6 +494,11 @@ export function ThemeStudioProvider({
     setTokens(prev => ({ ...DEFAULT_TOKENS, ...(data.tokens ?? {}), layout: prev.layout, columns: prev.columns, feedLayout: prev.feedLayout }))
     setSectionTitle(data.section_title ?? '')
     setBlogSignature(data.blog_signature ?? null)
+    // A fresh capture always replaces the compiled chrome (an old blob describes
+    // the PREVIOUS markup, so keeping it would style the new header with the old
+    // site's rules). Empty is the honest value when the compile bailed.
+    setCompiledChromeCss(data.compiled_chrome_css ?? '')
+    setChromeCompileStats(data.chrome_compile_stats ?? null)
     setBlogUrl(data.blog_signature?.blogUrl ?? '')
     // A fresh capture replaces the base chrome → old translations are stale.
     setChromeI18n({})
@@ -659,6 +682,9 @@ export function ThemeStudioProvider({
   const applyTemplate = useCallback(async (tpl: BlogTemplate, name: string) => {
     const { header, footer } = templateChromeJson(tpl, name)
     setExtractedHead('')
+    // A starter template ships its own scoped CSS — there is no captured chrome to
+    // compile, so any blob from a previous capture must go.
+    setCompiledChromeCss(''); setChromeCompileStats(null)
     setExtractedHeader(header)
     setExtractedFooter(footer)
     setExtractedBodyAttrs('') // starter templates are self-contained — no client body
@@ -682,9 +708,14 @@ export function ThemeStudioProvider({
     setChromeI18n({})
     setEditLocale(chromeDefaultLocale)
     setActive(true)
-    // Each look ships with its matching Smart Modules ON (search, newsletter…)
-    // — merge-only + best-effort, adjustable from the Mòduls tab.
-    if (tpl.modules?.length) void enableModules(siteId, tpl.modules).catch(() => {})
+    // NAKED TEMPLATES ARE DEAD (2026-09-17). A look that backs one of the three
+    // archetypes applies THAT — its modules with the chosen variants and the
+    // written copy — instead of merge-enabling a list of ids at their defaults.
+    // Everything else keeps the old merge-only behaviour. Both are best-effort
+    // and both are adjustable from the Mòduls tab.
+    const arch = archetypeForTemplate(tpl.id)
+    if (arch) void applyArchetype(siteId, arch.id).catch(() => {})
+    else if (tpl.modules?.length) void enableModules(siteId, tpl.modules).catch(() => {})
     // Born ALIVE: seed the starter articles (real, published, localized) so the
     // feed and the article pages are full from the very first second. Awaited —
     // the host refreshes the route right after, and the posts must be there.
@@ -699,6 +730,7 @@ export function ThemeStudioProvider({
     setActive(false)
     setSaveStatus('idle')
     setExtractedHead(''); setExtractedHeader(''); setExtractedFooter(''); setExtractedBodyAttrs(''); setExtractedCard(''); setExtractedScripts('')
+    setCompiledChromeCss(''); setChromeCompileStats(null)
     setExternalStyles([]); setExternalScripts([]); setFontLinks([]); setBaseUrl('')
     setDetectedFramework(null); setDetectedHosting(null)
     setTokens({ ...DEFAULT_TOKENS })
@@ -754,6 +786,7 @@ export function ThemeStudioProvider({
 
   const value: ThemeStudio = {
     siteId,
+    subdomain,
     hasTheme: active,
     saveStatus,
     savedAt,

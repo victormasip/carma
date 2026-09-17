@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { siteTag, postTag } from '@/lib/render/cache'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale } from '@/lib/i18n/config'
 import { translateFieldsWithClaude, type TranslatableFields } from '@/lib/i18n/translate'
 import { analyzeWriting, type WritingAnalysis } from '@/lib/writing/coach'
@@ -243,11 +244,19 @@ export async function listPosts(
   }
 }
 
-// Push content changes to the LIVE public render. The /render routes are
-// force-dynamic (always re-read the DB) so the owner sees edits immediately;
-// revalidating the path additionally clears any Next data-cache entry keyed to it.
-function revalidateRender(siteId: string) {
-  revalidatePath(`/render/${siteId}`)
+// Push content changes to the LIVE public render.
+//
+// This used to be a NO-OP. The /render routes were `force-dynamic`, so there was
+// no cache entry for `revalidatePath` to clear — the comment here even claimed the
+// routes "always re-read the DB", which is exactly why the call did nothing. The
+// staleness the owner saw came from the 60s CDN s-maxage, which this never touched.
+//
+// Fase 4 made the render cacheable and tagged (`site:<id>`), so the invalidation is
+// now real: `updateTag` expires the entry immediately, giving the owner
+// read-your-own-writes on the public blog the moment they publish.
+function revalidateRender(siteId: string, postId?: string) {
+  updateTag(siteTag(siteId))
+  if (postId) updateTag(postTag(siteId, postId))
 }
 
 export async function createPost(
@@ -304,6 +313,51 @@ export async function createPost(
   }
 }
 
+type SlugRow = { slug?: string | null; i18n?: Record<string, { slug?: string | null }> | null }
+
+/** Every slug a post row currently answers to — the flat column plus each locale's. */
+function collectRowSlugs(row: SlugRow): string[] {
+  const out = new Set<string>()
+  if (row.slug?.trim()) out.add(row.slug.trim())
+  for (const v of Object.values(row.i18n ?? {})) {
+    const sl = v?.slug?.trim()
+    if (sl) out.add(sl)
+  }
+  return [...out]
+}
+
+/**
+ * Point every retired slug at this post. Upsert on (site_id, from_slug) so a slug
+ * renamed twice ends up at the latest article rather than a dead middle hop, and
+ * drop any redirect whose from_slug is now a LIVE slug of this post (renaming
+ * back must not leave a self-referential loop).
+ *
+ * 42P01-safe: without migration 032 this is a silent no-op and behaviour is
+ * exactly as it was.
+ */
+async function recordSlugRedirects(
+  admin: ReturnType<typeof createAdminClient>,
+  siteId: string,
+  postId: string,
+  previous: string[],
+  current: string[],
+): Promise<void> {
+  const live = new Set(current.map(s => s.trim()).filter(Boolean))
+  const retired = previous.filter(s => !live.has(s))
+  try {
+    if (retired.length) {
+      await admin.from('post_redirects').upsert(
+        retired.map(from_slug => ({ site_id: siteId, from_slug, post_id: postId })),
+        { onConflict: 'site_id,from_slug' },
+      )
+    }
+    if (live.size) {
+      await admin.from('post_redirects').delete()
+        .eq('site_id', siteId).in('from_slug', [...live])
+    }
+  } catch { /* pre-032, or a losing race — never fail the save for a redirect */ }
+}
+
 export async function updatePost(
   postId: string,
   siteId: string,
@@ -326,6 +380,18 @@ export async function updatePost(
     if (opts.checkSlug !== false) {
       const conflict = await findSlugConflict(admin, siteId, postId, collectPostSlugs(data, slug))
       if (conflict) return { error: `El slug «${conflict}» ja existeix en un altre article d'aquest lloc.` }
+    }
+
+    // SLUG RENAME → REDIRECT (migration 032).
+    // Renaming a published article's slug used to 404 every link already indexed
+    // or shared. We read the outgoing slugs first so the rename can leave a trail;
+    // the body-only autosave path (checkSlug === false) guarantees no slug moved,
+    // so it skips this read entirely.
+    let previousSlugs: string[] = []
+    if (opts.checkSlug !== false) {
+      const before = await admin
+        .from('posts').select('slug, i18n').eq('id', postId).eq('site_id', siteId).maybeSingle()
+      if (before.data) previousSlugs = collectRowSlugs(before.data as SlugRow)
     }
 
     const baseRow = {
@@ -355,9 +421,16 @@ export async function updatePost(
       return { error: error.message }
     }
 
-    // The public render is force-dynamic (reads the DB per request), so edits show
-    // immediately; revalidate only clears any data-cache entry keyed to it.
-    revalidateRender(siteId)
+    // Leave a 308 trail for every slug this edit retired, so existing inbound
+    // links keep resolving. Best-effort: a missing table (pre-032) or a losing
+    // race must never fail the save.
+    if (previousSlugs.length) {
+      await recordSlugRedirects(admin, siteId, postId, previousSlugs, collectPostSlugs(data, slug))
+    }
+
+    // Expire the cache tags this post lives under. (Before Fase 4 this was a
+    // revalidatePath against a force-dynamic route — a no-op.)
+    revalidateRender(siteId, postId)
     // Only bust the dashboard/article-list cache when a list-visible field actually
     // changed. A body-only autosave used to invalidate the whole dashboard route on
     // every keystroke burst — that's why nothing stayed cached when you navigated back.

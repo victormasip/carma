@@ -8,7 +8,6 @@ import type { BlogSignature } from '@/lib/scrape/blogDetect'
 import type { LabPreviewRequest } from '@/lib/grabber-lab/types'
 
 // buildListingPage / node-html-parser need the Node.js runtime.
-export const runtime = 'nodejs'
 
 // Drop the listing's analytics beacon — a Lab preview must never pollute
 // page_views (and the fake site id wouldn't resolve anyway). Removes only the

@@ -9,9 +9,6 @@ import { buildListingPage } from '@/lib/render/theme'
 import { getTemplate, templateChromeJson } from '@/lib/render/templates'
 import { DEFAULT_LOCALE } from '@/lib/i18n/config'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const SAMPLE = [
   { title: 'Com construir una marca que perduri en el temps', excerpt: 'Una guia pràctica sobre identitat, to de veu i consistència visual a cada punt de contacte.', cat: 'Estratègia', seed: 'carma-a' },
   { title: 'Les tendències de disseny editorial per al 2026', excerpt: 'El que ve en tipografia, color i composició per a publicacions digitals modernes.', cat: 'Disseny', seed: 'carma-b' },

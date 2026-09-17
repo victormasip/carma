@@ -13,9 +13,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const BUCKET = 'post-media'
 const MAX_BYTES = 8 * 1024 * 1024 // 8 MB per image
 const EXT: Record<string, string> = {

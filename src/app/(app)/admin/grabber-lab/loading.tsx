@@ -1,8 +1,8 @@
-import RouteLoader from '@/components/ui/RouteLoader'
+import SectionSkeleton from '@/components/shell/SectionSkeleton'
 
-// The Lab fetches the sample history before first paint; show the knot instead
-// of a blank pane. (No longer fullscreen: /admin lives inside the dashboard
-// shell since 2026-07-06, so the loader centres in the content pane.)
+// Fase 3: un esquelet amb la FORMA de la pàgina, dins la columna de contingut —
+// ja no el `RouteLoader` (una capa opaca `fixed inset-0` que tapava tot el
+// viewport, sidebar inclòs, a cada navegació). El shell no parpelleja mai.
 export default function GrabberLabLoading() {
-  return <RouteLoader />
+  return <SectionSkeleton variant="split" />
 }

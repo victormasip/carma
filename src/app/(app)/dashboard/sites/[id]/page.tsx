@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import SiteDetailClient from './SiteDetailClient'
 import { listPosts } from '@/lib/actions/posts'
 import { fetchSiteStats } from '@/lib/analytics/read'
+import { getKarma } from '@/lib/karma/karma'
 
 export default async function SiteDetailsPage({
   params,
@@ -12,8 +13,11 @@ export default async function SiteDetailsPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const [{ id: siteId }, { tab: qTab, clone: qClone }] = await Promise.all([params, searchParams])
+  const [{ id: siteId }, { tab: qTab, clone: qClone, nova: qNova }] = await Promise.all([params, searchParams])
   const autoCloneUrl = typeof qClone === 'string' && qClone ? qClone : undefined
+  // ?nova=1 — arrived from "encara no tinc web". The onboarding opens on the
+  // template picker; there is nothing to capture and nothing to ask.
+  const startWithoutSite = qNova === '1'
 
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
@@ -23,17 +27,27 @@ export default async function SiteDetailsPage({
   // column isn't present yet we retry without it so the page still renders.
   const siteSel = (cols: string) =>
     (isSuperAdmin ? admin : supabase).from('sites').select(cols).eq('id', siteId).single()
-  let { data: site, error: siteError } = await siteSel('id, name, api_key, created_at, subdomain')
+  let { data: site, error: siteError } = await siteSel('id, name, api_key, created_at, subdomain, origin_url')
+  // 42703 walks back one column at a time: origin_url (022) is newer than
+  // subdomain (021), so a half-migrated database still renders the page.
+  if (siteError?.code === '42703') {
+    ;({ data: site, error: siteError } = await siteSel('id, name, api_key, created_at, subdomain'))
+  }
   if (siteError?.code === '42703') {
     ;({ data: site, error: siteError } = await siteSel('id, name, api_key, created_at'))
   }
 
   if (siteError || !site) redirect('/dashboard')
-  const siteRow = site as unknown as { id: string; name: string; api_key: string; created_at: string; subdomain?: string | null }
+  const siteRow = site as unknown as {
+    id: string; name: string; api_key: string; created_at: string
+    subdomain?: string | null
+    /** Where this blog was cloned from. The import never has to ask again. */
+    origin_url?: string | null
+  }
 
   // Fetch all tab data in parallel — enables instant client-side tab switching.
   // Posts are paginated (first page only) so the full table is never loaded.
-  const [postsResult, suResult, clientsResult, themeResult, initialStats] = await Promise.all([
+  const [postsResult, suResult, clientsResult, themeResult, initialStats, karma] = await Promise.all([
     listPosts(siteId, { page: 1, status: 'all' }),
     isSuperAdmin
       ? admin.from('site_users').select('user_id, profiles!inner(email)').eq('site_id', siteId)
@@ -47,6 +61,10 @@ export default async function SiteDetailsPage({
     // Initial analytics for the Resum section (30 days) — server-rendered so the
     // Overview has data on first paint with no client round-trip.
     fetchSiteStats(admin, siteId, 30),
+    // The account's real plan. It decides which Smart Modules and which
+    // archetype this owner can switch on — the server enforces it again, this
+    // is so the UI can say so BEFORE the click instead of failing after it.
+    getKarma(user.id, admin),
   ])
 
   // Onboarding step 3 (founder directive 2026-07-06): connecting the WhatsApp
@@ -100,6 +118,8 @@ export default async function SiteDetailsPage({
   const initialModules = (themeResult.data as { modules?: import('@/lib/modules/registry').SiteModules } | null)?.modules ?? null
   // First published post (newest) for the Modules tab's article preview toggle.
   const previewPostSlug = postsResult.posts.find(p => p.is_published)?.slug
+  // Superadmins see the whole catalogue (agency); everyone else gets their plan.
+  const plan = isSuperAdmin ? 'agency' : karma.plan
 
   return (
     <SiteDetailClient
@@ -108,8 +128,10 @@ export default async function SiteDetailsPage({
       siteCreatedAt={siteRow.created_at}
       apiKey={siteRow.api_key}
       subdomain={siteRow.subdomain ?? undefined}
+      originUrl={siteRow.origin_url ?? null}
       isSuperAdmin={isSuperAdmin}
       isNewSite={isNewSite}
+      startWithoutSite={startWithoutSite}
       initialPosts={postsResult.posts}
       initialPostsMeta={{
         page: postsResult.page,
@@ -130,6 +152,7 @@ export default async function SiteDetailsPage({
       siteDefaultLocale={(themeResult.data as { default_locale?: string } | null)?.default_locale ?? undefined}
       regenCount={regenCount}
       initialModules={initialModules}
+      plan={plan}
       previewPostSlug={previewPostSlug}
     />
   )

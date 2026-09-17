@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* EL FIL D'OR — the landing page's motion layer (scroll timelines, the gold
+   thread, the living knot). Kept in its own file because it is a
+   self-contained system with its own rules; see the header comment there. */
+@import "./landing.css";
+
 /* ── Brand palette (Carma gold) — vivid, yellow-leaning "super gold" ─────────── */
 @theme {
   --color-carma-50:  #fffbe6;
@@ -690,15 +695,10 @@ a[role="button"]:active {
 }
 @keyframes shimmer-text { 0% { background-position: 220% 0; } 100% { background-position: -220% 0; } }
 
-/* Scroll-reveal — hidden until intersected (App attaches .in-view via observer). */
-[data-reveal] {
-  opacity: 0;
-  transform: translateY(28px);
-  transition: opacity 0.9s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1)),
-              transform 0.9s var(--ease-emphasis, cubic-bezier(0.16,1,0.3,1));
-  transition-delay: var(--reveal-delay, 0ms);
-}
-[data-reveal].in-view { opacity: 1; transform: translateY(0); }
+/* Scroll-reveal lives in landing.css now: a native view() timeline whose BASE
+   state is visible, so a browser without scroll timelines can never render a
+   blank section. `.in-view` stays as a harmless no-op for old call sites. */
+[data-reveal].in-view { opacity: 1; transform: none; }
 
 /* Cursor-following soft spotlight (URL input, feature cards). */
 .pointer-spot {
@@ -825,115 +825,35 @@ section[id] { scroll-margin-top: 110px; }
 @keyframes zen-pop { 0% { transform: scale(0.55); opacity: 0; } 60% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
 .zen-pop { animation: zen-pop .6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-/* ════════════════════════════════════════════════════════════════════════════
- * WHATSAPP HERO SCENE — the landing phone auto-plays the whole product story on
- * a pure-CSS 16s loop: voice note in → warm ack → gold draft card → «Publicar»
- * tap → live link + celebration. GPU-only (transform/opacity, composited), zero
- * JS, zero CLS: every bubble keeps its layout slot from SSR — only paint moves.
- * Typing indicators/tap ring/sparks are absolutely positioned overlays, so they
- * never push layout either. Timeline windows are keyframe percentages of the
- * shared --wa-cycle; every element exits together at 94–98% for a clean loop.
- * ══════════════════════════════════════════════════════════════════════════ */
-.wa-scene { --wa-cycle: 16s; }
-.wa-step { opacity: 0; will-change: transform, opacity; }
-/* !important on every .wa-* animation: the scene is the landing's product demo
-   and must play even on Windows machines with OS animations disabled — the same
-   brand exemption as .animate-spin / .knot-draw / .btn-gold. A class rule with
-   !important beats the blanket `*` reduced-motion kill-switch above. */
-.wa-step-1 { animation: wa-step-1 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
-.wa-step-2 { animation: wa-step-2 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
-.wa-step-3 { animation: wa-step-3 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
-.wa-step-4 { animation: wa-step-4 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
-.wa-step-5 { animation: wa-step-5 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
-@keyframes wa-step-1 {
-  0%, 2%   { opacity: 0; transform: translateY(12px) scale(.94); }
-  5%, 93%  { opacity: 1; transform: none; }
-  97%, 100% { opacity: 0; transform: none; }
+/* THE "+N" THAT LIFTS OFF THE BALANCE when a repte is claimed.
+   One element, one keyframe, transform + opacity only, and it runs once — the
+   whole point is that claiming points should FEEL like gaining them rather than
+   like a number quietly changing value. Removed from the flow (absolute) so it
+   cannot shift the figure it is celebrating. */
+@keyframes karma-pop {
+  0%   { opacity: 0; transform: translateY(6px) scale(.9); }
+  25%  { opacity: 1; transform: translateY(-2px) scale(1.06); }
+  70%  { opacity: 1; transform: translateY(-14px) scale(1); }
+  100% { opacity: 0; transform: translateY(-26px) scale(1); }
 }
-@keyframes wa-step-2 {
-  0%, 15%  { opacity: 0; transform: translateY(12px) scale(.94); }
-  18%, 93% { opacity: 1; transform: none; }
-  97%, 100% { opacity: 0; transform: none; }
+.karma-pop { animation: karma-pop 1.5s cubic-bezier(0.16, 1, 0.3, 1) both; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  /* It still appears and still leaves — it just stops travelling. */
+  .karma-pop { animation: zen-fade-up .4s linear both; }
 }
-/* The gold draft card lands with a tiny overshoot — the hero beat. */
-@keyframes wa-step-3 {
-  0%, 34%  { opacity: 0; transform: translateY(16px) scale(.92); }
-  37%      { opacity: 1; transform: translateY(-2px) scale(1.015); }
-  39%, 93% { opacity: 1; transform: none; }
-  97%, 100% { opacity: 0; transform: none; }
-}
-@keyframes wa-step-4 {
-  0%, 57%  { opacity: 0; transform: translateY(12px) scale(.94); }
-  60%, 93% { opacity: 1; transform: none; }
-  97%, 100% { opacity: 0; transform: none; }
-}
-@keyframes wa-step-5 {
-  0%, 71%  { opacity: 0; transform: translateY(12px) scale(.94); }
-  74%, 93% { opacity: 1; transform: none; }
-  97%, 100% { opacity: 0; transform: none; }
-}
-/* Typing indicators — visible only in the pause before their bubble. */
-.wa-typing { opacity: 0; }
-.wa-typing-1 { animation: wa-typing-1 var(--wa-cycle) ease-in-out infinite !important; }
-.wa-typing-2 { animation: wa-typing-2 var(--wa-cycle) ease-in-out infinite !important; }
-.wa-typing-3 { animation: wa-typing-3 var(--wa-cycle) ease-in-out infinite !important; }
-@keyframes wa-typing-1 {
-  0%, 8%  { opacity: 0; transform: translateY(6px); }
-  10%, 13% { opacity: 1; transform: none; }
-  15%, 100% { opacity: 0; transform: none; }
-}
-@keyframes wa-typing-2 {
-  0%, 24% { opacity: 0; transform: translateY(6px); }
-  26%, 31% { opacity: 1; transform: none; }
-  33%, 100% { opacity: 0; transform: none; }
-}
-@keyframes wa-typing-3 {
-  0%, 65% { opacity: 0; transform: translateY(6px); }
-  67%, 70% { opacity: 1; transform: none; }
-  72%, 100% { opacity: 0; transform: none; }
-}
-.wa-typing-dot { animation: wa-typing-dot 1.2s ease-in-out infinite !important; }
-@keyframes wa-typing-dot {
-  0%, 60%, 100% { transform: none; opacity: .45; }
-  30% { transform: translateY(-3px); opacity: 1; }
-}
-/* Voice-note waveform: bars breathe from the baseline while the note "plays". */
-.wa-wave-bar { transform-origin: 50% 100%; animation: wa-wave 1.05s ease-in-out infinite !important; }
-@keyframes wa-wave { 0%, 100% { transform: scaleY(.5); } 50% { transform: scaleY(1); } }
-/* The «Publicar» tap: an expanding gold ring + a quick press dip on the button. */
-.wa-tap {
-  position: absolute; inset: -5px; border-radius: 12px; pointer-events: none;
-  border: 2px solid rgba(255, 215, 105, .95); opacity: 0;
-  animation: wa-tap var(--wa-cycle) ease-out infinite !important;
-}
-@keyframes wa-tap {
-  0%, 52% { opacity: 0; transform: scale(.72); }
-  55%     { opacity: .95; transform: scale(1); }
-  61%, 100% { opacity: 0; transform: scale(1.32); }
-}
-.wa-press { animation: wa-press var(--wa-cycle) ease-out infinite !important; }
-@keyframes wa-press {
-  0%, 53% { transform: none; }
-  55%     { transform: scale(.93); }
-  58%, 100% { transform: none; }
-}
-/* Celebration sparks bursting off the "Publicat!" bubble (per-spark --spark). */
-.wa-spark {
-  position: absolute; width: 6px; height: 6px; border-radius: 999px;
-  background: #ffd23d; opacity: 0; pointer-events: none;
-  animation: wa-spark var(--wa-cycle) ease-out infinite !important;
-}
-@keyframes wa-spark {
-  0%, 73% { opacity: 0; transform: translate(0, 0) scale(.3); }
-  77%     { opacity: 1; }
-  86%, 100% { opacity: 0; transform: var(--spark, translate(12px, -18px)) scale(1); }
-}
+
+/* The WhatsApp scene used to auto-play here on a 16s infinite CSS loop — five
+   step animations, three typing indicators, a breathing waveform, a tap ring
+   and six sparks, every one of them running forever whether or not anyone was
+   looking at the page. It is now driven by the visitor's own scroll (see
+   .sc-conversa in landing.css), which reads better AND takes sixteen idle
+   animations off the landing. */
+
 
 /* Print never scrolls, so scroll-revealed content must be forced visible or
    whole sections come out blank on paper/PDF. */
 @media print {
-  [data-reveal], .hero-word, .wa-step { opacity: 1 !important; transform: none !important; animation: none !important; }
-  .wa-typing, .wa-tap, .wa-spark { display: none !important; }
+  [data-reveal], .hero-word, .wa-beat { opacity: 1 !important; transform: none !important; animation: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1; transform: none; transition: none; }
@@ -945,9 +865,6 @@ section[id] { scroll-margin-top: 110px; }
   .hero-word { opacity: 1; transform: none; }
   .skeleton::after { display: none; }
   .zen-breathe { animation: none; opacity: .6; }
-  /* The WhatsApp hero scene keeps playing (brand exemption, like the knot and
-     the gold sheen): its .wa-* rules carry class-level !important animations
-     that beat the blanket `*` kill-switch — no override needed here. */
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -970,3 +887,66 @@ section[id] { scroll-margin-top: 110px; }
 .review-prose li::marker { color: var(--c-accent); }
 .review-prose blockquote { border-left: 3px solid var(--c-accent); margin: 1.6em 0; padding: 0.2em 0 0.2em 1.3em; font-style: italic; color: var(--c-text); }
 .review-prose img { max-width: 100%; border-radius: var(--radius-md); margin: 1.4em 0; display: block; }
+
+/* ── God-Mode CTA (Fase 1) ────────────────────────────────────────────────────
+   The single most important button in the product: connecting WhatsApp. One
+   massive gold monolith with a slow breathing aura and two emanating rings.
+
+   MOTION POLICY (perf audit 2026-07-06): compositor-only — transform + opacity,
+   never blur, filter or background-position. The rings are pre-blurred STATIC
+   box-shadows that are only scaled, so the GPU composites them without a single
+   paint per frame. That is the difference between this and the halos that froze
+   the landing page.
+
+   Like `.gold-trace`, this survives the blanket reduced-motion kill: it is the
+   brand's signature moment and the founder's OS has animations off. Class-level
+   !important beats the global `*` rule. It stays slow (4s+) and there is exactly
+   ONE on screen, ever. */
+.god-orb { position: relative; isolation: isolate; }
+.god-orb::before,
+.god-orb::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  box-shadow: 0 0 0 1px rgba(245, 188, 0, 0.45), 0 0 46px -6px rgba(245, 188, 0, 0.55);
+  opacity: 0;
+  animation: god-ring 4.2s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
+  will-change: transform, opacity;
+}
+.god-orb::after { animation-delay: 2.1s; }
+@keyframes god-ring {
+  0%   { transform: scale(1);    opacity: 0; }
+  18%  { opacity: .75; }
+  100% { transform: scale(1.22); opacity: 0; }
+}
+
+/* The button itself breathes — a 1.5% scale, far below the threshold where it
+   reads as movement, right at the threshold where it reads as ALIVE. */
+.god-breathe { animation: god-breathe 4.2s ease-in-out infinite; will-change: transform; }
+@keyframes god-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.015); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .god-orb::before { animation: god-ring 4.2s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite !important; }
+  .god-orb::after  { animation: god-ring 4.2s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) infinite !important; animation-delay: 2.1s !important; }
+  /* The breathing scale is the one piece we DO drop: it moves the hit target, and
+     a control that shifts under the cursor is a genuine accessibility problem,
+     not a stylistic one. */
+  .god-breathe { animation: none !important; }
+}
+
+/* ── Voice capture level meter (Fase 1) ──────────────────────────────────────
+   Bars driven by a CSS custom property the recorder writes per animation frame.
+   scaleY only — no height, no layout, no paint. */
+.vu-bar {
+  transform: scaleY(var(--vu, 0.08));
+  transform-origin: center;
+  transition: transform 90ms linear;
+  will-change: transform;
+}
+
+/* ── Drop target (Fase 1) ────────────────────────────────────────────────────
+   A dashed ring that only appears while a file is over the surface. */
+.drop-active { outline: 2px dashed var(--color-accent); outline-offset: 5px; }

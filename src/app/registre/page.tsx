@@ -4,7 +4,6 @@ import KnotLoader from '@/components/ui/KnotLoader'
 
 // Auth pages depend on runtime session/env (Supabase client) — never prerender
 // them, so a missing build-time env can't crash `next build` on this route.
-export const dynamic = 'force-dynamic'
 
 export default function RegisterPage() {
   return (

@@ -12,8 +12,8 @@ import { formatNumber } from '@/lib/format'
 import SiteGrid from './SiteGrid'
 import AddSiteButton from './AddSiteButton'
 
-type SiteWithCounts = { id: string; name: string; created_at: string; logo_url?: string | null; total: number; published: number; views: number }
-type SiteRow = { id: string; name: string; created_at: string; logo_url?: string | null }
+type SiteWithCounts = { id: string; name: string; created_at: string; logo_url?: string | null; subdomain?: string | null; total: number; published: number; views: number }
+type SiteRow = { id: string; name: string; created_at: string; logo_url?: string | null; subdomain?: string | null }
 
 export default async function DashboardHome() {
   const { supabase, user, isSuperAdmin } = await getSession()
@@ -25,7 +25,7 @@ export default async function DashboardHome() {
     // 42703-safe: sites.logo_url only exists after migration 022; profiles.plan
     // after 028. The plan decides whether "Afegir lloc" is real (SITE_LIMITS).
     const [sitesQ, planQ] = await Promise.all([
-      supabase.from('sites').select('id, name, created_at, logo_url').order('name'),
+      supabase.from('sites').select('id, name, created_at, logo_url, subdomain').order('name'),
       supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle(),
     ])
     let sitesRes = sitesQ
@@ -86,7 +86,7 @@ export default async function DashboardHome() {
   // Sites are fetched first (with a 42703-safe retry for the logo_url column),
   // then the rest in parallel.
   const sitesSel = (cols: string) => admin.from('sites').select(cols).order('created_at', { ascending: false })
-  let sitesRes = await sitesSel('id, name, created_at, logo_url')
+  let sitesRes = await sitesSel('id, name, created_at, logo_url, subdomain')
   if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
   const { data: sites, error } = sitesRes
   // clientProfiles: only for NewSiteModal's assign-to-client picker — the

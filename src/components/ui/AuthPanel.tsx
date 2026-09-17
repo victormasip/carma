@@ -86,9 +86,13 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
   // provisioning hub — otherwise toggling register→login (the same query carries
   // no ?next=) would drop the clone and dump the user on /dashboard instead of the
   // onboarding/import flow.
-  const cloneNext = `/benvinguda${cloneUrl ? `?url=${encodeURIComponent(cloneUrl)}` : ''}`
+  // "I have no website" is a funnel intent too, and it has to survive signup the
+  // same way ?url= does — including the register↔login toggle, which carries no
+  // ?next= of its own.
+  const noWeb = search.get('nova') === '1'
+  const cloneNext = `/benvinguda${cloneUrl ? `?url=${encodeURIComponent(cloneUrl)}` : noWeb ? '?nova=1' : ''}`
   const registerNext = cloneNext
-  const loginNext = search.get('next') || (cloneUrl ? cloneNext : '/dashboard')
+  const loginNext = search.get('next') || (cloneUrl || noWeb ? cloneNext : '/dashboard')
 
   // Shared form state.
   const [email, setEmail] = useState('')

@@ -143,3 +143,44 @@ export function publicBlogUrl(
   const proto = host.split(':')[0].endsWith('localhost') ? 'http:' : 'https:'
   return `${proto}//${host}${opts.path ?? '/'}`
 }
+
+/**
+ * THE address a HUMAN is ever sent to for a blog.
+ *
+ * `/render/<uuid>` is the ENGINE, not an address: the tenant subdomain rewrites
+ * onto it (see lib/supabase/middleware.ts) and the dashboard preview iframes
+ * load it same-origin so the Studio can inject live CSS. It was never meant to
+ * be linked to — but half the dashboard did exactly that, so owners kept landing
+ * on `carma.cat/render/8f3a…` and copying THAT into their menus.
+ *
+ * Everything user-facing goes through here instead. In production `rootDomain()`
+ * always resolves, so this is a real pretty URL with no browser involved — safe
+ * to compute on the server and safe to hydrate. `currentHost` (window.location
+ * .host) is only needed in dev, where the port has to come from somewhere; pass
+ * it at click time rather than at render time so the markup stays stable.
+ *
+ * The engine path is the LAST resort (dev with no NEXT_PUBLIC_ROOT_DOMAIN, or a
+ * site provisioned before migration 021 gave it a subdomain). It still works —
+ * it just isn't a URL we hand anyone on purpose.
+ */
+export function publicSiteUrl(
+  site: { id: string; subdomain?: string | null },
+  opts: { currentHost?: string; path?: string; bust?: boolean | number } = {},
+): string {
+  const path = opts.path && opts.path !== '/' ? (opts.path.startsWith('/') ? opts.path : `/${opts.path}`) : '/'
+  const v = opts.bust === true ? Date.now() : opts.bust || null
+  const query = v ? `${path.includes('?') ? '&' : '?'}v=${v}` : ''
+
+  const sub = (site.subdomain || '').trim()
+  if (sub) {
+    const pretty = publicBlogUrl(sub, { currentHost: opts.currentHost, path: `${path}${query}` })
+    if (pretty) return pretty
+  }
+  return `/render/${site.id}${path === '/' ? '' : path}${query}`
+}
+
+/** True when `publicSiteUrl` can produce a real public address (not the engine path). */
+export function hasPublicUrl(site: { subdomain?: string | null }, currentHost?: string): boolean {
+  const sub = (site.subdomain || '').trim()
+  return !!sub && blogHost(sub, currentHost) !== null
+}

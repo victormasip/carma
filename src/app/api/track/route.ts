@@ -14,9 +14,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isBotUA, clientIp, visitorHash, referrerHost, isUuid, type ViewKind } from '@/lib/analytics/track'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',

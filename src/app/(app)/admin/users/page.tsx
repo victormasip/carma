@@ -5,7 +5,6 @@ import UsersClient, { type AdminUserRow } from './UsersClient'
 
 // Dades per usuari + saldos — mai prerenderat. El gate de superadmin viu al
 // layout de /admin (redirect); aquí ja només hi arriben superadmins.
-export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Usuaris · Admin · Carma' }
 

@@ -4,7 +4,6 @@ import { isValidHttpUrl, isSafeUrl, safeFetch, decodeEntities } from '@/lib/scra
 import { findBlogIndexUrl, detectCardPattern } from '@/lib/scrape/blogDetect'
 
 // node-html-parser needs the Node runtime.
-export const runtime = 'nodejs'
 export const maxDuration = 20
 
 /**

@@ -12,6 +12,7 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'
+import { sanitizePastedHtml, looksLikeDocumentPaste } from './pasteSanitizer'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
@@ -23,13 +24,15 @@ import {
   Heading2, Heading3, Heading1, List, ListOrdered, Quote, Code, Minus,
   ImageIcon, Plus, Info, Images, Columns2, Video,
   Wand2, Sparkles, Minimize2, Maximize2, SpellCheck,
+  ChevronRight, MousePointerClick, ListTree,
 } from 'lucide-react'
 import KnotSpinner from '@/components/ui/KnotSpinner'
 import type { RewriteMode } from '@/lib/writing/rewrite'
 import { Callout } from './extensions/Callout'
 import { Gallery } from './extensions/Gallery'
 import { Figure } from './extensions/Figure'
-import { Embed, parseEmbedUrl } from './extensions/Embed'
+import { Embed } from './extensions/Embed'
+import { parseEmbedUrl } from '@/lib/embed'
 import { Columns, Column } from './extensions/Columns'
 import { HeadingId } from './extensions/HeadingId'
 import { Toggle, ToggleSummary } from './extensions/Toggle'
@@ -150,6 +153,24 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
           event.preventDefault()
           return true
         }
+        // Word / Google Docs / Notion paste (Fase 5). Their text/html flavour pins
+        // every few words inside `<span style="font-family:Calibri;color:#1F1F1F">`,
+        // which overrides the site's own typography and colour tokens — the classic
+        // way a CMS article ends up looking nothing like the blog it lives on.
+        // TipTap's schema drops unknown NODES but keeps inline styles on the ones it
+        // knows, so nothing filtered this before.
+        //
+        // Only foreign payloads are touched: a paste from inside Carma still goes
+        // through ProseMirror's normal path untouched.
+        const html = event.clipboardData?.getData('text/html')
+        if (html && looksLikeDocumentPaste(html) && editorRef.current) {
+          const clean = sanitizePastedHtml(html)
+          if (clean) {
+            event.preventDefault()
+            editorRef.current.chain().focus().insertContent(clean).run()
+            return true
+          }
+        }
         return false
       },
       handleDrop: (_view, event) => {
@@ -232,6 +253,29 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   }
 
   // Bubble-menu button on the dark floating pill.
+  /**
+   * THE BUG THAT MADE EVERY MENU BUTTON LOOK BROKEN.
+   *
+   * Founder, 2026-09-16: "quan cliques sobre blanc apareixen unes opcions que no
+   * funcionen be, per exemple encapçalament no fa res, obre linia en blanc".
+   *
+   * A <button> takes focus on MOUSEDOWN, before `click` ever fires. That single
+   * fact breaks a TipTap menu three ways at once:
+   *
+   *   · the editor loses focus, so ProseMirror's selection collapses and the
+   *     command — if it runs at all — runs against the wrong place;
+   *   · FloatingMenu's `shouldShow` re-evaluates on that blur and hides the
+   *     menu, so mouseup lands on nothing and NO click event is ever dispatched.
+   *     The button is not slow or buggy; it was never pressed;
+   *   · the caret ends up back in an empty paragraph, which is the "obre línia
+   *     en blanc" part.
+   *
+   * preventDefault on mousedown stops the focus move entirely. The editor keeps
+   * its selection, the menu stays up, the click lands, and `.chain().focus()`
+   * has something real to act on. Every button in this file gets it.
+   */
+  const preventBlur = (e: React.MouseEvent) => e.preventDefault()
+
   const bbtn = (active: boolean) => cn(
     'cursor-pointer flex items-center justify-center w-8 h-8 rounded-md transition-colors',
     active ? 'bg-accent text-on-accent' : 'text-white/70 hover:bg-white/15 hover:text-white',
@@ -286,35 +330,35 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
           return !empty && editor.isEditable && !editor.isActive('figure')
         }}
       >
-        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={bbtn(editor.isActive('bold'))} title="Negreta (Ctrl/⌘+B)">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleBold().run()} className={bbtn(editor.isActive('bold'))} title="Negreta (Ctrl/⌘+B)">
           <Bold className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={bbtn(editor.isActive('italic'))} title="Cursiva (Ctrl/⌘+I)">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleItalic().run()} className={bbtn(editor.isActive('italic'))} title="Cursiva (Ctrl/⌘+I)">
           <Italic className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={bbtn(editor.isActive('underline'))} title="Subratllat (Ctrl/⌘+U)">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleUnderline().run()} className={bbtn(editor.isActive('underline'))} title="Subratllat (Ctrl/⌘+U)">
           <UnderlineIcon className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()} className={bbtn(editor.isActive('strike'))} title="Barrat">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleStrike().run()} className={bbtn(editor.isActive('strike'))} title="Barrat">
           <Strikethrough className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleCode().run()} className={bbtn(editor.isActive('code'))} title="Codi">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleCode().run()} className={bbtn(editor.isActive('code'))} title="Codi">
           <Code className="w-3.5 h-3.5" />
         </button>
         <div className="w-px h-5 bg-white/15 mx-0.5" />
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={bbtn(editor.isActive('heading', { level: 1 }))} title="Títol gran">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={bbtn(editor.isActive('heading', { level: 1 }))} title="Títol gran">
           <Heading1 className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={bbtn(editor.isActive('heading', { level: 2 }))} title="Títol">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={bbtn(editor.isActive('heading', { level: 2 }))} title="Títol">
           <Heading2 className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={bbtn(editor.isActive('heading', { level: 3 }))} title="Subtítol">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={bbtn(editor.isActive('heading', { level: 3 }))} title="Subtítol">
           <Heading3 className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={bbtn(editor.isActive('blockquote'))} title="Cita">
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleBlockquote().run()} className={bbtn(editor.isActive('blockquote'))} title="Cita">
           <Quote className="w-3.5 h-3.5" />
         </button>
-        <button type="button" onClick={openLinkInput} className={bbtn(editor.isActive('link'))} title="Enllaç">
+        <button type="button" onMouseDown={preventBlur} onClick={openLinkInput} className={bbtn(editor.isActive('link'))} title="Enllaç">
           {editor.isActive('link') ? <Link2Off className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
         </button>
 
@@ -324,6 +368,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
             <div className="relative">
               <button
                 type="button"
+                onMouseDown={preventBlur}
                 onClick={() => setAiOpen(o => !o)}
                 className={cn(
                   'cursor-pointer flex items-center justify-center gap-1 h-8 px-2 rounded-md transition-colors',
@@ -361,43 +406,58 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       {/* Floating insert menu on empty paragraphs */}
       <FloatingMenu
         editor={editor}
-        className="w-48 p-1.5 bg-bg-elevated rounded-xl shadow-pop ring-1 ring-border"
+        className="w-52 max-h-[60vh] overflow-y-auto p-1.5 bg-bg-elevated rounded-xl shadow-pop ring-1 ring-border"
         options={{ placement: 'left-start' }}
       >
         <p className="px-3 pt-1 pb-1.5 text-xs font-bold uppercase tracking-widest text-subtle flex items-center gap-1">
           <Plus className="w-3 h-3" /> Inserir · prem <kbd className="px-1 py-0.5 bg-surface-subtle rounded text-subtle not-italic font-mono">/</kbd>
         </p>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={fbtn}>
           <Heading1 className="w-3.5 h-3.5 text-subtle" /> Títol gran
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={fbtn}>
           <Heading2 className="w-3.5 h-3.5 text-subtle" /> Títol
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={fbtn}>
+          <Heading3 className="w-3.5 h-3.5 text-subtle" /> Subtítol
+        </button>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleBulletList().run()} className={fbtn}>
           <List className="w-3.5 h-3.5 text-subtle" /> Llista
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleOrderedList().run()} className={fbtn}>
           <ListOrdered className="w-3.5 h-3.5 text-subtle" /> Llista numerada
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleBlockquote().run()} className={fbtn}>
           <Quote className="w-3.5 h-3.5 text-subtle" /> Cita
         </button>
-        <button type="button" onClick={() => { setShowImageInput(true); setShowLinkInput(false); setShowVideoInput(false) }} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => { setShowImageInput(true); setShowLinkInput(false); setShowVideoInput(false) }} className={fbtn}>
           <ImageIcon className="w-3.5 h-3.5 text-subtle" /> Imatge
         </button>
-        <button type="button" onClick={() => { setShowVideoInput(true); setShowImageInput(false); setShowLinkInput(false) }} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => { setShowVideoInput(true); setShowImageInput(false); setShowLinkInput(false) }} className={fbtn}>
           <Video className="w-3.5 h-3.5 text-subtle" /> Vídeo
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setCallout({ variant: 'info' }).run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setCallout({ variant: 'info' }).run()} className={fbtn}>
           <Info className="w-3.5 h-3.5 text-subtle" /> Targeta destacada
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setGallery().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setGallery().run()} className={fbtn}>
           <Images className="w-3.5 h-3.5 text-subtle" /> Galeria
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setColumns().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setColumns().run()} className={fbtn}>
           <Columns2 className="w-3.5 h-3.5 text-subtle" /> 2 columnes
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className={fbtn}>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={fbtn}>
+          <Code className="w-3.5 h-3.5 text-subtle" /> Bloc de codi
+        </button>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setToggleBlock().run()} className={fbtn}>
+          <ChevronRight className="w-3.5 h-3.5 text-subtle" /> Desplegable
+        </button>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setCtaButton().run()} className={fbtn}>
+          <MousePointerClick className="w-3.5 h-3.5 text-subtle" /> Botó d&apos;acció
+        </button>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setToc().run()} className={fbtn}>
+          <ListTree className="w-3.5 h-3.5 text-subtle" /> Índex de continguts
+        </button>
+        <button type="button" onMouseDown={preventBlur} onClick={() => editor.chain().focus().setHorizontalRule().run()} className={fbtn}>
           <Minus className="w-3.5 h-3.5 text-subtle" /> Separador
         </button>
       </FloatingMenu>
@@ -417,10 +477,10 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
                 placeholder="https://example.com"
                 className="flex-1 text-xs px-2 py-1.5 bg-transparent focus:outline-none text-text placeholder:text-subtle"
               />
-              <button type="button" onClick={applyLink} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={applyLink} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
                 Aplicar
               </button>
-              <button type="button" onClick={() => setShowLinkInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={() => setShowLinkInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
                 Esc
               </button>
             </>
@@ -437,10 +497,10 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
                 placeholder="https://example.com/imatge.jpg"
                 className="flex-1 text-xs px-2 py-1.5 bg-transparent focus:outline-none text-text placeholder:text-subtle"
               />
-              <button type="button" onClick={applyImage} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={applyImage} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
                 Inserir
               </button>
-              <button type="button" onClick={() => setShowImageInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={() => setShowImageInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
                 Esc
               </button>
             </>
@@ -457,10 +517,10 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
                 placeholder="Enganxa una URL de YouTube o Vimeo"
                 className="flex-1 text-xs px-2 py-1.5 bg-transparent focus:outline-none text-text placeholder:text-subtle"
               />
-              <button type="button" onClick={applyVideo} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={applyVideo} className="cursor-pointer text-xs font-semibold px-3 py-1.5 bg-accent text-on-accent rounded-md hover:bg-accent-hover transition-colors">
                 Inserir
               </button>
-              <button type="button" onClick={() => setShowVideoInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
+              <button type="button" onMouseDown={preventBlur} onClick={() => setShowVideoInput(false)} className="cursor-pointer text-xs font-medium px-2 py-1.5 text-muted hover:text-text hover:bg-surface-hover rounded-md transition-colors">
                 Esc
               </button>
             </>

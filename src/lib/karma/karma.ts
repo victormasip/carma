@@ -19,6 +19,10 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { KARMA_COSTS, KARMA_ALLOCATIONS, type KarmaAction, type KarmaPlan, type KarmaRewardKey, KARMA_REWARDS } from './config'
+// Context-aware zero-punts message lives in the (pure) WhatsApp upsell module; we
+// re-export it so existing callers keep importing it from here. Calling it with no
+// argument yields the classic one-liner (unchanged behaviour).
+export { outOfPuntsMessage, type OutOfPuntsContext } from '@/lib/whatsapp/upsell'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -197,18 +201,8 @@ export function karmaPageUrl(): string {
   return `${base}/dashboard/karma`
 }
 
-/**
- * El missatge càlid de WhatsApp quan no queden punts — mai un error sec. Zero
- * despesa d'LLM: és determinista a propòsit (no podem pagar una resposta LLM
- * per dir que no queden punts).
- */
-export function outOfPuntsMessage(): string {
-  return (
-    'Ostres, t’has quedat sense Punts de Carma per aquest mes! 😅 ' +
-    'Es renoven el dia 1, però no cal esperar: pots guanyar punts extra completant reptes ' +
-    `o passar a un pla superior aquí 👉 ${karmaPageUrl()} 💛`
-  )
-}
+// outOfPuntsMessage() is re-exported at the top from @/lib/whatsapp/upsell (the pure,
+// context-aware renderer). karmaPageUrl() stays here for other server callers.
 
 /** La variant curta per a la consola web (la UI hi afegeix els botons). */
 export function outOfPuntsConsoleMessage(): string {

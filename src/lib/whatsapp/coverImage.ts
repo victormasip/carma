@@ -1,106 +1,144 @@
-// WhatsApp Agent — AI cover-image generation (server-only).
+// WhatsApp Agent — REAL AI cover-image generation (server-only, P2.5 / CEO C-10).
 //
-// Founder directive 2026-06-30: the agent proactively offers to generate a cover
-// image for a draft (the "nano-banana" external image API). The ENTIRE logical flow
-// is real — load the post for context, build the prompt, write DB state, set the
-// featured image — only the external image-provider FETCH is stubbed (behind
-// NANO_BANANA_API_KEY). Enabling the real provider later is a one-function change in
-// `generateCoverImage` with zero churn in the worker/webhook/state machine.
+// Every agent-published article should ship with a real cover image — the most
+// visible week-1 quality gap was imageless posts. This kills the old "nano-banana"
+// stub: it now calls a real image provider (OpenAI Images — K1: keep OpenAI for the
+// WA channel, no new provider/keys), stores the bytes in the existing public
+// `post-media` bucket (migration 013), and sets posts.featured_image to the clean URL.
+//
+// Best-effort by contract: a provider hiccup never blocks the draft/publish — the
+// article just ships without a cover and cover_status records the failure. openai is
+// imported lazily so this module stays import-safe for the plain-node test harness.
 
-import { createAdminClient } from '@/lib/supabase/admin'
+import type { createAdminClient } from '@/lib/supabase/admin'
+import { WA_MOCK_AGENT } from './config'
 
 type Admin = ReturnType<typeof createAdminClient>
+
+const BUCKET = 'post-media'
+const IMAGE_MODEL = process.env.WA_IMAGE_MODEL || 'gpt-image-1'
+// Cost control: 'low' is plenty for a blog hero; overridable for premium looks.
+const IMAGE_QUALITY = (process.env.WA_IMAGE_QUALITY || 'low') as 'low' | 'medium' | 'high' | 'auto'
+// 3:2 landscape — closest gpt-image-1 size to a 1.91:1 social/blog hero.
+const IMAGE_SIZE = process.env.WA_IMAGE_SIZE || '1536x1024'
 
 export type CoverImageRequest = {
   title: string
   excerpt?: string
   /** A short brand/style hint (site name, niche) to steer the look. */
   brandHint?: string
-  /** Target aspect, defaults to a 1.91:1 social/blog hero. */
-  aspect?: '1.91:1' | '16:9' | '1:1'
 }
 
 export type CoverImageResult =
-  | { ok: true; url: string; prompt: string }
+  | { ok: true; bytes: Buffer; contentType: string; prompt: string }
   | { ok: false; reason: 'not_configured' | 'error'; detail?: string }
 
-/** True once the external image provider is configured (key present). */
+/** True when the real image provider can run (key present, not in mock mode). */
 export function coverImageEnabled(): boolean {
-  return !!(process.env.NANO_BANANA_API_KEY && process.env.NANO_BANANA_API_BASE)
+  if (WA_MOCK_AGENT) return false
+  if (/^(0|false|no|off)$/i.test((process.env.WA_COVER_IMAGES || '').trim())) return false
+  return !!process.env.OPENAI_API_KEY
 }
 
-/** Build the text prompt we would send to the image model. Pure + testable. */
+/** Build the text prompt for the image model. Pure + testable. */
 export function buildCoverPrompt(req: CoverImageRequest): string {
   const bits = [
     `Editorial blog hero image for an article titled "${req.title}".`,
     req.excerpt ? `Theme: ${req.excerpt}.` : '',
     req.brandHint ? `Brand context: ${req.brandHint}.` : '',
-    'Clean, modern, premium, no text overlay, soft natural lighting.',
+    'Photographic, clean, modern, premium, no text or lettering, soft natural lighting, wide aspect.',
   ].filter(Boolean)
   return bits.join(' ')
 }
 
 /**
- * Low-level provider call. STUB: returns `not_configured` until the nano-banana
- * provider is wired. The signature + error contract are final so the orchestrator
- * below can gate on the result without later refactors. The eventual implementation:
- *   POST {NANO_BANANA_API_BASE}/generate  { prompt, aspect }  → { url }
+ * Low-level provider call — OpenAI Images → PNG bytes. Returns `not_configured` when
+ * disabled and `error` on any provider failure (never throws). openai is lazy-imported.
  */
 export async function generateCoverImage(req: CoverImageRequest): Promise<CoverImageResult> {
   if (!coverImageEnabled()) return { ok: false, reason: 'not_configured' }
-  // Real fetch lands here in the follow-up; mocked for now even when keys are set.
-  void req
-  return { ok: false, reason: 'error', detail: 'cover image provider fetch not implemented yet' }
+  const prompt = buildCoverPrompt(req)
+  try {
+    const { default: OpenAI } = await import('openai')
+    const client = new OpenAI({ maxRetries: 1 })
+    const res = await client.images.generate(
+      { model: IMAGE_MODEL, prompt, size: IMAGE_SIZE, quality: IMAGE_QUALITY, n: 1 },
+      { timeout: 90_000 },
+    )
+    const b64 = res.data?.[0]?.b64_json
+    if (b64) return { ok: true, bytes: Buffer.from(b64, 'base64'), contentType: 'image/png', prompt }
+    // Some models/params return a URL instead of b64 — fetch the bytes.
+    const url = res.data?.[0]?.url
+    if (url) {
+      const r = await fetch(url)
+      if (r.ok) {
+        const buf = Buffer.from(await r.arrayBuffer())
+        return { ok: true, bytes: buf, contentType: r.headers.get('content-type') || 'image/png', prompt }
+      }
+    }
+    return { ok: false, reason: 'error', detail: 'no image data returned' }
+  } catch (e) {
+    return { ok: false, reason: 'error', detail: e instanceof Error ? e.message : String(e) }
+  }
 }
 
-// ─── Orchestrator: the full Free-Flow cover step (server-only) ────────────────
-export type NanoBananaResult =
-  | { ok: true; mocked: true; prompt: string }
-  | { ok: true; mocked: false; url: string; prompt: string }
-  | { ok: false; reason: 'no_post' | 'error' }
+/** Upload cover bytes to the public post-media bucket → clean public URL (or null). */
+async function uploadCover(admin: Admin, siteId: string, postId: string, bytes: Buffer, contentType: string): Promise<string | null> {
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : contentType.includes('jpeg') ? 'jpg' : 'png'
+  const path = `${siteId}/cover-${postId}-${Date.now()}.${ext}`
+  const { error } = await admin.storage.from(BUCKET).upload(path, bytes, { contentType, cacheControl: '31536000', upsert: true })
+  if (error) {
+    console.error('[wa/cover] upload failed:', error.message)
+    return null
+  }
+  return admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+}
+
+// ─── Orchestrator: generate + attach a cover for a post (server-only) ─────────
+export type CoverResult =
+  | { ok: true; url: string; prompt: string }
+  | { ok: false; reason: 'no_post' | 'not_configured' | 'error' }
 
 /**
- * Generate (and attach) a cover image for a post — the function the WhatsApp agent
- * invokes when the owner taps "Sí" on the cover-image offer. The whole flow is real:
- *
- *   1. Load the post for prompt context (title + lede), unless `context` supplies it.
- *   2. Build the image prompt from the title/lede + an optional brand hint.
- *   3. Write DB state on the post (`meta.cover_status` + `meta.cover_prompt`) so the
- *      request is durable and observable — `generating` → `done` | `mock_pending`.
- *   4. Call the provider. On a real URL, set `posts.featured_image` + `cover_status:'done'`.
- *      While the fetch is stubbed, land in `mock_pending` (state recorded, image pending).
- *
- * Returns a discriminated result the caller turns into the WhatsApp reply. Never throws.
+ * Generate a real cover image and attach it as posts.featured_image (via the
+ * post-media bucket). Records durable state on the post's meta (cover_status:
+ * generating → done | failed). Never throws. This is what the write executor calls
+ * so every agent draft carries a real cover, and what the webhook Yes/No offer uses.
  */
-export async function generateNanoBananaCover(
+export async function generateAndAttachCover(
   admin: Admin,
   postId: string,
   context?: { siteId?: string | null; title?: string; excerpt?: string; brandHint?: string },
-): Promise<NanoBananaResult> {
+): Promise<CoverResult> {
   try {
-    const { data: post } = await admin
-      .from('posts').select('title, excerpt, meta').eq('id', postId).maybeSingle()
+    if (!coverImageEnabled()) return { ok: false, reason: 'not_configured' }
+
+    const { data: post } = await admin.from('posts').select('title, excerpt, meta, site_id').eq('id', postId).maybeSingle()
     if (!post) return { ok: false, reason: 'no_post' }
 
+    const siteId = String(context?.siteId || post.site_id || '')
     const title = context?.title || String(post.title ?? '')
     const excerpt = context?.excerpt || String(post.excerpt ?? '')
     const meta = ((post.meta as Record<string, unknown> | null) ?? {}) as Record<string, unknown>
-    const prompt = buildCoverPrompt({ title, excerpt, brandHint: context?.brandHint })
 
-    // (3) durable request state — recorded even while the fetch is mocked.
-    await admin.from('posts').update({ meta: { ...meta, cover_status: 'generating', cover_prompt: prompt } }).eq('id', postId)
+    await admin.from('posts').update({ meta: { ...meta, cover_status: 'generating' } }).eq('id', postId)
 
-    // (4) provider call (stubbed). A real URL attaches as the featured image.
-    const provider = await generateCoverImage({ title, excerpt, brandHint: context?.brandHint })
-    if (provider.ok) {
-      await admin.from('posts')
-        .update({ featured_image: provider.url, meta: { ...meta, cover_status: 'done', cover_prompt: prompt } })
-        .eq('id', postId)
-      return { ok: true, mocked: false, url: provider.url, prompt }
+    const gen = await generateCoverImage({ title, excerpt, brandHint: context?.brandHint })
+    if (!gen.ok) {
+      await admin.from('posts').update({ meta: { ...meta, cover_status: 'failed' } }).eq('id', postId)
+      return { ok: false, reason: gen.reason === 'not_configured' ? 'not_configured' : 'error' }
     }
 
-    await admin.from('posts').update({ meta: { ...meta, cover_status: 'mock_pending', cover_prompt: prompt } }).eq('id', postId)
-    return { ok: true, mocked: true, prompt }
+    const url = siteId ? await uploadCover(admin, siteId, postId, gen.bytes, gen.contentType) : null
+    if (!url) {
+      await admin.from('posts').update({ meta: { ...meta, cover_status: 'failed' } }).eq('id', postId)
+      return { ok: false, reason: 'error' }
+    }
+
+    await admin.from('posts')
+      .update({ featured_image: url, meta: { ...meta, cover_status: 'done', cover_prompt: gen.prompt } })
+      .eq('id', postId)
+    return { ok: true, url, prompt: gen.prompt }
   } catch {
     return { ok: false, reason: 'error' }
   }

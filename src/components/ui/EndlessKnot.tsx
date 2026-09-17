@@ -30,6 +30,16 @@ type Props = {
   spin?: boolean
   /** Accessible label. Omit to render the mark as purely decorative. */
   title?: string
+  /**
+   * The travelling gold sheen (an SVG gradient animated with SMIL).
+   *
+   * PERF: a gradient sweep REPAINTS the whole mark every frame. At 24px that is
+   * free, and it is what makes the logo feel alive. At 600px — the landing's
+   * watermarks and hero knot — it is a large surface repainting forever, which
+   * is exactly the class of bug that froze the landing in July. Big marks pass
+   * `sheen={false}` and get a static gradient plus a compositor-only rotation.
+   */
+  sheen?: boolean
 }
 
 export default function EndlessKnot({
@@ -38,7 +48,12 @@ export default function EndlessKnot({
   glow = false,
   spin = false,
   title,
+  sheen = true,
 }: Props) {
+  // A non-sheening instance needs its OWN gradient id, or it would share the
+  // animated one already in the document and inherit the repaint it exists to
+  // avoid.
+  const gradientId = sheen ? KNOT_GRADIENT_ID : `${KNOT_GRADIENT_ID}-still`
   return (
     <svg
       viewBox={KNOT_VIEWBOX}
@@ -54,22 +69,24 @@ export default function EndlessKnot({
         {/* Living gold: a bright sheen band sweeps diagonally across the weave
            (objectBoundingBox + reflect = seamless, self-relative for every
            instance). SMIL keeps it alive even when the OS has "reduce motion" on. */}
-        <linearGradient id={KNOT_GRADIENT_ID} x1="0" y1="0" x2="0.72" y2="0.72" spreadMethod="reflect">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0.72" y2="0.72" spreadMethod="reflect">
           <stop offset="0%" stopColor="#9a7409" />
           <stop offset="42%" stopColor="#f5bc00" />
           <stop offset="50%" stopColor="#fff7d6" />
           <stop offset="58%" stopColor="#f5bc00" />
           <stop offset="100%" stopColor="#9a7409" />
-          <animateTransform
-            attributeName="gradientTransform"
-            type="translate"
-            values="0 0; 0.72 0.72; 0 0"
-            dur="3.6s"
-            repeatCount="indefinite"
-          />
+          {sheen && (
+            <animateTransform
+              attributeName="gradientTransform"
+              type="translate"
+              values="0 0; 0.72 0.72; 0 0"
+              dur="3.6s"
+              repeatCount="indefinite"
+            />
+          )}
         </linearGradient>
       </defs>
-      <path d={KNOT_PATH} fill={`url(#${KNOT_GRADIENT_ID})`} />
+      <path d={KNOT_PATH} fill={`url(#${gradientId})`} />
     </svg>
   )
 }

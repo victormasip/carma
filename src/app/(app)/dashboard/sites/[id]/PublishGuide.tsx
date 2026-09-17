@@ -17,7 +17,7 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Rocket, Globe, Copy, Check, Crown, PenLine, Link2, ExternalLink, Layers } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
-import { publicBlogUrl } from '@/lib/sites/domain'
+import { publicSiteUrl } from '@/lib/sites/domain'
 import { isWordPress } from '@/lib/render/publishing'
 import { cn } from '@/lib/cn'
 
@@ -73,9 +73,8 @@ export default function PublishGuide({
   const host = useSyncExternalStore(() => () => {}, () => window.location.host, () => '')
   const origin = useSyncExternalStore(() => () => {}, () => window.location.origin, () => '')
 
-  const publicUrl =
-    (subdomain && publicBlogUrl(subdomain, { currentHost: host || undefined })) ||
-    (origin ? `${origin}/render/${siteId}` : `/render/${siteId}`)
+  const rel = publicSiteUrl({ id: siteId, subdomain }, { currentHost: host || undefined })
+  const publicUrl = rel.startsWith('http') ? rel : `${origin}${rel}`
   const displayUrl = publicUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
   const wp = isWordPress(detectedFramework)
 

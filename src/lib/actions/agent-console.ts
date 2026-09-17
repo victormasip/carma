@@ -15,7 +15,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { runAgent, type AgentDraft } from '@/lib/whatsapp/agent'
 import { createPost } from '@/lib/actions/posts'
 import { WA_TABLES } from '@/lib/whatsapp/types'
-import { publicBlogUrl } from '@/lib/sites/domain'
+import { publicSiteUrl } from '@/lib/sites/domain'
 import { LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
 import { spendKarma, refundKarma, outOfPuntsConsoleMessage } from '@/lib/karma/karma'
 import { KARMA_COSTS, KARMA_CLARIFY_NET } from '@/lib/karma/config'
@@ -150,7 +150,7 @@ export async function consolePublish(
     const { data: site } = await admin.from('sites').select('subdomain').eq('id', siteId).maybeSingle()
     const sub = (site as { subdomain?: string | null } | null)?.subdomain ?? ''
     const path = `/${encodeURIComponent(draft.slug)}`
-    const liveUrl = (sub ? publicBlogUrl(sub, { path }) : null) ?? `/render/${siteId}${path}`
+    const liveUrl = publicSiteUrl({ id: siteId, subdomain: sub }, { path })
 
     // Outcome row (thread_id null = console channel) so the Activitat feed and
     // the 60-day outcome loop cover both channels. Best-effort: the table only

@@ -20,6 +20,36 @@
 
 export type ModuleScope = 'listing' | 'article' | 'both'
 
+/**
+ * THE TIER A MODULE BELONGS TO.
+ *
+ * This replaces the old `premium: boolean`, which could only ever express two
+ * products. Carma sells four (Gratis · Premium · Or · Agència), and the module
+ * catalogue is the main thing a plan actually buys, so a boolean was quietly
+ * capping the business model.
+ *
+ * `premium` is KEPT on every definition and stays in sync (it is simply
+ * `tier !== 'free'`), because the dashboard's lock badges and the server-side
+ * enable guard both read it. Nothing had to migrate the day this landed.
+ *
+ * Plan matrix and the reasoning behind each placement:
+ * docs/plans/2026-09-16-modules-and-pricing-strategy.md
+ */
+export type ModuleTier = 'free' | 'premium' | 'gold' | 'agency'
+
+/** Plans are cumulative: a higher plan gets everything below it. */
+export const TIER_RANK: Record<ModuleTier, number> = { free: 0, premium: 1, gold: 2, agency: 3 }
+
+/** Can a site on `plan` switch this module on? */
+export function moduleAllowedForPlan(def: { tier: ModuleTier }, plan: ModuleTier): boolean {
+  return TIER_RANK[plan] >= TIER_RANK[def.tier]
+}
+
+/** Every module a plan unlocks, in catalogue order. */
+export function modulesForPlan(plan: ModuleTier): ModuleDef[] {
+  return MODULES.filter(m => moduleAllowedForPlan(m, plan))
+}
+
 // Bento sections in the dashboard, in display order.
 export type ModuleCategory = 'discovery' | 'engagement' | 'reading' | 'growth'
 
@@ -67,6 +97,10 @@ export type ModuleDef = {
   category: ModuleCategory
   /** Where the module renders. */
   scope: ModuleScope
+  /** The lowest plan that unlocks it. The source of truth. */
+  tier: ModuleTier
+  /** Legacy mirror of `tier !== 'free'`. Read by the dashboard lock badges and
+   *  the server-side enable guard; kept in sync by hand in this file. */
   premium: boolean
   /** Flagged as AI-powered in the UI (e.g. related posts). */
   ai?: boolean
@@ -95,6 +129,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Search',
     category: 'discovery',
     scope: 'listing',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'bar',
@@ -115,6 +150,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Filter',
     category: 'discovery',
     scope: 'listing',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'pills',
@@ -136,6 +172,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Star',
     category: 'discovery',
     scope: 'listing',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'spotlight',
@@ -159,6 +196,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Sparkles',
     category: 'engagement',
     scope: 'article',
+    tier: 'premium',
     premium: true,
     ai: true,
     defaultEnabled: false,
@@ -186,6 +224,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'ArrowLeftRight',
     category: 'engagement',
     scope: 'article',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'cards',
@@ -205,6 +244,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Share2',
     category: 'engagement',
     scope: 'article',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'inline',
@@ -233,6 +273,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'ArrowUp',
     category: 'engagement',
     scope: 'both',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'circle',
@@ -254,6 +295,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'BookOpen',
     category: 'reading',
     scope: 'article',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'bar',
@@ -278,6 +320,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'ListTree',
     category: 'reading',
     scope: 'article',
+    tier: 'premium',
     premium: true,
     defaultEnabled: false,
     defaultVariant: 'sidebar',
@@ -302,6 +345,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'UserCircle',
     category: 'reading',
     scope: 'article',
+    tier: 'free',
     premium: false,
     defaultEnabled: false,
     defaultVariant: 'box',
@@ -325,6 +369,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Mail',
     category: 'growth',
     scope: 'both',
+    tier: 'premium',
     premium: true,
     defaultEnabled: false,
     defaultVariant: 'inline',
@@ -351,6 +396,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Lock',
     category: 'growth',
     scope: 'article',
+    tier: 'gold',
     premium: true,
     defaultEnabled: false,
     defaultVariant: 'gradient',
@@ -374,6 +420,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'Megaphone',
     category: 'growth',
     scope: 'both',
+    tier: 'premium',
     premium: true,
     defaultEnabled: false,
     defaultVariant: 'gradient',
@@ -401,6 +448,7 @@ export const MODULES: ModuleDef[] = [
     icon: 'MoonStar',
     category: 'growth',
     scope: 'both',
+    tier: 'premium',
     premium: true,
     defaultEnabled: false,
     defaultVariant: 'icon',
@@ -417,8 +465,153 @@ export const MODULES: ModuleDef[] = [
       ] },
     ],
   },
-]
 
+  // ── NEW, 2026-09-16 — the WordPress-killer batch ───────────────────────────
+  // Every one of these renders with the engine we already have: no plugin, no
+  // database, no third-party script. That is the whole pitch — on WordPress each
+  // of these is an install, an update cycle and a security surface.
+
+  {
+    id: 'keyTakeaways',
+    name: 'Què hi trobaràs',
+    description: 'Una caixa d’idees clau a l’inici, construïda amb els propis titols de l’article.',
+    icon: 'ListChecks',
+    category: 'reading',
+    scope: 'article',
+    tier: 'premium',
+    premium: true,
+    variants: [
+      { id: 'box', name: 'Caixa', description: 'Bloc destacat amb vora d’accent' },
+      { id: 'minimal', name: 'Mínim', description: 'Llista neta, sense caixa' },
+      { id: 'card', name: 'Targeta', description: 'Targeta elevada amb ombra' },
+    ],
+    defaultVariant: 'box',
+    options: [
+      { key: 'heading', label: 'Títol del bloc', type: 'text', default: '', placeholder: 'Què hi trobaràs' },
+      { key: 'max', label: 'Punts màxims', type: 'range', default: 5, min: 3, max: 8, step: 1 },
+      { key: 'linked', label: 'Punts clicables', type: 'toggle', default: true, help: 'Cada punt salta a la seva secció' },
+    ],
+    defaultEnabled: false,
+  },
+
+  {
+    id: 'pullQuote',
+    name: 'Cites destacades',
+    description: 'Puja la frase més forta de l’article a una cita gran, com una revista.',
+    icon: 'Quote',
+    category: 'reading',
+    scope: 'article',
+    tier: 'free',
+    premium: false,
+    variants: [
+      { id: 'center', name: 'Centrada', description: 'A tota amplada, entre paràgrafs' },
+      { id: 'side', name: 'Al marge', description: 'Flotant al costat del text' },
+      { id: 'rule', name: 'Amb filet', description: 'Filet superior i inferior' },
+    ],
+    defaultVariant: 'center',
+    options: [
+      { key: 'count', label: 'Quantes', type: 'range', default: 1, min: 1, max: 3, step: 1 },
+      { key: 'minChars', label: 'Llargada mínima', type: 'range', default: 70, min: 40, max: 160, step: 10, unit: 'car.' },
+    ],
+    defaultEnabled: false,
+  },
+
+  {
+    id: 'readNext',
+    name: 'Continua llegint',
+    description: 'Una barra que apareix al final amb el següent article. Retenció, sense pop-ups.',
+    icon: 'ArrowRightCircle',
+    category: 'engagement',
+    scope: 'article',
+    tier: 'premium',
+    premium: true,
+    variants: [
+      { id: 'bar', name: 'Barra inferior', description: 'Barra adherida que puja al final' },
+      { id: 'card', name: 'Targeta', description: 'Targeta gran al final del text' },
+    ],
+    defaultVariant: 'bar',
+    options: [
+      { key: 'heading', label: 'Etiqueta', type: 'text', default: '', placeholder: 'Continua llegint' },
+      { key: 'showImage', label: 'Amb imatge', type: 'toggle', default: true },
+    ],
+    defaultEnabled: false,
+  },
+
+  {
+    id: 'whatsappShare',
+    name: 'Envia-ho al teu grup',
+    description: 'Un botó de WhatsApp a cada article. El canal on la teva gent ja comparteix coses.',
+    icon: 'MessageCircle',
+    category: 'growth',
+    scope: 'article',
+    tier: 'free',
+    premium: false,
+    variants: [
+      { id: 'inline', name: 'En línia', description: 'Botó sota el títol' },
+      { id: 'end', name: 'Al final', description: 'Bloc destacat després del text' },
+      { id: 'float', name: 'Flotant', description: 'Botó rodó fix a la cantonada' },
+    ],
+    defaultVariant: 'end',
+    options: [
+      { key: 'label', label: 'Text del botó', type: 'text', default: '', placeholder: 'Envia-ho al teu grup' },
+      { key: 'prefix', label: 'Text que acompanya l’enllaç', type: 'text', default: '', placeholder: 'Mira això:' },
+    ],
+    defaultEnabled: false,
+  },
+
+  // ── The community pair (2026-09-17) ────────────────────────────────────────
+  // The Interaction Plan promised a blog that can be TALKED BACK TO, and the
+  // catalogue had no way to say a word or clap. Both write through
+  // /api/interactions with the same shape /api/leads uses: public, rate-limited,
+  // service-role persisted, and a no-op (never an error page) when migration 036
+  // has not run yet.
+  {
+    id: 'likes',
+    name: 'M’agrada',
+    description: 'Un aplaudiment per article. La mètrica més barata que existeix i la que més diu.',
+    icon: 'Heart',
+    category: 'engagement',
+    scope: 'article',
+    tier: 'premium',
+    premium: true,
+    variants: [
+      { id: 'heart', name: 'Cor', description: 'Un cor amb el recompte al costat' },
+      { id: 'clap', name: 'Aplaudiment', description: 'Estil Medium: es pot prémer diverses vegades' },
+      { id: 'float', name: 'Flotant', description: 'Pastilla fixa a la cantonada inferior' },
+    ],
+    defaultVariant: 'heart',
+    options: [
+      { key: 'label', label: 'Text del botó', type: 'text', default: '', placeholder: 'T’ha agradat?' },
+      { key: 'showCount', label: 'Mostrar el recompte', type: 'toggle', default: true },
+      { key: 'maxPerReader', label: 'Màxim per lector', type: 'range', default: 1, min: 1, max: 50, help: 'Amb l’aplaudiment estil Medium, puja’l a 10 o més.' },
+    ],
+    defaultEnabled: false,
+  },
+  {
+    id: 'comments',
+    name: 'Comentaris verificats',
+    description: 'Comentaris amb correu verificat i moderació. Sense Disqus, sense anuncis, sense rastrejadors.',
+    icon: 'MessagesSquare',
+    category: 'engagement',
+    scope: 'article',
+    tier: 'premium',
+    premium: true,
+    variants: [
+      { id: 'threaded', name: 'Conversa', description: 'Llista amb avatar d’inicials i data' },
+      { id: 'compact', name: 'Compacte', description: 'Llista densa, sense avatars' },
+    ],
+    defaultVariant: 'threaded',
+    options: [
+      { key: 'title', label: 'Títol de la secció', type: 'text', default: 'Comentaris' },
+      { key: 'placeholder', label: 'Placeholder', type: 'text', default: 'Escriu el teu comentari…' },
+      { key: 'buttonText', label: 'Text del botó', type: 'text', default: 'Publicar' },
+      { key: 'requireApproval', label: 'Moderar abans de publicar', type: 'toggle', default: true, help: 'Recomanat. Els comentaris esperen la teva aprovació al panell.' },
+      { key: 'emptyMessage', label: 'Quan no n’hi ha cap', type: 'text', default: 'Encara no hi ha comentaris. Comença tu la conversa.' },
+      { key: 'closedMessage', label: 'Missatge d’enviat', type: 'text', default: '✓ Rebut. El publicarem quan l’hàgim revisat.' },
+    ],
+    defaultEnabled: false,
+  },
+]
 // ─── Config shape (stored in site_themes.modules JSONB) ───────────────────────
 
 export type ModuleConfig = {

@@ -12,6 +12,7 @@ import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
 import { useThemeStudio } from '../ThemeStudioContext'
+import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
 import type { Device } from './types'
 import { cn } from '@/lib/cn'
 
@@ -26,6 +27,7 @@ export default function StudioTopBar({ device, setDevice, isSuperAdmin, globalOp
   exitHref?: string
 }) {
   const s = useThemeStudio()
+  const openBlog = useOpenBlog({ id: s.siteId, subdomain: s.subdomain })
   const { toast } = useToast()
   const confirm = useConfirm()
 
@@ -122,14 +124,16 @@ export default function StudioTopBar({ device, setDevice, isSuperAdmin, globalOp
       <Divider />
 
       {/* ── Site actions ── */}
-      <button
-        type="button"
-        onClick={() => window.open(`/render/${s.siteId}?v=${Date.now()}`, '_blank', 'noopener,noreferrer')}
+      <a
+        href={blogHref({ id: s.siteId, subdomain: s.subdomain })}
+        onClick={(e) => { e.preventDefault(); openBlog() }}
+        target="_blank"
+        rel="noopener noreferrer"
         title="Veure el lloc en viu en una pestanya nova"
         className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-xs font-bold text-text transition-colors hover:bg-surface-hover"
       >
         <ExternalLink className="h-4 w-4" /> <span className="max-md:hidden">En viu</span>
-      </button>
+      </a>
 
       {/* Re-capture only makes sense when the theme CAME from a URL — a
           template blog has no source to regenerate from. */}

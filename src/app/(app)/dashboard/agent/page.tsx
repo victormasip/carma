@@ -6,7 +6,6 @@ import AgentClient from './AgentClient'
 import type { Identity, Scope } from './AgentConnection'
 
 // Per-user surface (identities, memberships, live activity) — never prerendered.
-export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Agent · Carma' }
 

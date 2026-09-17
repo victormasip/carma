@@ -123,13 +123,17 @@ function iterRules(css: string): Rule[] {
 
 function getDecl(body: string, prop: string): string | null {
   const m = body.match(new RegExp(`(?:^|;|\\{)\\s*${prop}\\s*:\\s*([^;]+)`, 'i'))
-  return m ? m[1].trim() : null
+  if (!m) return null
+  // `!important` is noise for token extraction — left in place it made every
+  // value fail its shape check (isColor/length regexes) and silently dropped
+  // the site's real colour/size back to our defaults.
+  return m[1].replace(/!\s*important\s*$/i, '').trim()
 }
 
 function collectVars(css: string): Map<string, string> {
   const map = new Map<string, string>()
   for (const m of css.matchAll(/--([\w-]+)\s*:\s*([^;}]+)[;}]/g)) {
-    map.set(m[1].toLowerCase().trim(), m[2].trim())
+    map.set(m[1].toLowerCase().trim(), m[2].replace(/!\s*important\s*$/i, '').trim())
   }
   return map
 }

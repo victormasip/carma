@@ -30,8 +30,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { runDueJobs, purgeExpiredWaData } from '@/lib/whatsapp/worker'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 function safeEqual(a: string, b: string): boolean {

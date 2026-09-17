@@ -13,7 +13,7 @@ import { Wand2, AlertCircle, ArrowRight, Crown, LayoutDashboard } from 'lucide-r
 import Wordmark from '@/components/ui/Wordmark'
 import { provisionOnboardingSite } from '@/lib/actions/onboarding'
 
-export default function BenvingudaClient({ cloneUrl }: { cloneUrl?: string }) {
+export default function BenvingudaClient({ cloneUrl, noWeb = false }: { cloneUrl?: string; noWeb?: boolean }) {
   const router = useRouter()
   const ran = useRef(false)
   const [, startTransition] = useTransition()
@@ -35,6 +35,7 @@ export default function BenvingudaClient({ cloneUrl }: { cloneUrl?: string }) {
       }
       const params = new URLSearchParams({ onboarding: '1' })
       if (cloneUrl) params.set('clone', cloneUrl)
+      if (noWeb) params.set('nova', '1')
       router.replace(`/dashboard/sites/${result.id}?${params.toString()}`)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,7 +103,9 @@ export default function BenvingudaClient({ cloneUrl }: { cloneUrl?: string }) {
             <p className="mt-1.5 text-sm text-muted">
               {cloneUrl
                 ? 'Estem creant el teu espai i clonant el disseny. Trigarà un instant.'
-                : 'Estem creant el teu espai. Trigarà un instant.'}
+                : noWeb
+                  ? 'Estem creant el teu espai. Ara tries com vols que es vegi.'
+                  : 'Estem creant el teu espai. Trigarà un instant.'}
             </p>
           </div>
         </div>

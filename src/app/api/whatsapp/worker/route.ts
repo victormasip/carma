@@ -15,8 +15,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { runDueJobs } from '@/lib/whatsapp/worker'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 function authorized(req: NextRequest): boolean {

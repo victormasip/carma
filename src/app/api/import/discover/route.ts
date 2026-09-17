@@ -187,8 +187,21 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(
-    { error: 'No s\'ha pogut detectar cap WordPress, sitemap ni feed RSS. Comprova que el site és accessible.' },
-    { status: 404 },
-  )
+  // NOTHING FOUND IS NOT AN ERROR (founder, 2026-09-17).
+  //
+  // This used to 404. During onboarding that meant a brand-new owner whose site
+  // simply has no blog yet — a shop with five pages, a restaurant with a menu —
+  // met a red failure box on their second minute in the product, for behaving
+  // completely normally. There is nothing wrong with their website; there are
+  // just no articles on it, which is precisely why they are here.
+  //
+  // So: 200, an empty list, and a sentence the UI can show calmly. Callers
+  // distinguish "nothing found" from "something broke" by `method: 'none'` —
+  // every real failure above still returns its own status.
+  return NextResponse.json({
+    method: 'none',
+    articles: [],
+    count: 0,
+    note: 'No hi hem trobat articles. Cap problema: el blog comença buit i el primer article el pots escriure ara mateix.',
+  })
 }

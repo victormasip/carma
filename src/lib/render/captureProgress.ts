@@ -11,6 +11,7 @@
 // capture modal (client). It is import-safe everywhere: the only non-local
 // dependency is a TYPE-only import that erases at build time.
 
+import type { ChromeCompileStats } from '@/lib/scrape/chromeCompiler'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
 
@@ -129,6 +130,15 @@ export type AnalyzeResult = {
   /** Source-site features mapped to Carma Smart Modules (search box → search,
    *  newsletter form → newsletter, …), auto-enabled after apply. */
   detected_modules?: DetectedModule[]
+  /** CHROME COMPILER (migration 032): only the CSS rules the captured header and
+   *  footer actually use, compiled once here instead of injecting the target's
+   *  whole <head> (stylesheets AND scripts) on every render. Empty string when the
+   *  compile produced nothing — the render then falls back to raw injection, so no
+   *  existing site changes appearance until it is re-captured. */
+  compiled_chrome_css?: string
+  /** Rules in/out, bytes saved, selectors that could not be evaluated (and were
+   *  therefore KEPT). Feeds the capture UI and the chrome-fidelity gate. */
+  chrome_compile_stats?: ChromeCompileStats | null
 }
 
 /** One source feature → registry module mapping (id MUST exist in the registry). */

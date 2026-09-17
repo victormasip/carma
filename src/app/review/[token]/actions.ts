@@ -14,7 +14,8 @@
 // the now-live post from /embed, so flipping the flag IS the WordPress trigger.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { updateTag } from 'next/cache'
+import { siteTag, postTag } from '@/lib/render/cache'
 import { headers } from 'next/headers'
 import { hashToken } from '@/lib/whatsapp/tokens'
 import { WA_TABLES } from '@/lib/whatsapp/types'
@@ -161,9 +162,12 @@ export async function approveAndPublish(rawToken: string): Promise<ApproveResult
     return { ok: false, error: "No s'ha pogut publicar. Torna-ho a provar." }
   }
 
-  // The publish trigger: revalidate the render path → the headless feed (and the WP
-  // plugin that pulls it) serve the now-live article.
-  revalidatePath(`/render/${tk.site_id}`)
+  // The publish trigger: expire the site + post cache tags → the public blog, the
+  // headless feed and the WP plugin that pulls it all serve the now-live article
+  // immediately. (Before Fase 4 this was revalidatePath against a force-dynamic
+  // route, i.e. a no-op.)
+  updateTag(siteTag(tk.site_id))
+  updateTag(postTag(tk.site_id, tk.post_id))
 
   // G3 outcome loop: stamp published_at + the live URL (best-effort, non-blocking).
   await admin

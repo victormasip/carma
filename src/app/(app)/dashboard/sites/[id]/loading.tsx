@@ -1,7 +1,8 @@
-import RouteLoader from '@/components/ui/RouteLoader'
+import SectionSkeleton from '@/components/shell/SectionSkeleton'
 
-// Clean centred loader for site-detail navigation (preferred over the full-page
-// skeleton — lighter and consistent with the rest of the dashboard).
+// Fase 3: un esquelet amb la FORMA de la pàgina, dins la columna de contingut —
+// ja no el `RouteLoader` (una capa opaca `fixed inset-0` que tapava tot el
+// viewport, sidebar inclòs, a cada navegació). El shell no parpelleja mai.
 export default function SiteDetailLoading() {
-  return <RouteLoader />
+  return <SectionSkeleton variant="bento" />
 }

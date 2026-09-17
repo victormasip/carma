@@ -1,0 +1,873 @@
+/* ════════════════════════════════════════════════════════════════════════════
+ * EL FIL D'OR — the landing page's motion layer.
+ * Plan: docs/plans/2026-09-16-landing-and-community-vision.md
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * THE BUG THIS FILE WAS REWRITTEN TO FIX (2026-09-16, second pass)
+ * ────────────────────────────────────────────────────────────────────────────
+ * Every scroll animation in the first version sat inside
+ * `@media (prefers-reduced-motion: no-preference)`. The founder's Windows has OS
+ * animations turned OFF, so Chrome reports `reduce` — and the ENTIRE visual
+ * system was switched off on the one machine that matters. No thread, no knot,
+ * no scrub, no reveals. "The Golden Thread animation is broken" was exactly
+ * right: on that machine it never ran once.
+ *
+ * THE POLICY, STATED ONCE
+ * -----------------------
+ * A scroll-LINKED animation is not "motion" in the sense the reduced-motion
+ * setting is asking about. It has no autonomy: it cannot move unless the visitor
+ * moves it, exactly like a scrollbar or a progress bar. Nothing animates while
+ * the page is still. So:
+ *
+ *   ALIVE under reduced motion   the thread, the knot's rotation and sheen, the
+ *                                scene ticks, the clone wipe, the punts gauges,
+ *                                the conversation scrub, the WhatsApp demo loop
+ *                                (the same brand exemption `.gold-trace`,
+ *                                `.knot-spin` and `.btn-gold` already carry —
+ *                                see globals.css)
+ *   STILLED under reduced motion  autonomous drift (halos, watermark parallax)
+ *                                and every entrance TRANSLATE — reveals fade
+ *                                instead of sliding, which is the part that
+ *                                actually causes vestibular trouble
+ *
+ * OTHER RULES THAT SHAPE EVERY BLOCK BELOW
+ * ----------------------------------------
+ * · Not one line of JavaScript animates this page. Scroll/view timelines run on
+ *   the compositor, which is why a page this elaborate holds 60fps on a mid
+ *   Android, and why GSAP (~28KB + a permanent rAF loop) was declined.
+ * · THE FALLBACK DIRECTION IS ALWAYS "VISIBLE". Every animated element is fully
+ *   visible in its base rule and only becomes hidden-then-revealed INSIDE
+ *   `@supports (animation-timeline: view())`. Backwards, and a browser without
+ *   scroll timelines renders a blank page.
+ * · LONGHANDS, NEVER THE `animation` SHORTHAND, for anything on a timeline: the
+ *   shorthand resets `animation-duration` to 0s, and a scroll-timeline animation
+ *   needs it to stay `auto`. This is not style; the shorthand silently produces
+ *   a zero-length animation.
+ * · transform + opacity only. No filter, no blur, no background-position over
+ *   large surfaces. Two exceptions, both deliberate and both small: the closing
+ *   knot's stroke-dashoffset (a 240px box on the last screen) and the Veu
+ *   highlight sweep (one finite 900ms transition on a line of text).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Display typography ──────────────────────────────────────────────────────
+   Fraunces (soft + wonky axes) carries every headline; Ubuntu keeps the UI. The
+   variable is set on the landing wrapper by the route, so no other surface in
+   the app pays for the font or inherits the face by accident. */
+.font-display {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 28, "WONK" 1;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+}
+
+.display-xl { font-size: clamp(2.6rem, 1.75rem + 4.2vw, 5.25rem); line-height: 0.98; }
+.display-lg { font-size: clamp(2rem,   1.5rem  + 2.4vw, 3.4rem);  line-height: 1.06; }
+.display-md { font-size: clamp(1.45rem, 1.2rem + 1.4vw, 2.2rem);  line-height: 1.22; }
+
+/* The payoff line. Gold as LIGHT (a settled gradient), never as a paint fill. */
+.display-gold {
+  background: linear-gradient(96deg, #a87f00 0%, #f5bc00 26%, #ffe9a8 50%, #f5bc00 74%, #a87f00 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+}
+[data-theme="dark"] .display-gold,
+.scene-ink .display-gold {
+  background: linear-gradient(96deg, #d9a400 0%, #ffcf1a 26%, #fff7d6 50%, #ffcf1a 74%, #d9a400 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+}
+
+/* ── The dark overture ───────────────────────────────────────────────────────
+   Scenes 1-4 sit on brand ink whatever the visitor's theme is, then the page
+   warms into paper. Light travels DOWN the page with the thread. Implemented by
+   re-pointing the semantic tokens, never by hardcoding colours, so every
+   existing component composes correctly inside it. */
+.scene-ink {
+  --c-bg:             #14110c;
+  --c-bg-elevated:    #1c1811;
+  --c-surface:        #1c1811;
+  --c-surface-hover:  #262117;
+  --c-surface-subtle: #191510;
+  --c-text:           #faf7f0;
+  --c-text-muted:     #bdb4a2;
+  --c-text-subtle:    #8b8272;
+  --c-border:         #2e2819;
+  --c-border-strong:  #433a25;
+  --c-accent:         #ffcf1a;
+  --c-accent-hover:   #ffe066;
+  --c-accent-soft:    rgba(255, 207, 26, 0.12);
+  --c-on-accent:      #1a1400;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+.scene-ink .eyebrow { color: #ffce2e; background: rgba(255, 206, 46, 0.1); border-color: rgba(255, 206, 46, 0.28); }
+
+/* The seam between ink and paper — the thread passing through the wall. */
+.scene-seam {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 188, 0, 0.55) 22%, rgba(245, 188, 0, 0.55) 78%, transparent);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * EL FIL — the thread.
+ * A fixed column in the left gutter, grown by the page scroll. `scaleY` on a 3px
+ * element is the cheapest possible scroll indicator: the compositor transforms
+ * an existing texture, so scrolling the page costs zero paint.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.fil {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: 54px;
+  z-index: 30;
+  pointer-events: none;
+  contain: layout paint;
+}
+.fil__rail,
+.fil__lit {
+  position: absolute;
+  left: 26px;
+  width: 3px;
+  border-radius: 3px;
+}
+.fil__rail {
+  top: 0; bottom: 0;
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+.fil__lit {
+  top: 0; height: 100%;
+  transform-origin: top center;
+  /* Base (no scroll-timeline support): a calm, static gold hairline. */
+  transform: scaleY(1);
+  opacity: 0.45;
+  background: linear-gradient(180deg, #f5bc00 0%, #ffe680 40%, #ffffff 52%, #ffe680 64%, #f5bc00 100%);
+  box-shadow: 0 0 12px 1px rgba(245, 188, 0, 0.45);
+}
+/* The leading spark rides the head of the thread. One 10px dot with a PRE-BAKED
+   static shadow, translated — never a shadow that animates. */
+.fil__spark {
+  position: absolute;
+  left: 21px; top: -6px;
+  width: 13px; height: 13px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #fffbe6 0%, #ffe680 42%, rgba(245, 188, 0, 0) 72%);
+  opacity: 0;
+}
+/* The knot the thread comes out of, pinned to the top of the rail. */
+.fil__knot {
+  position: absolute;
+  left: 11px; top: 16px;
+  width: 32px; height: 32px;
+  opacity: 0.95;
+}
+
+@media (max-width: 767px) {
+  .fil { width: 22px; }
+  .fil__rail, .fil__lit { left: 8px; width: 2px; }
+  .fil__spark { left: 4px; }
+  .fil__knot { display: none; }
+}
+
+@supports (animation-timeline: scroll()) {
+  .fil__lit {
+    opacity: 1;
+    animation-name: fil-grow;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: scroll(root block);
+  }
+  .fil__spark {
+    animation-name: fil-spark;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: scroll(root block);
+  }
+}
+@keyframes fil-grow  { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes fil-spark {
+  0%        { transform: translateY(0);     opacity: 0; }
+  3%, 97%   { opacity: 1; }
+  100%      { transform: translateY(100vh); opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE LIVING KNOT
+ * Founder directive, 2026-09-16: the mark must SPIN, with massive presence,
+ * throughout the page. It is the brand, so it carries the same reduced-motion
+ * exemption `.knot-spin` already carries in globals.css — class-level
+ * !important, because the founder's own machine would otherwise never see it.
+ * Every state below is transform or opacity, and nothing else.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1 ── Perpetual rotation. The signature.
+       ONE ANGULAR VELOCITY FOR EVERY KNOT ON THE PAGE (founder, 2026-09-16).
+       The first pass used three durations — 42s, 18s, 56s — which looked fine in
+       isolation and wrong the moment two marks overlapped: the same object,
+       drawn twice, turning at different rates. They are not three decorations.
+       They are one object seen at different distances, so they share a speed and
+       differ only in direction and scale. */
+:root { --knot-spin-dur: 32s; }
+.knot-rotate,
+.knot-rotate-fast { animation: knot-rotate var(--knot-spin-dur) linear infinite !important; }
+.knot-rotate-rev  { animation: knot-rotate-rev var(--knot-spin-dur) linear infinite !important; }
+@keyframes knot-rotate     { to { transform: rotate(360deg); } }
+@keyframes knot-rotate-rev { to { transform: rotate(-360deg); } }
+
+/* 2 ── The hero knot. Enormous, behind everything, turning. This is the "massive
+        visual presence" the brief asked for — at this size it reads as an
+        atmosphere rather than a logo. */
+.knot-hero {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.1;
+  filter: none;
+}
+.scene-ink .knot-hero { opacity: 0.14; }
+
+/* 3 ── Watermark — an enormous, almost-invisible knot behind a scene. */
+.knot-mark {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.055;
+  z-index: 0;
+}
+[data-theme="dark"] .knot-mark, .scene-ink .knot-mark { opacity: 0.075; }
+
+/* Watermark parallax is autonomous-feeling, so it is the one knot behaviour that
+   yields to reduced motion (see the block at the foot of this file). */
+@supports (animation-timeline: view()) {
+  .knot-mark--parallax {
+    animation-name: knot-parallax;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: view();
+    animation-range: cover 0% cover 100%;
+  }
+}
+@keyframes knot-parallax {
+  from { transform: translateY(7%)  scale(1.04); }
+  to   { transform: translateY(-7%) scale(1.04); }
+}
+
+/* 4 ── Flare — fired imperatively by the Door when it accepts something. A
+        single finite pulse: the mark acknowledging the visitor. */
+.knot-flare { animation: knot-flare 900ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) 1 !important; }
+@keyframes knot-flare {
+  0%   { transform: scale(1)    rotate(0deg); }
+  28%  { transform: scale(1.18) rotate(24deg); }
+  100% { transform: scale(1)    rotate(0deg); }
+}
+
+/* 5 ── Thinking — while the Brand Brain reads. Feedback, not decoration: if it
+        stops, a 40-second wait looks like a crash. Always alive. */
+.knot-thinking { animation: knot-rotate 4.6s linear infinite !important; }
+
+/* 6 ── Scene ticks — the small knot beside each eyebrow lights as its scene
+        arrives and stays lit. The page remembers where you have been. */
+.knot-tick { opacity: 0.3; transform: scale(0.9); }
+@supports (animation-timeline: view()) {
+  .knot-tick {
+    animation-name: knot-tick-on;
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-timeline: view();
+    animation-range: entry 20% entry 80%;
+  }
+}
+@keyframes knot-tick-on {
+  from { opacity: 0.3; transform: scale(0.9)  rotate(-40deg); }
+  to   { opacity: 1;   transform: scale(1.05) rotate(0deg); }
+}
+
+/* 7 ── The tie — the closing knot draws itself over the last screen of scroll,
+        then fills. The one paint-bound animation on the page, deliberately: a
+        240px box that only runs while the footer is on screen. */
+.knot-tie path {
+  fill: none;
+  stroke: url(#carma-knot-gold-tie);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+}
+.knot-tie__fill { opacity: 1; }
+
+@supports (animation-timeline: view()) {
+  .knot-tie path {
+    animation-name: knot-draw-in;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: view();
+    animation-range: entry 0% cover 55%;
+  }
+  .knot-tie__fill {
+    animation-name: knot-fill-in;
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-timeline: view();
+    animation-range: cover 38% cover 68%;
+  }
+}
+@keyframes knot-draw-in { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes knot-fill-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * REVEALS — replaces the IntersectionObserver that used to ship on this page.
+ * Base state is VISIBLE; the hide-then-reveal only exists where a view timeline
+ * can drive it. `--reveal-i` staggers a group by shifting the range instead of
+ * using a delay (delays are meaningless on a scroll timeline).
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-reveal] { opacity: 1; transform: none; }
+
+@supports (animation-timeline: view()) {
+  [data-reveal] {
+    animation-name: reveal-in;
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-timeline: view();
+    animation-range: entry calc(4% + var(--reveal-i, 0) * 7%) cover calc(26% + var(--reveal-i, 0) * 7%);
+  }
+}
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: none; }
+}
+/* The reduced-motion twin: the same reveal, without the travel. */
+@keyframes reveal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE WHATSAPP PHONE — two modes.
+ *
+ * 'live'  the hero. The demo plays itself on a 12s loop so the product is
+ *         moving before the visitor does anything. Brand-exempt from reduced
+ *         motion for the same reason the old 16s scene was: it is the product
+ *         demo, and the founder's machine must see it. Five beats, every one
+ *         transform + opacity, every bubble holding its layout slot from SSR so
+ *         nothing ever shifts.
+ * 'scrub' scene 2. The same markup, pinned, every beat mapped onto a slice of
+ *         the section's view timeline. The visitor writes the article by
+ *         scrolling.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Both modes start from a fully visible, complete conversation. */
+.wa-beat, .wa-line { opacity: 1; transform: none; }
+
+/* ── 'live' — the hero loop ─────────────────────────────────────────────── */
+/* NOTE the absence of a base `opacity: 0` here. An earlier draft had one, and it
+   is the same trap as hiding content outside an @supports guard: if the loop
+   never starts — an extension that disables animations, a rendering mode that
+   drops them, a future policy — the conversation is invisible and the hero is a
+   blank phone. The keyframes own the fade instead, from their own 0%, so the
+   worst case is the complete conversation sitting there. */
+.wa-live { --wa-cycle: 12s; }
+.wa-live .wa-beat { will-change: transform, opacity; }
+.wa-live .wa-beat[data-beat="1"] { animation: wa-live-1 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-live .wa-beat[data-beat="2"] { animation: wa-live-2 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-live .wa-beat[data-beat="3"] { animation: wa-live-3 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-live .wa-beat[data-beat="4"] { animation: wa-live-4 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-live .wa-beat[data-beat="5"] { animation: wa-live-5 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+.wa-live .wa-beat[data-beat="6"] { animation: wa-live-6 var(--wa-cycle) var(--ease-emphasis, cubic-bezier(.16,1,.3,1)) infinite !important; }
+
+@keyframes wa-live-1 {
+  0%, 2%    { opacity: 0; transform: translateY(12px) scale(.94); }
+  6%, 92%   { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wa-live-2 {
+  0%, 14%   { opacity: 0; transform: translateY(12px) scale(.94); }
+  18%, 92%  { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wa-live-3 {
+  0%, 24%   { opacity: 0; transform: translateY(8px); }
+  28%, 38%  { opacity: 1; transform: none; }
+  42%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wa-live-4 {
+  0%, 40%   { opacity: 0; transform: translateY(16px) scale(.92); }
+  45%       { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  47%, 92%  { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wa-live-5 {
+  0%, 60%   { opacity: 0; transform: translateY(10px) scale(.95); }
+  64%, 74%  { opacity: 1; transform: none; }
+  76%       { opacity: 1; transform: scale(.94); }
+  78%, 92%  { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wa-live-6 {
+  0%, 80%   { opacity: 0; transform: translateY(12px) scale(.94); }
+  84%, 92%  { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+
+/* The gold draft card ignites once as it lands (opacity on a pre-baked shadow). */
+.wa-live .wa-beat[data-beat="4"]::before,
+.sc-conversa .wa-beat[data-beat="4"]::before {
+  content: "";
+  position: absolute; inset: -3px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1.5px rgba(245, 188, 0, 0.85), 0 0 38px -4px rgba(245, 188, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+.wa-live .wa-beat[data-beat="4"]::before { animation: wa-ignite-loop var(--wa-cycle) linear infinite !important; }
+@keyframes wa-ignite-loop {
+  0%, 42%   { opacity: 0; }
+  48%       { opacity: 1; }
+  60%, 100% { opacity: .3; }
+}
+
+/* The voice-note waveform breathes while the note "plays" — 16 bars, scaleY
+   only, origin at the baseline so nothing reflows. */
+.wa-live .wa-wave-bar { transform-origin: 50% 100%; animation: wa-wave var(--wa-cycle) linear infinite !important; }
+@keyframes wa-wave {
+  0%, 4%    { transform: scaleY(.35); }
+  8%        { transform: scaleY(1); }
+  12%       { transform: scaleY(.5); }
+  16%       { transform: scaleY(.95); }
+  20%, 100% { transform: scaleY(.35); }
+}
+/* Typing dots, only alive in the window their bubble occupies. */
+.wa-live .wa-dot { animation: wa-dot 1.15s ease-in-out infinite !important; }
+@keyframes wa-dot {
+  0%, 60%, 100% { transform: none;             opacity: .4; }
+  30%           { transform: translateY(-3px); opacity: 1; }
+}
+
+/* ── 'scrub' — scene 2, the pinned conversation ─────────────────────────── */
+.sc-conversa__stage { position: relative; }
+.wa-lines { position: relative; }
+
+@supports (animation-timeline: view()) {
+  @media (min-width: 1024px) {
+    .sc-conversa {
+      height: 360svh;
+      view-timeline-name: --conversa;
+      view-timeline-axis: block;
+    }
+    .sc-conversa__stage {
+      position: sticky;
+      top: 0;
+      height: 100svh;
+      display: grid;
+      align-content: center;
+    }
+    .sc-conversa .wa-beat {
+      animation-name: wa-beat-in;
+      animation-fill-mode: both;
+      animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+      animation-timeline: --conversa;
+    }
+    .sc-conversa .wa-beat[data-beat="1"] { animation-range: contain  2% contain 11%; }
+    .sc-conversa .wa-beat[data-beat="2"] { animation-range: contain 13% contain 22%; }
+    .sc-conversa .wa-beat[data-beat="3"] { animation-range: contain 26% contain 38%; }
+    .sc-conversa .wa-beat[data-beat="4"] { animation-range: contain 40% contain 49%; }
+    .sc-conversa .wa-beat[data-beat="5"] { animation-range: contain 56% contain 65%; }
+    .sc-conversa .wa-beat[data-beat="6"] { animation-range: contain 72% contain 82%; }
+
+    .sc-conversa .wa-beat[data-beat="4"]::before {
+      animation-name: wa-ignite;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+      animation-timeline: --conversa;
+      animation-range: contain 40% contain 58%;
+    }
+
+    .wa-lines { height: 5.2em; }
+    .wa-line {
+      position: absolute;
+      inset: 0;
+      animation-name: wa-line-through;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+      animation-timeline: --conversa;
+    }
+    .wa-line[data-beat="1"] { animation-range: contain  0% contain 18%; }
+    .wa-line[data-beat="2"] { animation-range: contain 16% contain 34%; }
+    .wa-line[data-beat="3"] { animation-range: contain 32% contain 54%; }
+    .wa-line[data-beat="4"] { animation-range: contain 52% contain 72%; }
+    .wa-line[data-beat="5"] { animation-range: contain 70% contain 96%; }
+
+    /* The phone drifts a hair across the pin: stillness inside a pin reads as a
+       frozen page. This one IS autonomous-feeling, so reduced motion drops it. */
+    .sc-conversa__phone--drift {
+      animation-name: wa-phone-drift;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+      animation-timeline: --conversa;
+      animation-range: contain 0% contain 100%;
+    }
+  }
+}
+@keyframes wa-beat-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.965); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes wa-ignite { 0% { opacity: 0; } 35% { opacity: 1; } 100% { opacity: 0.3; } }
+@keyframes wa-line-through {
+  0%          { opacity: 0; transform: translateY(10px); }
+  18%, 78%    { opacity: 1; transform: none; }
+  100%        { opacity: 0; transform: translateY(-10px); }
+}
+@keyframes wa-phone-drift {
+  from { transform: translateY(16px) rotate(1.4deg); }
+  to   { transform: translateY(-16px) rotate(-1.4deg); }
+}
+
+/* SCENE 3 — EL CLON: deleted 2026-09-17, along with the mock browser it drove.
+   ~70 lines of .sc-morph timelines lived here; the scene they animated is gone
+   (see the note at the top of LandingPage.tsx) and the claim survives as one
+   band with no motion of its own. Also removes one of the two multi-element
+   scroll timelines on the page. If you are looking for it in git: the last
+   commit that still had it is the one before this line was written. */
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * LA VEU — three sources converging into the knot.
+ *
+ * The highlight sweep (.veu-mark) went with the invented quotes it used to draw
+ * across. What is left is the convergence: each source chip enters from its own
+ * direction, one keyframe driving all three off two custom properties.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.veu-src { opacity: 1; transform: none; }
+
+@supports (animation-timeline: view()) {
+  .veu-src {
+    animation-name: veu-converge;
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-timeline: view();
+    animation-range: entry 12% cover 46%;
+  }
+}
+@keyframes veu-converge {
+  from { opacity: 0; transform: translate(var(--veu-x, 0), var(--veu-y, 18px)) rotate(var(--veu-r, 0deg)); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The thread between the three sources and the voice sheet they produce. It is
+   the page's own gold line, cut to 2.5rem — the section is a machine with an IN
+   and an OUT, and the stem is what says so without a caption. Decorative, so it
+   is behind aria-hidden and it simply does not draw where there is no room. */
+.veu-stem {
+  display: block;
+  width: 2px; height: 2.5rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, var(--color-accent), transparent);
+  opacity: 0.55;
+}
+
+/* The article pitches the agent proposes in the reveal — they arrive in order. */
+.pitch-card { animation: reveal-in 560ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE HEADER — a floating, premium navigation bar.
+ * Two states, and the transition between them is the whole trick: at the top of
+ * the page it is wide and weightless; once the visitor scrolls it condenses into
+ * a smaller, denser, brighter pill. Driven by the page scroll, so it costs no
+ * listener and no JavaScript.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.nav-shell {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 50;
+  padding-inline: clamp(0.75rem, 2vw, 1.25rem);
+  padding-top: clamp(0.75rem, 1.6vw, 1.1rem);
+  pointer-events: none;
+}
+.nav-bar {
+  pointer-events: auto;
+  position: relative;
+  margin-inline: auto;
+  max-width: 72rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-radius: 999px;
+  padding: 0.55rem 0.7rem 0.55rem 1.1rem;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 18%, transparent);
+  background: color-mix(in oklab, var(--color-bg-elevated) 78%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+          backdrop-filter: blur(18px) saturate(180%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 50px -24px rgba(0, 0, 0, 0.55);
+  transform-origin: top center;
+}
+/* The gold hairline that runs the top edge of the bar — the thread, passing
+   through the header on its way down the page. */
+.nav-bar::before {
+  content: "";
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 188, 0, 0.75), transparent);
+  pointer-events: none;
+}
+.nav-link {
+  position: relative;
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-decoration: none;
+  transition: color 180ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 50%; bottom: 0.18rem;
+  width: 0; height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #d9a400, #ffe066);
+  transform: translateX(-50%);
+  transition: width 260ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.nav-link:hover { color: var(--color-text); }
+.nav-link:hover::after { width: calc(100% - 1.7rem); }
+
+/* The condense is TRANSFORM ONLY.
+   An earlier draft animated `max-width` and `box-shadow` between the two states,
+   which is a layout pass and a shadow repaint on every frame of every scroll —
+   on the one element that is on screen the entire time. The gate caught it. The
+   bar now scales uniformly (which is the Apple-ish effect anyway, and scales the
+   type with it), and the heavier shadow is a second, pre-baked layer whose
+   OPACITY crosses over. Both are composited. */
+.nav-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 24px 64px -20px rgba(0, 0, 0, 0.65);
+  opacity: 0;
+}
+
+@supports (animation-timeline: scroll()) {
+  .nav-bar {
+    animation-name: nav-condense;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: scroll(root block);
+    animation-range: 0 140px;
+  }
+  .nav-bar::after {
+    animation-name: nav-deepen;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: scroll(root block);
+    animation-range: 0 140px;
+  }
+}
+@keyframes nav-condense {
+  from { transform: scale(1); }
+  to   { transform: scale(0.955); }
+}
+@keyframes nav-deepen {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * SCENE 8 — ELS PUNTS. Fuel gauges, filled on entry.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.punts-fill { transform-origin: left center; transform: scaleX(1); }
+@supports (animation-timeline: view()) {
+  .punts-fill {
+    animation-name: punts-fill;
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-timeline: view();
+    animation-range: entry 24% cover 52%;
+  }
+}
+@keyframes punts-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * SCENE 7 — LA COMUNITAT. The wall moves with the scroll, never on a clock: no
+ * idle animation is left running on this page.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.wall { display: flex; gap: 1rem; width: max-content; }
+@supports (animation-timeline: view()) {
+  @media (min-width: 768px) {
+    .wall {
+      animation-name: wall-drift;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+  }
+}
+@keyframes wall-drift { from { transform: translateX(2%); } to { transform: translateX(-26%); } }
+
+@media (max-width: 767px) {
+  .wall {
+    width: auto;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-inline: 1rem;
+  }
+  .wall > * { scroll-snap-align: center; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE DOOR — the only real ask on the page.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.door {
+  position: relative;
+  border-radius: 24px;
+  transition: box-shadow 260ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)),
+              transform 260ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.door:focus-within { transform: translateY(-2px); }
+.door--dropping { outline: 2px dashed var(--color-accent); outline-offset: 6px; }
+
+/* THE LANDING RING. The Door swaps its entire body between phases, and the
+   island re-anchors the card under the nav when it does (see keepInView in
+   Door.tsx). A silent re-anchor still reads as a jump, so the arrival is
+   announced: one gold ring, expanding out of the card's own edge and gone in
+   900ms. It is a keyed child, mounted fresh per arrival, so the one-shot always
+   replays — a class toggle on the card itself would only ever run once.
+
+   Opacity + transform only: no layout, no paint of anything underneath. Exempt
+   from the reduced-motion kill switch on purpose — this fires in response to the
+   visitor's own action and is the only feedback that the page moved for them. */
+.door-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 26px;
+  border: 2px solid var(--color-accent);
+  pointer-events: none;
+  opacity: 0;
+  animation: door-ring 900ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) both !important;
+}
+@keyframes door-ring {
+  0%   { opacity: 0;    transform: scale(0.985); }
+  18%  { opacity: 0.95; transform: scale(1); }
+  100% { opacity: 0;    transform: scale(1.035); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still announced, without the travel: a ring that fades rather than grows. */
+  .door-ring { animation: door-ring-still 900ms linear both !important; }
+}
+@keyframes door-ring-still {
+  0%   { opacity: 0; }
+  18%  { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+.door-veil {
+  position: fixed; inset: 0; z-index: 60;
+  background: radial-gradient(60% 50% at 50% 42%, rgba(245, 188, 0, 0.16), transparent 70%);
+  opacity: 0;
+  transition: opacity 180ms linear;
+  pointer-events: none;
+}
+.door-veil--on { opacity: 1; }
+
+/* ── THE START FORK (StartModal.tsx) ────────────────────────────────────────
+   Two elements, two compositor-only keyframes. The ground is a real scrim (the
+   page behind must recede, not merely blur) with the same gold wash the Door's
+   dropzone uses, so the fork reads as part of the same object. */
+.start-veil {
+  background:
+    radial-gradient(60% 50% at 50% 38%, rgba(245, 188, 0, 0.14), transparent 70%),
+    color-mix(in oklab, var(--color-bg) 72%, #000 28%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: start-veil-in 200ms linear both;
+}
+@keyframes start-veil-in { from { opacity: 0; } to { opacity: 1; } }
+.start-card { animation: start-card-in 340ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+@keyframes start-card-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.975); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The card still arrives — it just stops moving. A dialog that fades in from
+     nowhere is the one piece of motion a reduced-motion reader still wants. */
+  .start-card { animation: start-veil-in 200ms linear both; }
+}
+
+/* Magnetic submit: two custom properties written by the island, one transform
+   read by the compositor. Fine pointers only. */
+.magnet { transform: translate3d(var(--mag-x, 0px), var(--mag-y, 0px), 0); }
+@media (hover: hover) and (pointer: fine) {
+  .magnet { transition: transform 220ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .magnet { transform: none; }
+}
+
+.door-chip { animation: door-chip-in 420ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+@keyframes door-chip-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+.glimpse-bar { transform-origin: left center; transform: scaleX(var(--pct, 0)); transition: transform 420ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)); }
+.glimpse-line { animation: reveal-in 520ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * REDUCED MOTION — the contract, stated in one place.
+ *
+ * The blanket `*` kill-switch in globals.css turns everything off. What survives
+ * here is what the visitor's own scrolling drives, plus the brand's signature
+ * marks — the same exemption `.gold-trace`, `.btn-gold`, `.knot-spin` and
+ * `.god-orb` already carry. What dies is autonomous drift and entrance travel.
+ * ══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  /* ── STILLED: autonomous movement ─────────────────────────────────────── */
+  .knot-mark--parallax        { animation: none !important; transform: none !important; }
+  .sc-conversa__phone--drift  { animation: none !important; transform: none !important; }
+  .fil__spark                 { display: none !important; }
+  .sc-clon__grip::after       { animation: none !important; opacity: 0 !important; }
+
+  /* Reveals fade instead of travelling. The travel is the part that causes
+     vestibular trouble; the fade is what makes the page feel composed. */
+  @supports (animation-timeline: view()) {
+    [data-reveal] { animation-name: reveal-fade !important; }
+    .veu-src      { animation-name: reveal-fade !important; }
+    .sc-conversa .wa-beat { animation-name: reveal-fade !important; }
+  }
+
+  /* ── ALIVE: scroll-linked, and the brand's own marks ──────────────────── */
+  /* These cannot move unless the visitor moves them. Silencing them does not
+     reduce motion, it just deletes the design. */
+  @supports (animation-timeline: scroll()) {
+    /* Longhands and an explicit `auto` duration: the shorthand would reset the
+       duration to 0s, and a bare `animation-timeline` in a browser that does not
+       know it is a dropped declaration next to a live one. */
+    .fil__lit {
+      opacity: 1 !important;
+      animation-name: fil-grow !important;
+      animation-duration: auto !important;
+      animation-fill-mode: both !important;
+      animation-timing-function: linear !important;
+      animation-timeline: scroll(root block) !important;
+    }
+  }
+  .knot-rotate,
+  .knot-rotate-fast { animation: knot-rotate var(--knot-spin-dur) linear infinite !important; }
+  .knot-rotate-rev  { animation: knot-rotate-rev var(--knot-spin-dur) linear infinite !important; }
+  .knot-thinking    { animation: knot-rotate 4.6s linear infinite !important; }
+  .knot-flare       { animation: knot-flare 900ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)) 1 !important; }
+  .wa-live .wa-wave-bar { animation: wa-wave var(--wa-cycle) linear infinite !important; }
+  .wa-live .wa-dot      { animation: wa-dot 1.15s ease-in-out infinite !important; }
+}
+
+/* ── Print safety ─────────────────────────────────────────────────────────── */
+@media print {
+  .fil, .knot-mark, .knot-hero, .door-veil, .sc-clon__handle { display: none !important; }
+  .wa-beat, .wa-line, .veu-src, [data-reveal], .sc-clon__after { opacity: 1 !important; transform: none !important; }
+}

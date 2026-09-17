@@ -35,9 +35,12 @@ export default function RootLayout({
             executes it when the framework runtime boots — after paint — which
             breaks dark/light detection (flash of wrong theme / stuck light). */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        {/* Reveal-on-scroll needs JS; without it, below-the-fold sections must
-            never stay invisible. */}
-        <noscript><style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style></noscript>
+        {/* Reveal-on-scroll used to need JavaScript (an IntersectionObserver
+            adding `.in-view`), so a <noscript> override lived here to stop the
+            page rendering blank without it. Reveals are now native view()
+            timelines whose BASE state is visible — there is nothing to override,
+            because there is no state in which the text is hidden and unable to
+            un-hide itself. See src/app/landing.css. */}
       </head>
       <body className={`${ubuntu.className} ${ubuntu.variable} bg-bg text-text antialiased`}>
         <ThemeProvider>

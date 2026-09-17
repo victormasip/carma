@@ -6,7 +6,6 @@ import { getRewardStates } from '@/lib/karma/challenges'
 import KarmaClient, { type LedgerEntry } from './KarmaClient'
 
 // Saldo + reptes per usuari — mai prerenderat.
-export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Punts de Carma · Carma' }
 

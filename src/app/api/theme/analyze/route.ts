@@ -4,6 +4,8 @@ import { parse, HTMLElement } from 'node-html-parser'
 import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText, decodeEntities } from '@/lib/scrape/http'
 import { extractTokens } from '@/lib/scrape/tokens'
 import { absolutiseCssUrls as cssAbsUrls, splitImports, extractFontFaceCss, proxyFontsInCss } from '@/lib/scrape/clientCss'
+import { compileChromeCss, compileSavings } from '@/lib/scrape/chromeCompiler'
+import { auditChromeContrast, extractGround, buildChromeRepairCss } from '@/lib/scrape/chromeContrast'
 import { absolutise, buildExtractedHead } from '@/lib/scrape/headerFooter'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { detectBlogSignature, findBlogIndexUrl } from '@/lib/scrape/blogDetect'
@@ -15,7 +17,6 @@ import {
 } from '@/lib/render/captureProgress'
 
 // node-html-parser requires the Node.js runtime.
-export const runtime = 'nodejs'
 // The capture STREAMS its progress (Server-Sent Events) so the connection stays
 // alive and the user sees steady movement. The pipeline is a single static fetch
 // + a parallel CSS scan (for token extraction) + a synchronous, verbatim
@@ -207,12 +208,19 @@ async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> 
 
   const resolved = await mapWithConcurrency(tasks, CSS_CONCURRENCY, t => t())
 
-  // Concatenate in cascade order under the byte budget.
+  // Concatenate in cascade order under the byte budget. When a sheet must be
+  // truncated, cut at the last COMPLETE rule (`}`) — a mid-rule slice leaves an
+  // unclosed block that poisons every regex/parser downstream (token extraction
+  // read garbage selectors from it: the "bad CSS" edge case).
   let budget = MAX_CSS_BYTES
   const parts: string[] = []
   for (const css of resolved) {
     if (budget <= 0) break
-    const slice = css.length > budget ? css.slice(0, budget) : css
+    let slice = css
+    if (css.length > budget) {
+      const cut = css.lastIndexOf('}', budget)
+      slice = cut > 0 ? css.slice(0, cut + 1) : ''
+    }
     budget -= slice.length
     if (slice) parts.push(slice)
   }
@@ -418,9 +426,22 @@ export async function POST(request: NextRequest) {
         // JS-rendered chrome that isn't in the initial HTML won't be captured, but
         // the overwhelming majority of sites server-render their header/footer.)
         running('fetch')
-        const fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
+        let fetched = await safeFetch(referenceUrl, { timeout: 15_000 })
+        let fetchedUrl = referenceUrl
+        // Fault tolerance: a DEEP url that 404s / is blocked must not sink the
+        // whole capture when the site itself is reachable — fall back to the
+        // origin root (its chrome + styles are the same site identity).
+        if (!fetched) {
+          try {
+            const rootUrl = new URL(referenceUrl).origin + '/'
+            if (rootUrl !== referenceUrl && isSafeUrl(rootUrl)) {
+              const rootFetched = await safeFetch(rootUrl, { timeout: 12_000 })
+              if (rootFetched) { fetched = rootFetched; fetchedUrl = rootUrl }
+            }
+          } catch { /* keep the original failure */ }
+        }
         if (!fetched) { fail('fetch', 'No hem pogut llegir aquest lloc. Pot estar bloquejant l’accés automàtic (p. ex. Cloudflare) o carregar-se només amb JavaScript. Prova una altra pàgina del lloc, o un altre lloc.'); return }
-        let baseUrl = new URL(referenceUrl)
+        let baseUrl = new URL(fetchedUrl)
         let root: HTMLElement
         try { root = parse(fetched.body) as HTMLElement } catch {
           fail('fetch', 'No hem pogut interpretar l’HTML de la pàgina.'); return
@@ -561,6 +582,81 @@ export async function POST(request: NextRequest) {
           }
         } catch { /* best-effort */ }
 
+        // ── 5b. CHROME COMPILER (migration 032) ────────────────────────────────
+        // The single biggest LCP win available on a cloned site. Until now we shipped
+        // `extracted_head` verbatim on EVERY blog page — the target's real
+        // stylesheets (cross-origin, render-blocking) AND its scripts — so an empty
+        // Carma blog inherited the full weight of a fat WordPress theme.
+        //
+        // A site's chrome uses a few dozen rules out of tens of thousands, so we do
+        // the matching ONCE, here, and store one critical-CSS blob. Best-effort by
+        // design: on any failure `compiled_chrome_css` stays empty and the render
+        // falls back to raw injection, exactly as before.
+        let compiledChromeCss = ''
+        let chromeCompileStats: AnalyzeResult['chrome_compile_stats'] = null
+        try {
+          const compiled = compileChromeCss({
+            css: rawCss,
+            headerHtml: extractedHeader,
+            footerHtml: extractedFooter,
+            bodyAttrs: extractedBodyAttrs,
+          })
+          // A compile that kept nothing means our selector matching failed to
+          // understand this site, not that the site has no styles — keeping an empty
+          // blob would render the chrome naked. Fall back to raw injection instead.
+          if (compiled.css.trim() && compiled.stats.rulesOut > 0) {
+            compiledChromeCss = compiled.css
+            chromeCompileStats = compiled.stats
+            const { pctSaved } = compileSavings(compiled.stats)
+            send({
+              type: 'notice', severity: 'info', code: 'chrome_compiled',
+              message: `Hem compilat l'estil de la teva capçalera i peu: ${compiled.stats.rulesOut} regles de ${compiled.stats.rulesIn} (${pctSaved}% menys pes). El teu blog carregarà sense cap full d'estil extern.`,
+            })
+          }
+        } catch { /* best-effort — raw injection remains the fallback */ }
+
+        // ── 5b. READABILITY (2026-09-17) ───────────────────────────────────────
+        //
+        // We own <html> and <body> on the render document, so the source's
+        // `body{background;color}` is dropped — and a header that declared no
+        // background of its own loses the ground it was designed against. That is
+        // the "bad colour contrast" the founder kept hitting, and it is OUR bug,
+        // not the customer's.
+        //
+        // So the audit runs here, once, against the page background the render
+        // will ACTUALLY paint (`tokens.colorBg`), and appends the smallest repair
+        // it can justify. It does nothing at all for the ~93% of sites measured
+        // clean over the Barcelona-100 (tests/grabber-audit.mjs) — and it never
+        // touches a contrast failure the LIVE site already has, because
+        // redesigning someone's header over half a point of contrast is not a fix.
+        try {
+          const ground = extractGround(rawCss, extractedBodyAttrs)
+          const contrast = auditChromeContrast({
+            css: compiledChromeCss || rawCss,
+            headerHtml: extractedHeader,
+            footerHtml: extractedFooter,
+            ground,
+            pageBackground: tokens.colorBg,
+          })
+          const repair = buildChromeRepairCss(contrast)
+          if (repair) {
+            // Appended LAST so it wins over the compiled rules it is correcting.
+            compiledChromeCss = compiledChromeCss ? `${compiledChromeCss}\n${repair}` : repair
+            send({
+              type: 'notice', severity: 'info', code: 'chrome_contrast_fixed',
+              message: contrast.repair?.kind === 'ground'
+                ? 'La teva capçalera no portava fons propi: li hem tornat el del teu lloc perquè el text es llegeixi igual que a casa teva.'
+                : 'Hi havia text de la capçalera que quedava il·legible sobre el fons del blog. L’hem ajustat perquè es llegeixi.',
+            })
+          } else if (contrast.inheritedFailures.length) {
+            // Reported, not repaired: tight but readable, and theirs to decide.
+            send({
+              type: 'notice', severity: 'warning', code: 'chrome_contrast_tight',
+              message: `Hi ha ${contrast.inheritedFailures.length} color${contrast.inheritedFailures.length === 1 ? '' : 's'} de la capçalera amb poc contrast (també al teu lloc). Ho pots afinar des de l’Estudi.`,
+            })
+          }
+        } catch { /* a readability miss must never fail a capture */ }
+
         // ── 6. FINALIZE (packaging) ────────────────────────────────────────────
         running('finalize')
         const data: AnalyzeResult = {
@@ -586,6 +682,8 @@ export async function POST(request: NextRequest) {
           logo_url: logoUrl,
           blog_signature: blogSignature,
           detected_modules: detectedModules,
+          compiled_chrome_css: compiledChromeCss,
+          chrome_compile_stats: chromeCompileStats,
         }
         done('finalize')
         send({ type: 'result', data })

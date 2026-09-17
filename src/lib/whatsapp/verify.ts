@@ -45,3 +45,26 @@ export function inboundMatchesCode(text: string | null | undefined, code: string
   if (!text || !code) return false
   return text.replace(/[^\d]/g, '').includes(code)
 }
+
+/**
+ * The six-digit code inside an inbound message, if there is exactly one.
+ *
+ * The counterpart to `inboundMatchesCode`, for the case where we do NOT yet know
+ * which code to expect: a stranger's number texting "Carma 481920" to claim an
+ * open binding (migration 035). We have to read the code out of the message
+ * before we can look it up.
+ *
+ * Deliberately strict:
+ *   · the digits are taken as a RUN, not from the whole string flattened, so a
+ *     phone number pasted into the message cannot accidentally yield a code;
+ *   · exactly one six-digit run, or we return null. Two candidates is ambiguous,
+ *     and guessing at an ambiguous credential is how accounts get bound to the
+ *     wrong person.
+ */
+export function extractVerifyCode(text: string | null | undefined): string | null {
+  if (!text) return null
+  const runs = text.match(/\d{6,}/g)
+  if (!runs) return null
+  const six = runs.filter(r => r.length === 6)
+  return six.length === 1 ? six[0]! : null
+}

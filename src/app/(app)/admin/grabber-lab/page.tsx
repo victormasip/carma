@@ -5,7 +5,6 @@ import GrabberLab from './GrabberLab'
 import type { LabSampleListItem } from '@/lib/grabber-lab/types'
 
 // The Lab reads the freshly-saved sample list each visit; never prerender.
-export const dynamic = 'force-dynamic'
 
 export default async function GrabberLabPage() {
   // Belt-and-suspenders: the /admin layout already gates this, but a page that

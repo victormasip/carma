@@ -10,12 +10,12 @@
 //   · Right slide-over for everything contextual (Ajustos / SEO / AI). The
 //     canvas reclaims the viewport when the drawer is closed.
 
-import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Save, Eye, EyeOff, Tag, X, ImageIcon,
-  User, FileText, Globe, CalendarDays, Settings2, Search, Target,
-  CheckCircle2, AlertCircle, ExternalLink, Sparkles, Plus, Crown,
+  User, FileText, Globe, CalendarDays, Settings2, Search, Target, ShieldCheck,
+  CheckCircle2, AlertCircle, ExternalLink, Sparkles, Crown,
   RefreshCw, PanelRight, Bot, Languages, Upload,
   Heading1, Heading2, Heading3, List, ListOrdered, Quote, Info, Images, Columns2, Minus, Type, Focus,
 } from 'lucide-react'
@@ -24,6 +24,9 @@ import { uploadImage } from '@/lib/upload'
 import { createPost, updatePost, translateArticle, analyzeArticleWriting, generateSeoArticle, rewriteArticleSelection, type PostData, type LocalizedContent } from '@/lib/actions/posts'
 import type { RewriteMode } from '@/lib/writing/rewrite'
 import CommandPalette, { type Command } from '@/components/editor/CommandPalette'
+import TitleInput from '@/components/editor/TitleInput'
+import LanguageMenu from '@/components/editor/LanguageMenu'
+import CostBadge, { CostLine } from '@/components/ui/CostBadge'
 import type { WritingAnalysis } from '@/lib/writing/coach'
 import { addSiteLocale } from '@/lib/actions/locales'
 import { LOCALES, DEFAULT_LOCALE, LOCALE_META, normalizeLocale, type Locale } from '@/lib/i18n/config'
@@ -35,6 +38,9 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Modal, useConfirm } from '@/components/ui/Modal'
 import { PremiumPanel } from '@/app/(app)/dashboard/sites/[id]/PremiumGate'
 import { cn } from '@/lib/cn'
+import { publicSiteUrl, rootDomain } from '@/lib/sites/domain'
+import { requestPeerReview } from '@/lib/actions/review-request'
+import { KARMA_COSTS } from '@/lib/karma/config'
 import Link from 'next/link'
 
 // Code-split the heavy rich-text editor so it doesn't bloat the initial bundle.
@@ -76,15 +82,22 @@ type Post = {
   meta?: { canonical?: string; noindex?: boolean; focus_keyword?: string } | null
   default_locale?: string | null
   i18n?: Record<string, Partial<LocalizedContent>> | null
+  /** I6 — set when this draft is already queued for a peer read (migration 036). */
+  review_requested_at?: string | null
 }
 
 type Props = {
   siteId: string
   siteName: string
+  /** sites.subdomain — "Veure en directe" opens the blog's real public URL. */
+  subdomain?: string | null
   post?: Post
   siteLocales?: string[]
   siteDefaultLocale?: string
   canTranslate?: boolean
+  /** Punts balance, so every AI control can state its price BEFORE it is pressed
+   *  (Fase 2). `available: false` = migration 028 pending → prices stay hidden. */
+  karma?: { balance: number | null; available: boolean; superadmin: boolean }
 }
 
 type DrawerTab = 'settings' | 'seo' | 'ai'
@@ -280,7 +293,59 @@ function slugSignature(d: PostData): string {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function PostEditorClient({ siteId, siteName, post, siteDefaultLocale, canTranslate = false }: Props) {
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE RIGHT PANEL'S OPEN STATE
+ *
+ * Founder, 2026-09-16: "editor amaga barra lateral per defecte per que? llavors
+ * no se sap quines opcions hi ha". Exactly right, and it was a deliberate
+ * decision made for the wrong reason: "canvas-first" is a good instinct for the
+ * WRITING surface, but hiding the panel does not make the canvas better — it
+ * makes Ajustos, SEO and IA invisible, and a feature nobody can find is a
+ * feature nobody has.
+ *
+ * So: OPEN by default where there is room for it (≥1024px), closed on a phone
+ * where the sheet would cover the article. And the owner's own choice is
+ * remembered, because the second time they close it they mean it.
+ *
+ * Read with useSyncExternalStore — localStorage and a media query are both
+ * external state, and an effect that calls setState here is a wasted render
+ * that react-hooks v6 rejects anyway.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const DRAWER_KEY = 'carma.editor.drawer.v1'
+
+let drawerCache: boolean | undefined
+const drawerListeners = new Set<() => void>()
+
+function readDrawerOpen(): boolean {
+  if (drawerCache !== undefined) return drawerCache
+  let open = true
+  try {
+    const raw = localStorage.getItem(DRAWER_KEY)
+    // No stored choice yet → decide by room: docked on a desktop, out of the way
+    // on a phone. A stored choice always wins.
+    open = raw === null ? window.matchMedia('(min-width: 1024px)').matches : raw === '1'
+  } catch { /* blocked storage: default to showing what exists */ }
+  drawerCache = open
+  return drawerCache
+}
+
+/** Server snapshot: closed, so the markup the server sends is the smaller one
+ *  and the panel arrives on hydration rather than flashing away. */
+function serverDrawerOpen(): boolean { return false }
+
+function subscribeDrawer(fn: () => void): () => void {
+  drawerListeners.add(fn)
+  return () => { drawerListeners.delete(fn) }
+}
+
+function writeDrawerOpen(next: boolean): void {
+  drawerCache = next
+  try { localStorage.setItem(DRAWER_KEY, next ? '1' : '0') } catch { /* nothing to remember with */ }
+  for (const fn of drawerListeners) fn()
+}
+
+export default function PostEditorClient({ siteId, siteName, subdomain = null, post, siteDefaultLocale, canTranslate = false, karma }: Props) {
   const isNew = !post
   const router = useRouter()
   const { toast } = useToast()
@@ -319,10 +384,6 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     return LOCALES.filter(l => set.has(l))
   })
 
-  const [addLangOpen, setAddLangOpen] = useState(false)
-  const [addLangQuery, setAddLangQuery] = useState('')
-  const addLangRef = useRef<HTMLDivElement>(null)
-  const addLangInputRef = useRef<HTMLInputElement>(null)
   const [premiumOpen, setPremiumOpen] = useState(false)
   const [editorNonce, setEditorNonce] = useState(0)
   const [translating, setTranslating] = useState(false)
@@ -371,41 +432,13 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     setActiveLocale(loc)
   }, [commitBody])
 
-  // The query is reset by the toggle handler itself, so this effect only wires
-  // the external listeners (focus, outside-click, Escape) while the menu is open.
-  useEffect(() => {
-    if (!addLangOpen) return
-    // Focus the searcher the moment the menu opens so the user can type straight away.
-    addLangInputRef.current?.focus()
-    const onClick = (e: MouseEvent) => {
-      if (addLangRef.current && !addLangRef.current.contains(e.target as Node)) setAddLangOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddLangOpen(false) }
-    document.addEventListener('mousedown', onClick)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onClick)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [addLangOpen])
-
+  // Languages available to ADD. The free-text filter that used to live here
+  // moved into LanguageMenu, which owns its own query state.
   const availableToAdd = LOCALES.filter(l => !shownLocales.includes(l))
-  // Filter the add-language list by a free-text query (native name, English label or
-  // code) — with 10 content locales a flat list was "too many options". Defaults to
-  // the full list; the site's own languages already sit in the tab row above.
-  const filteredToAdd = (() => {
-    const q = addLangQuery.trim().toLowerCase()
-    if (!q) return availableToAdd
-    return availableToAdd.filter(l => {
-      const m = LOCALE_META[l]
-      return m.native.toLowerCase().includes(q) || m.label.toLowerCase().includes(q) || m.code.toLowerCase().includes(q) || l.includes(q)
-    })
-  })()
 
   const addLanguage = (loc: Locale) => {
     setShownLocales(prev => LOCALES.filter(l => prev.includes(l) || l === loc))
     setActiveLocale(loc)
-    setAddLangOpen(false)
     void addSiteLocale(siteId, loc).catch(() => {})
   }
 
@@ -442,8 +475,54 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     if (activeLocale === loc) setActiveLocale(nextDefault)
   }
 
+  // Promote a language to the article's base. The base is where the flat
+  // title/slug/content columns live, so this is a real move, not a label change —
+  // but every locale's fields already live in their own bucket, so the swap is
+  // just which bucket the flat columns serialize from (see buildPostData).
+  const makeDefault = (loc: Locale) => {
+    if (loc === defaultLocale) return
+    setDefaultLocale(loc)
+    setActiveLocale(loc)
+    setShownLocales(prev => LOCALES.filter(l => prev.includes(l) || l === loc))
+    void addSiteLocale(siteId, loc).catch(() => {})
+  }
+
   const cur = localeData[activeLocale]
   const isDefault = activeLocale === defaultLocale
+
+  // Superadmins spend nothing, so a price would be noise; everyone else sees one.
+  const cost = {
+    balance: karma?.superadmin ? null : (karma?.balance ?? null),
+    available: !!karma?.available && !karma?.superadmin,
+  }
+
+  // The slug this article was LOADED with, per locale. Renaming a published
+  // article's slug is a real event (old links break unless we redirect), so the
+  // editor has to know the difference between "typing a slug for a new post" and
+  // "moving a URL that already exists in the wild".
+  const originalSlugs = useMemo(() => {
+    const out = {} as Record<Locale, string>
+    for (const loc of LOCALES) out[loc] = ''
+    if (post) {
+      out[normalizeLocale(post.default_locale ?? siteDefaultLocale, DEFAULT_LOCALE)] = post.slug ?? ''
+      for (const [loc, v] of Object.entries(post.i18n ?? {})) {
+        if ((LOCALES as readonly string[]).includes(loc)) out[loc as Locale] = v?.slug ?? ''
+      }
+    }
+    return out
+  }, [post, siteDefaultLocale])
+
+  const originalSlugForLocale = originalSlugs[activeLocale]
+  const slugRenamed =
+    !!post?.is_published && !!originalSlugForLocale && cur.slug.trim() !== originalSlugForLocale
+
+  // Completion per language, for the language menu's progress column. Memoised on
+  // localeData so opening the menu never recomputes 10 locales per render.
+  const localeCompletion = useMemo(() => {
+    const out = {} as Record<Locale, number>
+    for (const loc of LOCALES) out[loc] = fieldsCompletionPct(localeData[loc])
+    return out
+  }, [localeData])
 
   const patchLocale = useCallback((locale: Locale, patch: Partial<LocaleFields>) => {
     setLocaleData(prev => ({ ...prev, [locale]: { ...prev[locale], ...patch } }))
@@ -459,11 +538,12 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   const [authorName, setAuthorName] = useState(post?.author_name ?? '')
   const [isPublished, setIsPublished] = useState(post?.is_published ?? false)
   const [date, setDate] = useState(post?.created_at ? post.created_at.slice(0, 10) : '')
-  // Canvas-first: the writing surface is the whole view by default. The
-  // Ajustos/SEO/IA drawer is summoned on demand (top-bar toggle or ⌘K → "Obre …").
-  // A closed default also stops the mobile bottom sheet from covering the screen
-  // on load.
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  // Open where there is room, closed on a phone, and the owner's own choice
+  // always wins. See the store above for why it was the other way round.
+  const drawerOpen = useSyncExternalStore(subscribeDrawer, readDrawerOpen, serverDrawerOpen)
+  const setDrawerOpen = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    writeDrawerOpen(typeof v === 'function' ? v(readDrawerOpen()) : v)
+  }, [])
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('settings')
   const [error, setError] = useState<string | null>(null)
   // Autosave status — drives the top-bar indicator that replaced the Save button.
@@ -799,6 +879,93 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     }
   }
 
+  /**
+   * Translate EVERY non-default language from the base, in one action (Fase 5).
+   *
+   * Previously the only path was: switch to a language tab, press Traduir, repeat.
+   * With up to ten content locales that is ten round trips through a control the
+   * founder already found hard to discover.
+   *
+   * Empty languages are filled silently; ones that already carry text are listed
+   * in a SINGLE confirm rather than one prompt per language — a per-language
+   * confirm chain is how you train someone to click through without reading.
+   */
+  const handleTranslateAll = async () => {
+    if (translating) return
+    if (!canTranslate) { setPremiumOpen(true); return }
+    const src = localeData[defaultLocale]
+    if (!src.title.trim() && !src.contentHtml.trim()) {
+      toast(`Escriu primer el contingut en ${LOCALE_META[defaultLocale].native}`, 'error')
+      return
+    }
+    const targets = shownLocales.filter(l => l !== defaultLocale)
+    if (targets.length === 0) {
+      toast('Afegeix un altre idioma per traduir-hi.', 'info')
+      return
+    }
+
+    const occupied = targets.filter(localeHasContent)
+    if (occupied.length > 0) {
+      const names = occupied.map(l => LOCALE_META[l].native).join(', ')
+      const ok = await confirm({
+        title: 'Sobreescriure les traduccions existents?',
+        message: `Ja hi ha contingut en ${names}. La traducció el reemplaçarà i es perdran els canvis manuals d'aquests idiomes.`,
+        confirmLabel: 'Tradueix-ho tot',
+        cancelLabel: 'Cancel·la',
+      })
+      if (!ok) return
+    }
+
+    setError(null)
+    setTranslating(true)
+    clearPendingBody()
+    const done: Locale[] = []
+    const failed: Locale[] = []
+    try {
+      // Sequential on purpose: each translation spends punts, and firing ten
+      // concurrent generations would race the wallet's per-thread claim.
+      for (const target of targets) {
+        try {
+          const res = await translateArticle(siteId, defaultLocale, target, {
+            title: src.title,
+            html: src.contentHtml,
+            excerpt: src.excerpt,
+            seoTitle: src.seoTitle,
+            seoDescription: src.seoDescription,
+          })
+          if (res.error || !res.result) { failed.push(target); continue }
+          const r = res.result
+          setLocaleData(prev => ({
+            ...prev,
+            [target]: {
+              ...prev[target],
+              title: r.title,
+              contentHtml: r.html,
+              excerpt: r.excerpt,
+              seoTitle: r.seoTitle,
+              seoDescription: r.seoDescription,
+              slug: prev[target].slugTouched && prev[target].slug ? prev[target].slug : generateSlug(r.title),
+            },
+          }))
+          done.push(target)
+        } catch {
+          failed.push(target)
+        }
+      }
+      setEditorNonce(n => n + 1)
+      if (done.length) {
+        toast(`Traduït a ${done.map(l => LOCALE_META[l].native).join(', ')}`, 'success')
+      }
+      if (failed.length) {
+        const msg = `No s'ha pogut traduir a ${failed.map(l => LOCALE_META[l].native).join(', ')}`
+        setError(msg)
+        toast(msg, 'error')
+      }
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   const buildData = (bodyOverride?: { locale: Locale; html: string } | null): PostData => {
     // Optionally merge a live (uncommitted) body edit over committed state, so a
     // save triggered before the debounce flush (manual save, unmount) still
@@ -986,19 +1153,32 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
     }
   }, [canTranslate, siteId, activeLocale, toast])
 
-  // Open the live public render for the active locale — shared by the top-bar
+  // Open the LIVE PUBLIC blog for the active locale — shared by the top-bar
   // "Veure" link and the command palette.
+  //
+  // This is a link to the reader's internet, so it uses the blog's real address
+  // (`<sub>.carma.cat/<slug>`), never `/render/<uuid>`. In-editor previewing is
+  // local React state — the canvas IS the preview; there is no round trip and no
+  // loading screen between a keystroke and seeing it.
   const openLivePreview = useCallback(() => {
     const localizedSlug = cur.slug?.trim()
     const fallbackSlug = localeData[defaultLocale]?.slug?.trim() || ''
     const slug = localizedSlug || fallbackSlug
-    const path = isNew || !slug ? `/render/${siteId}` : `/render/${siteId}/${slug}`
+    const path = isNew || !slug ? '/' : `/${slug}`
     const needsLang = (!localizedSlug || isNew) && activeLocale !== defaultLocale
-    const qs = `v=${Date.now()}${needsLang ? `&lang=${activeLocale}` : ''}`
-    window.open(`${path}?${qs}`, '_blank', 'noopener,noreferrer')
-  }, [cur.slug, localeData, defaultLocale, isNew, siteId, activeLocale])
+    const url = publicSiteUrl(
+      { id: siteId, subdomain },
+      { path: needsLang ? `${path}?lang=${activeLocale}` : path, currentHost: window.location.host, bust: true },
+    )
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }, [cur.slug, localeData, defaultLocale, isNew, siteId, subdomain, activeLocale])
 
-  const openDrawerTab = useCallback((tab: DrawerTab) => { setDrawerTab(tab); setDrawerOpen(true) }, [])
+  const openDrawerTab = useCallback((tab: DrawerTab) => { setDrawerTab(tab); setDrawerOpen(true) }, [setDrawerOpen])
+
+  // I6 — whether this draft is already queued for a peer read. Seeded from the
+  // post so a reload never re-offers (and never re-charges for) a request that
+  // has already been made.
+  const [reviewRequestedAt, setReviewRequestedAt] = useState<string | null>(post?.review_requested_at ?? null)
 
   // Live document stats (word count + reading time) — a standard modern-editor
   // affordance. Driven by the already-debounced content so it's cheap.
@@ -1055,7 +1235,12 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
   const headerTitle = localeData[defaultLocale].title
   const previewTitle = (cur.seoTitle || cur.title || 'Títol del teu article').slice(0, 60)
   const previewDesc = (cur.seoDescription || cur.excerpt || 'Afegeix una meta descripció per controlar com es mostra aquest article als resultats de cerca.').slice(0, 160)
-  const previewHost = `${siteName.toLowerCase().replace(/\s+/g, '')}.carma.cat`
+  // The host Google will actually show. Derived from the site's REAL subdomain —
+  // it used to be `siteName.toLowerCase()` + '.carma.cat', which invented a
+  // hostname the blog does not live at and put it in a screenshot-shaped card.
+  const previewHost = subdomain
+    ? `${subdomain}.${rootDomain() || 'carma.cat'}`
+    : `${rootDomain() || 'carma.cat'}/render/${siteId}`
 
   return (
     <div className="fixed inset-0 z-20 overflow-hidden bg-bg flex flex-col">
@@ -1080,119 +1265,12 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
             </div>
           </div>
 
-          {/* Center: LANGUAGE BAR — primary surface for multi-locale editing */}
-          <div className="flex items-center gap-1 shrink-0">
-            <div className="flex items-center gap-0.5 bg-surface-subtle border border-border rounded-lg p-0.5">
-              {shownLocales.map(loc => {
-                const isActive = loc === activeLocale
-                const pct = fieldsCompletionPct(localeData[loc])
-                // Any language is removable as long as it isn't the last one —
-                // including the base (Catalan). removeLanguage promotes a new base
-                // and confirms before discarding content.
-                const removable = shownLocales.length > 1
-                const dotColor = pct >= 80 ? 'bg-success' : pct > 0 ? 'bg-warning' : 'bg-border-strong'
-                return (
-                  <div key={loc} className="relative group/lang">
-                    <button
-                      type="button"
-                      onClick={() => pickLocale(loc)}
-                      title={`${LOCALE_META[loc].label} · ${pct}% complet${loc === defaultLocale ? ' · idioma per defecte' : ''}`}
-                      className={cn(
-                        'cursor-pointer flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-semibold transition-colors',
-                        isActive ? 'bg-surface text-text shadow-card ring-1 ring-accent/40' : 'text-muted hover:text-text',
-                      )}
-                    >
-                      <span className="uppercase tracking-wider">{LOCALE_META[loc].code}</span>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', dotColor)} aria-hidden />
-                      {loc === defaultLocale && (
-                        <span className={cn('text-[9px] font-bold', isActive ? 'text-accent' : 'text-subtle')}>·def</span>
-                      )}
-                    </button>
-                    {removable && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); void removeLanguage(loc) }}
-                        title={`Treure ${LOCALE_META[loc].native}`}
-                        aria-label={`Treure ${LOCALE_META[loc].native}`}
-                        className="cursor-pointer absolute -top-1 -right-1 w-4 h-4 rounded-full bg-bg-elevated border border-border flex items-center justify-center text-subtle hover:text-danger hover:border-danger/40 opacity-0 group-hover/lang:opacity-100 transition-opacity"
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-
-              {availableToAdd.length > 0 && (
-                <div ref={addLangRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => { setAddLangOpen(o => !o); setAddLangQuery('') }}
-                    aria-label="Afegir idioma"
-                    title="Afegir idioma"
-                    className="cursor-pointer flex items-center justify-center w-8 h-8 rounded-md text-subtle hover:text-text hover:bg-surface-hover transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                  {addLangOpen && (
-                    <div role="menu" className="absolute top-full right-0 mt-1.5 z-40 bg-bg-elevated border border-border rounded-xl shadow-pop overflow-hidden w-52">
-                      <div className="border-b border-border p-1.5">
-                        <input
-                          ref={addLangInputRef}
-                          type="text"
-                          value={addLangQuery}
-                          onChange={(e) => setAddLangQuery(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && filteredToAdd.length > 0) { e.preventDefault(); addLanguage(filteredToAdd[0]) }
-                          }}
-                          placeholder="Cerca un idioma…"
-                          aria-label="Cerca un idioma"
-                          className="h-8 w-full rounded-lg border border-border bg-surface-subtle px-2.5 text-sm text-text outline-none transition-colors focus:border-accent placeholder:text-subtle"
-                        />
-                      </div>
-                      <div className="max-h-60 overflow-y-auto py-1">
-                        {filteredToAdd.length === 0 ? (
-                          <p className="px-3 py-2 text-xs text-subtle">Cap idioma coincideix.</p>
-                        ) : filteredToAdd.map(loc => (
-                          <button
-                            key={loc}
-                            type="button"
-                            onClick={() => addLanguage(loc)}
-                            className="cursor-pointer w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-surface-hover transition-colors text-left"
-                          >
-                            <span className="grid h-5 w-7 shrink-0 place-items-center rounded bg-surface-subtle text-[10px] font-bold tracking-wide text-subtle">{LOCALE_META[loc].code}</span>
-                            <span className="flex-1 font-medium text-text">{LOCALE_META[loc].native}</span>
-                            <Plus className="w-3 h-3 text-subtle" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* AI Translate — only on non-default locales */}
-            {!isDefault && (
-              <button
-                type="button"
-                onClick={() => { void handleTranslate() }}
-                disabled={translating}
-                title={canTranslate ? `Traduir de ${LOCALE_META[defaultLocale].native} amb IA` : 'Funció Premium'}
-                className={cn(
-                  'cursor-pointer hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60',
-                  canTranslate
-                    ? 'text-accent bg-accent-soft hover:opacity-90'
-                    : 'text-warning bg-warning-soft hover:opacity-90',
-                )}
-              >
-                {translating
-                  ? <KnotSpinner className="w-3.5 h-3.5" />
-                  : canTranslate ? <Sparkles className="w-3.5 h-3.5" /> : <Crown className="w-3.5 h-3.5" />}
-                {translating ? 'Traduint…' : 'Traduir'}
-              </button>
-            )}
-          </div>
+          {/* The language control MOVED to the head of the writing canvas
+              (Fase 5). It used to live here, in the top bar, as a segmented row
+              of two-letter codes with a hover-only remove button — competing for
+              attention with the breadcrumb and the publish CTA, and unusable on
+              touch. Language belongs next to the words it governs. */}
+          <div className="flex-1" />
 
           {/* Right: publish CTA + preview + drawer toggle + save */}
           <div className="flex items-center gap-1.5 shrink-0 flex-1 justify-end">
@@ -1310,41 +1388,89 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
               onChange={e => { void uploadCover(e.target.files?.[0]); e.target.value = '' }}
             />
 
-            {/* Title — borderless, oversized, prosey */}
-            <input
-              type="text"
+            {/* Language — a real, labelled control at the head of the canvas
+                (Fase 5). Spelled-out language name, completion as a number, and
+                every destructive action behind a per-row ⋯ menu instead of a
+                hover-only ✕ that a touch device could never reach. */}
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              <LanguageMenu
+                shown={shownLocales}
+                active={activeLocale}
+                defaultLocale={defaultLocale}
+                completion={localeCompletion}
+                availableToAdd={availableToAdd}
+                onPick={pickLocale}
+                onAdd={addLanguage}
+                onRemove={(l) => { void removeLanguage(l) }}
+                onMakeDefault={makeDefault}
+                onTranslateAll={() => { void handleTranslateAll() }}
+                translating={translating}
+                canTranslate={canTranslate}
+              />
+              {!isDefault && (
+                <span className="flex items-center gap-2 text-xs text-subtle">
+                  Tradueix de <span className="font-semibold text-muted">{LOCALE_META[defaultLocale].native}</span>
+                  <CostBadge action="article_revision" balance={cost.balance} available={cost.available} />
+                </span>
+              )}
+            </div>
+
+            {/* Title — borderless, oversized, prosey, and now AUTO-EXPANDING: it
+                was a single-line <input>, so a long headline scrolled sideways and
+                the writer could never see the whole thing. */}
+            <TitleInput
               value={cur.title}
-              onChange={e => handleTitleChange(e.target.value)}
-              placeholder="Títol de l'article"
-              className="w-full px-0 py-2 bg-transparent border-0 focus:outline-none text-4xl sm:text-5xl font-bold tracking-tight text-text placeholder:text-subtle"
-              style={{ lineHeight: 1.1 }}
+              onChange={handleTitleChange}
+              onCommit={() => editorInstanceRef.current?.commands.focus("start")}
             />
 
-            {/* Slug — editable inline under the title (click to edit; blends into the hint). */}
-            {cur.title.trim() && (
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-subtle">
-                <Globe className="w-3 h-3 shrink-0" />
-                <span className="font-mono shrink-0">{previewHost}/</span>
-                <input
-                  type="text"
-                  value={cur.slug}
-                  onChange={e => patchLocale(activeLocale, { slugTouched: true, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
-                  placeholder="article"
-                  aria-label="Slug de l'article"
-                  spellCheck={false}
-                  className="min-w-0 flex-1 -mx-1 rounded px-1 bg-transparent font-mono text-muted outline-none transition-colors hover:bg-surface-hover focus:bg-surface-hover focus:text-text placeholder:text-subtle"
-                />
-                {cur.slugTouched && (
-                  <button
-                    type="button"
-                    onClick={regenerateSlug}
-                    title="Regenerar des del títol"
-                    className="cursor-pointer shrink-0 text-subtle hover:text-accent transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+            {/* Slug — ALWAYS visible (Fase 5). It used to appear only once a title
+                existed, so the URL felt like a side effect rather than something
+                the writer owns. The lock icon says whether it is still tracking
+                the title or has been set by hand. */}
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-subtle">
+              <Globe className="w-3 h-3 shrink-0" />
+              <span className="font-mono shrink-0">{previewHost}/</span>
+              {activeLocale !== defaultLocale && (
+                <span className="font-mono shrink-0 text-subtle">{activeLocale}/</span>
+              )}
+              <input
+                type="text"
+                value={cur.slug}
+                onChange={e => patchLocale(activeLocale, { slugTouched: true, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
+                placeholder={cur.title.trim() ? 'article' : 'es-genera-del-titol'}
+                aria-label="Slug de l'article"
+                spellCheck={false}
+                className="min-w-0 flex-1 -mx-1 rounded px-1 bg-transparent font-mono text-muted outline-none transition-colors hover:bg-surface-hover focus:bg-surface-hover focus:text-text placeholder:text-subtle"
+              />
+              {cur.slugTouched ? (
+                <button
+                  type="button"
+                  onClick={regenerateSlug}
+                  title="Tornar a generar-lo des del títol"
+                  aria-label="Tornar a generar l'slug des del títol"
+                  className="cursor-pointer shrink-0 text-subtle transition-colors hover:text-accent"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
+              ) : (
+                <span title="Es genera automàticament des del títol" className="shrink-0 text-subtle">
+                  <Sparkles className="w-3 h-3" />
+                </span>
+              )}
+            </div>
+
+            {/* Renaming a PUBLISHED article's slug used to silently 404 every link
+                already indexed or shared. Migration 032 records the rename and the
+                render 308s the old URL, so this note is a promise we now keep. */}
+            {slugRenamed && (
+              <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-info-soft px-2.5 py-1.5 text-xs text-info">
+                <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                <span className="text-text">
+                  Has canviat l&apos;adreça d&apos;un article publicat. Redirigirem
+                  <span className="font-mono"> /{originalSlugForLocale}</span> cap a la nova, així cap enllaç existent es trenca.
+                </span>
+              </p>
             )}
 
             {/* Language detection pill — advisory, TRANSLATION tabs only. The
@@ -1468,11 +1594,32 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
               </div>
             </div>
 
+            {/* WHAT YOU ARE LOOKING AT, AND WHAT IT IS FOR.
+                The tab cards say the name; this says the job. A panel that
+                changes contents when you press a tab but never explains what
+                the contents are for is the reason people stop pressing tabs. */}
+            <div className="shrink-0 border-b border-border bg-surface-subtle px-4 py-2.5">
+              <p className="text-sm font-bold leading-tight text-text">
+                {drawerTab === 'settings' ? 'Ajustos de l’article'
+                  : drawerTab === 'seo' ? 'Com es veurà a Google'
+                  : 'Escriu amb la Carma'}
+              </p>
+              <p className="mt-0.5 text-xs leading-snug text-muted">
+                {drawerTab === 'settings' ? 'Portada, data, autor, categories, etiquetes i idioma.'
+                  : drawerTab === 'seo' ? 'Títol, descripció i URL — amb una previsualització real del resultat.'
+                  : 'Genera, amplia o tradueix aquest article. Cada acció diu el que costa abans de prémer-la.'}
+              </p>
+            </div>
+
             {/* Drawer content — scrolls */}
             <div className="flex-1 overflow-y-auto px-4 py-5">
               {drawerTab === 'settings' && (
                 <SettingsPanel
                   siteId={siteId}
+                  postId={post?.id}
+                  karma={karma}
+                  reviewRequestedAt={reviewRequestedAt}
+                  onReviewRequested={setReviewRequestedAt}
                   isPublished={isPublished} setIsPublished={setIsPublished}
                   date={date} setDate={setDate}
                   authorName={authorName} setAuthorName={setAuthorName}
@@ -1518,6 +1665,7 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
                   generating={generatingArticle}
                   generateError={generateError}
                   onGenerate={() => { void handleGenerateArticle() }}
+                  cost={cost}
                 />
               )}
             </div>
@@ -1578,13 +1726,18 @@ export default function PostEditorClient({ siteId, siteName, post, siteDefaultLo
 // ── Settings panel ──────────────────────────────────────────────────────────
 
 function SettingsPanel({
-  siteId,
+  siteId, postId, karma, reviewRequestedAt, onReviewRequested,
   isPublished, setIsPublished, date, setDate, authorName, setAuthorName,
   categories, setCategories, tags, setTags,
   cur, patchLocale, activeLocale,
   featuredImage, setFeaturedImage,
 }: {
   siteId: string
+  /** Undefined on a brand-new post — there is nothing to send for review yet. */
+  postId?: string
+  karma?: { balance: number | null; available: boolean; superadmin: boolean }
+  reviewRequestedAt: string | null
+  onReviewRequested: (iso: string) => void
   isPublished: boolean; setIsPublished: (v: boolean) => void
   date: string; setDate: (v: string) => void
   authorName: string; setAuthorName: (v: string) => void
@@ -1634,6 +1787,20 @@ function SettingsPanel({
           </button>
         </div>
       </PanelSection>
+
+      {/* I6 — VALIDACIÓ. Only on a saved DRAFT: a published article cannot be
+          pre-read, and a post with no id yet has nothing to queue. */}
+      {postId && !isPublished && (
+        <PanelSection title="Validació" icon={ShieldCheck} kind="shared">
+          <ReviewRequestRow
+            siteId={siteId}
+            postId={postId}
+            karma={karma}
+            requestedAt={reviewRequestedAt}
+            onRequested={onReviewRequested}
+          />
+        </PanelSection>
+      )}
 
       <PanelSection title="Data" icon={CalendarDays} kind="shared">
         <input
@@ -1866,7 +2033,7 @@ function SeoPanel({
 function AiPanel({
   cur, activeLocale, insights, llmsExcerpt,
   canTranslate, analysis, loading, error, onRun, onApply,
-  canGenerate, generating, generateError, onGenerate,
+  canGenerate, generating, generateError, onGenerate, cost,
 }: {
   cur: LocaleFields
   activeLocale: Locale
@@ -1882,6 +2049,8 @@ function AiPanel({
   generating: boolean
   generateError: string | null
   onGenerate: () => void
+  /** Punts balance for the pre-flight price on each AI action (Fase 2). */
+  cost: { balance: number | null; available: boolean }
 }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
@@ -1924,6 +2093,14 @@ function AiPanel({
             ? <><KnotSpinner className="w-4 h-4" /> Generant l’article…</>
             : <><Sparkles className="w-4 h-4" /> Genera un article SEO</>}
         </button>
+        {/* The price, before the press (Fase 2). An owner who cannot afford this
+            gets told what to do about it here, instead of meeting a 402 after
+            waiting a minute for a generation that was never going to land. */}
+        {!generating && (
+          <div className="flex justify-center pt-1.5">
+            <CostLine action="article_draft" balance={cost.balance} available={cost.available} />
+          </div>
+        )}
         {generating && (
           <div className="flex flex-col items-center gap-2 pt-1">
             <KnotLoader size={52} tone="ink" />
@@ -2250,5 +2427,94 @@ function AutosaveIndicator({
       {view.icon}
       <span className="hidden sm:inline">{view.label}</span>
     </button>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * I6 — DEMANAR REVISIÓ
+ *
+ * "Publish and hope" is the loneliest part of writing, and it is where most
+ * first blogs quietly die. This button buys a real reader: someone in the
+ * community takes the draft, says what works and gives one concrete suggestion,
+ * before anyone else sees it.
+ *
+ * The author pays 10 punts and the reviewer earns 25 — Carma covers the gap on
+ * purpose, because reading is the half of the exchange nobody does unprompted.
+ *
+ * The request is a FLAG, not a queue (see lib/actions/review-request.ts). Once
+ * set it stays set, the button becomes a state, and pressing again costs
+ * nothing — a price that can be paid twice by accident is a bug, not a feature.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+function ReviewRequestRow({ siteId, postId, karma, requestedAt, onRequested }: {
+  siteId: string
+  postId: string
+  karma?: { balance: number | null; available: boolean; superadmin: boolean }
+  requestedAt: string | null
+  onRequested: (iso: string) => void
+}) {
+  const { toast } = useToast()
+  const [busy, setBusy] = useState(false)
+  const cost = KARMA_COSTS.peer_review
+  const balance = karma?.balance ?? null
+  const short = karma?.available === true && !karma.superadmin && balance !== null && balance < cost
+
+  if (requestedAt) {
+    const when = (() => { try { return new Date(requestedAt).toLocaleDateString() } catch { return '' } })()
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success-soft px-2.5 py-2">
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-success">A la cua de validació</p>
+          <p className="mt-0.5 text-[0.7rem] leading-relaxed text-muted">
+            Demanat el {when}. T&apos;avisarem quan algú l&apos;hagi llegit. No es torna a cobrar.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const ask = async () => {
+    setBusy(true)
+    try {
+      const res = await requestPeerReview(postId, siteId)
+      if (!res.ok) { toast(res.error, 'error'); return }
+      onRequested(res.requestedAt)
+      toast(
+        res.already
+          ? 'Aquest esborrany ja estava a la cua de validació.'
+          : `Demanat. Un company el llegirà abans que el publiquis (−${cost} punts).`,
+        'success',
+      )
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No s’ha pogut demanar la validació', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.7rem] leading-relaxed text-muted">
+        Un company de Carma llegeix l&apos;esborrany i et diu què funciona i què canviaria, abans de publicar-lo.
+      </p>
+      <button
+        type="button"
+        onClick={() => { void ask() }}
+        disabled={busy || short}
+        className={cn(
+          'cursor-pointer flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-colors disabled:cursor-default disabled:opacity-60',
+          'bg-accent text-on-accent hover:bg-accent-hover',
+        )}
+      >
+        <ShieldCheck className="h-3.5 w-3.5" />
+        {busy ? 'Demanant…' : `Demanar Revisió (${cost} Punts)`}
+      </button>
+      {short && (
+        <p className="text-[0.7rem] font-semibold text-warning">
+          Et falten punts: en tens {balance} i en calen {cost}.
+        </p>
+      )}
+    </div>
   )
 }

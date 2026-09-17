@@ -42,7 +42,42 @@ import { MAX_REGION_HTML, shouldDropScript } from './headerFooter'
 const SLOT_DATA = 'CARMA_BLOG_SLOT_7b3f9'
 const SLOT_HTML = `<!--${SLOT_DATA}-->`
 
+/** Bump on every behavioural change to the extraction heuristics — stored with
+ *  each Grabber Eval review so stale reviews are attributable to an engine rev.
+ *  (The batch runner ALSO hashes the source files; this is the human-readable tag.) */
+export const ENGINE_VERSION = 'v2.0-structural-2026-07-13'
+
 export type SplitStrategy = 'content' | 'none'
+
+/** Introspection of HOW the split was made — consumed by the Grabber Eval Lab
+ *  (accuracy metrics + human review) and by capture diagnostics. Additive:
+ *  nothing in the render path depends on it. */
+export type SplitMeta = {
+  headerFound: boolean
+  footerFound: boolean
+  /** Compact anchor signature, e.g. `header#masthead.site-header` — for reports. */
+  headerSig: string | null
+  footerSig: string | null
+  /** True when the content-density heuristic bailed and the structural
+   *  chrome-boundary failsafe produced the range instead. */
+  usedFallback: boolean
+  /**
+   * LINK REPAIR (2026-09-17). Measured across the cached Barcelona-100 before it
+   * was written: 54% of captured chromes carried at least one link that could not
+   * work on our origin. These counters make the fix visible in the Grabber Lab
+   * and in the eval, rather than being an invisible behaviour change.
+   */
+  links: {
+    /** Every `<a href>` in the captured chrome. */
+    total: number
+    /** `href="javascript:…"` — the source's own JS, on OUR origin. Neutralised. */
+    scripted: number
+    /** `href=""` — a dead click on a logo. Neutralised. */
+    empty: number
+    /** `href="#section"` whose target went out with the carved content. Neutralised. */
+    deadFragment: number
+  }
+}
 
 export type PageSplit = {
   /** Light-DOM HTML rendered BEFORE the blog (wrappers open across the gap). */
@@ -52,6 +87,7 @@ export type PageSplit = {
   /** Serialised `<body>` attributes (class/style/data-*), sans the angle brackets. */
   bodyAttrs: string
   strategy: SplitStrategy
+  meta: SplitMeta
 }
 
 // ─── parse5 tree shims ────────────────────────────────────────────────────────
@@ -117,8 +153,92 @@ function isAncestor(ancestor: P5Node, node: P5Node): boolean {
 const HEADER_HINT = /(?:^|[\s_-])(?:masthead|site-?header|main-?header|global-?header|primary-?header|l-header|topbar|top-?bar|site-?nav|main-?nav|primary-?nav|navbar)(?:$|[\s_-])/i
 const FOOTER_HINT = /(?:^|[\s_-])(?:colophon|site-?footer|main-?footer|global-?footer|page-?footer|primary-?footer|l-footer)(?:$|[\s_-])/i
 
+// ── WEAK tier (Engine v2, eval-driven 2026-07-13) ────────────────────────────
+// The Barcelona-100 eval showed the strict tier misses a large real-world class
+// of chrome: theme-prefixed names (`fusion-footer` — Avada, `mdl-footer`,
+// `panel_footer`), camelCase (`mainFooter`), and Catalan/Spanish naming
+// (`peu-de-pagina`, `cabecera`, `capçalera→capcalera`, `encabezado`, `colofon`,
+// `rodape`). The weak tier matches those by WORD, but is consulted ONLY when the
+// strict tier found nothing, and never on an element whose name marks it as
+// IN-CONTENT chrome (entry-footer, card-header…) — the historical fragmentation
+// trap that killed suffix-matching stays closed.
+// In-content / subcomponent exclusions for the WEAK tier. Three shapes, all
+// found live on the Barcelona-100:
+//   · `entry-footer`, `page-header` (WP title band) — SEPARATOR-required prefix,
+//     so `PageHeaderNavigation` (a REAL site header) still qualifies;
+//   · BEM `X__header` / `X__footer` — the header OF a component, never the site's
+//     (`MobileMenu__header` anchored a whole page at its hamburger drawer);
+//   · mobile-menu contexts (`header-mobile-menu`) — drawers, not the header.
+const FOOTER_WORD = /footer|colophon|(?:^|[\s_-])(?:peu|pie|colofon|rodape)(?:$|[\s_-])/i
+const FOOTER_IN_CONTENT = /(?:^|[\s_-])(?:entry|post|article|card|comment|widget|item|product|caption|section|block|module)[-_]footer(?:$|[\s_-])|__footer(?:$|[\s_-])|footer[-_]?mobile/i
+const HEADER_WORD = /header|masthead|(?:^|[\s_-])(?:cabecera|capcalera|encabezado)(?:$|[\s_-])/i
+const HEADER_IN_CONTENT = /(?:^|[\s_-])(?:entry|post|article|card|comment|widget|item|product|caption|section|block|module|page|hero|banner)[-_]header(?:$|[\s_-])|__header(?:$|[\s_-])|header[-_]?mobile|(?:^|[\s_-])(?:mobile|hamburger|burger)[-_]?(?:menu|nav)/i
+
+// Overlay/consent junk: NEVER a chrome anchor, NEVER a content block. These are
+// out-of-flow layers (cookie bars, lightboxes, modals, back-to-top) whose text
+// mass and "top-bar"-style class names poisoned both the density pivot and the
+// anchor search (a PhotoSwipe `pswp__top-bar` was picked as a site header).
+// CONSENT vocabulary is unambiguous (a cookie modal is never the page shell) so
+// it taints regardless of size; LAYOUT vocabulary (offcanvas, modal, drawer…) is
+// also how themes name their page WRAPPERS (Drupal `dialog-off-canvas-main-canvas`,
+// UIkit `uk-offcanvas-content`), so it only taints under the mass guard.
+const CONSENT_HINT = /(?:^|[\s_-])(?:cookie|consent|gdpr|cmplz|onetrust)(?:$|[\s_-])|cli-modal|cli-bar|cookie-law/i
+const OVERLAY_HINT = /(?:^|[\s_-])(?:modal|popup|backdrop|preloader|offcanvas|off-canvas|lightbox|fancybox|pswp|mfp|drawer|to-?top|scroll-?top|back-?to-?top)(?:$|[\s_-])|pswp__/i
+
 const hintHaystack = (el: P5Node): string => `${getAttr(el, 'id') ?? ''} ${getAttr(el, 'class') ?? ''}`
 const roleOf = (el: P5Node): string => (getAttr(el, 'role') ?? '').toLowerCase()
+
+/**
+ * Every node inside an overlay layer (the layer element itself included).
+ * MASS GUARD: a real overlay (modal, lightbox, drawer) is SMALL relative to the
+ * page — an element matching a layout-overlay word while holding a big share of
+ * the page text is the page SHELL, not an overlay (Drupal wraps the whole page
+ * in `dialog-off-canvas-main-canvas`, UIkit in `uk-offcanvas-content`; tainting
+ * those blanked the capture). Consent layers (cookie/GDPR) taint at ANY size —
+ * verbose GDPR modals can outweigh a small page's real text.
+ */
+function collectOverlayTainted(body: P5Node, stats: Map<P5Node, Stats>): Set<P5Node> {
+  const total = stats.get(body)?.text ?? 0
+  const cap = total * 0.4
+  const tainted = new Set<P5Node>()
+  const mark = (n: P5Node) => walk(n, x => tainted.add(x))
+  eachEl(body, el => {
+    if (tainted.has(el)) return
+    const hay = hintHaystack(el)
+    if (CONSENT_HINT.test(hay)) { mark(el); return }
+    if (OVERLAY_HINT.test(hay) && (stats.get(el)?.text ?? 0) <= cap) mark(el)
+  })
+  return tainted
+}
+
+const isWeakHeader = (el: P5Node): boolean => {
+  const hay = hintHaystack(el)
+  return HEADER_WORD.test(hay) && !HEADER_IN_CONTENT.test(hay)
+}
+const isWeakFooter = (el: P5Node): boolean => {
+  const hay = hintHaystack(el)
+  return FOOTER_WORD.test(hay) && !FOOTER_IN_CONTENT.test(hay)
+}
+
+// Copyright tier: language-independent LAST-RESORT footer signal for sites whose
+// markup carries no usable names at all (CSS-in-JS `jss593` classes). A small
+// bottom-of-document element whose text holds a © / rights notice IS the footer.
+const COPYRIGHT_RE = /©|&copy;|copyright|tots els drets|todos los derechos|all rights reserved|drets reservats|derechos reservados/i
+
+function subtreeText(el: P5Node, cap = 4000): string {
+  let out = ''
+  const rec = (n: P5Node): void => {
+    if (out.length > cap) return
+    if (isElement(n)) {
+      const t = tagOf(n)
+      if (t === 'script' || t === 'style' || t === 'noscript' || t === 'template') return
+    }
+    if (n.nodeName === '#text' && typeof n.value === 'string') out += n.value
+    for (const c of n.childNodes ?? []) rec(c)
+  }
+  rec(el)
+  return out
+}
 
 // Whether the element carries `id="header"`/`class="header"` (or footer) as an
 // EXACT token — the bare, un-prefixed chrome name countless sites use instead of a
@@ -154,24 +274,61 @@ function liftAnchor(node: P5Node, body: P5Node, strong: (n: P5Node) => boolean):
   return cur
 }
 
-// Topmost site-header (first strong header in document order, lifted), or — lacking
-// one — the first top-of-page <nav> with real links. `els` is in document order.
-function findHeaderAnchor(body: P5Node, els: P5Node[]): P5Node | null {
+// Topmost site-header, searched in tiers (each consulted only when the previous
+// found nothing, and always skipping overlay layers):
+//   1. STRONG — semantic tag/role/site-chrome class (first in document order, lifted).
+//   2. WEAK   — any word-match on header/masthead/cabecera/capçalera… that is not an
+//               in-content header (entry-header, page-header hero bands…).
+//   3. NAV    — the first top-of-page <nav> with real links.
+function findHeaderAnchor(body: P5Node, els: P5Node[], tainted: Set<P5Node>): P5Node | null {
   for (const el of els) {
+    if (tainted.has(el)) continue
     if (isStrongHeader(el)) return liftAnchor(el, body, isStrongHeader)
+  }
+  for (const el of els) {
+    if (tainted.has(el)) continue
+    if (isWeakHeader(el)) return liftAnchor(el, body, (n) => isStrongHeader(n) || isWeakHeader(n))
   }
   const half = Math.max(1, Math.floor(els.length / 2))
   for (let i = 0; i < half; i++) {
+    if (tainted.has(els[i])) continue
     if (tagOf(els[i]) === 'nav' && countTag(els[i], 'a') >= 2) return els[i]
   }
   return null
 }
-// Bottommost site-footer: the LAST strong footer in document order (so an article's
-// own <footer> never wins over the site footer below it), lifted to its outermost
-// footer wrapper. No depth cap — a footer buried deep in builder wrappers is found.
-function findFooterAnchor(body: P5Node, els: P5Node[]): P5Node | null {
+// Bottommost site-footer, in tiers (bottom-up so an article's own <footer> never
+// wins over the site footer below it; lifted to its outermost wrapper; overlay
+// layers skipped):
+//   1. STRONG    — semantic tag/role/site-chrome class.
+//   2. WEAK      — word-match on footer/colophon/peu/pie… minus in-content names.
+//   3. COPYRIGHT — a small bottom-of-document element holding a © / rights notice
+//                  (the only signal CSS-in-JS sites emit).
+function findFooterAnchor(body: P5Node, els: P5Node[], tainted: Set<P5Node>): P5Node | null {
   for (let i = els.length - 1; i >= 0; i--) {
+    if (tainted.has(els[i])) continue
     if (isStrongFooter(els[i])) return liftAnchor(els[i], body, isStrongFooter)
+  }
+  for (let i = els.length - 1; i >= 0; i--) {
+    if (tainted.has(els[i])) continue
+    if (isWeakFooter(els[i])) return liftAnchor(els[i], body, (n) => isStrongFooter(n) || isWeakFooter(n))
+  }
+  // Copyright tier — only the last 40% of the document, and only compact blocks
+  // (a © inside a page-wide wrapper must not anchor the whole page as footer).
+  const from = Math.floor(els.length * 0.6)
+  for (let i = els.length - 1; i >= from; i--) {
+    const el = els[i]
+    if (tainted.has(el)) continue
+    const text = subtreeText(el, 2200)
+    if (text.length > 2000 || !COPYRIGHT_RE.test(text)) continue
+    // Lift while the parent adds little extra text — climbing the footer's own
+    // wrappers (nav columns, social rows) but stopping before the page shell.
+    let cur = el
+    while (cur.parentNode && cur.parentNode !== body) {
+      const parentText = subtreeText(cur.parentNode, 4000)
+      if (parentText.length > Math.max(text.length * 2.5, text.length + 900)) break
+      cur = cur.parentNode
+    }
+    return cur
   }
   return null
 }
@@ -187,6 +344,7 @@ type Stats = { text: number; imgs: number; ps: number; hs: number }
 
 function computeStats(root: P5Node): Map<P5Node, Stats> {
   const m = new Map<P5Node, Stats>()
+  const ZERO: Stats = { text: 0, imgs: 0, ps: 0, hs: 0 }
   const rec = (n: P5Node): Stats => {
     const s: Stats = { text: 0, imgs: 0, ps: 0, hs: 0 }
     if (!isElement(n)) {
@@ -194,11 +352,18 @@ function computeStats(root: P5Node): Map<P5Node, Stats> {
       m.set(n, s)
       return s
     }
+    const t = tagOf(n)
+    // Script/style/noscript text is CODE, not content — counting it made a 9KB
+    // inline <style> the densest "content block" on real pages (Barcelona-100
+    // eval), hijacking the pivot and corrupting the whole carve.
+    if (t === 'script' || t === 'style' || t === 'noscript' || t === 'template') {
+      m.set(n, ZERO)
+      return ZERO
+    }
     for (const c of n.childNodes ?? []) {
       const cs = rec(c)
       s.text += cs.text; s.imgs += cs.imgs; s.ps += cs.ps; s.hs += cs.hs
     }
-    const t = tagOf(n)
     if (t === 'img' || t === 'picture' || t === 'svg' || t === 'video') s.imgs += 1
     else if (t === 'p') s.ps += 1
     else if (t === 'h1' || t === 'h2' || t === 'h3' || t === 'h4') s.hs += 1
@@ -250,22 +415,44 @@ function childContaining(parent: P5Node, node: P5Node | null): P5Node | null {
 const MIN_BLOCK_SCORE = 40
 const BLOCK_FRACTION = 0.05
 
+// Compact human-readable anchor signature for reports: `header#masthead.site-header`.
+const anchorSig = (n: P5Node | null): string | null => {
+  if (!n) return null
+  const id = getAttr(n, 'id')
+  const cls = (getAttr(n, 'class') ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 2)
+  return `${tagOf(n)}${id ? `#${id}` : ''}${cls.length ? '.' + cls.join('.') : ''}`
+}
+
+const EMPTY_LINKS = { total: 0, scripted: 0, empty: 0, deadFragment: 0 }
+
+const EMPTY_META: SplitMeta = {
+  headerFound: false, footerFound: false, headerSig: null, footerSig: null, usedFallback: false,
+  links: { ...EMPTY_LINKS },
+}
+
 /**
  * The RANGE of sibling nodes to replace with the blog slot — the full content area
  * (all of its sections) that sits BETWEEN the header and footer inside their shared
  * wrappers. Replaces the old single-node model so multi-section homepages keep ALL
  * their content carved out together (none leaking into the header/footer halves).
- * Returns null when there's no chrome or no real content (→ default blog, no chrome).
+ * `range` is null when there's no chrome or no real content (→ default blog, no
+ * chrome); `meta` always reports what WAS structurally found, for the Eval Lab.
  */
-function findContentRange(body: P5Node): ContentRange | null {
+function findContentRange(body: P5Node): { range: ContentRange | null; meta: SplitMeta } {
   const els: P5Node[] = []
   eachEl(body, n => els.push(n))
-  if (!els.length) return null
+  if (!els.length) return { range: null, meta: EMPTY_META }
+
+  // Overlay layers (cookie bars, modals, lightboxes, back-to-top) are OUT OF
+  // FLOW: they can neither anchor the chrome nor count as content blocks. The
+  // density stats are computed up-front so the taint pass can mass-guard.
+  const stats = computeStats(body)
+  const tainted = collectOverlayTainted(body, stats)
 
   // 1. Chrome = two POSITIONAL anchors: the topmost site-header + bottommost
   //    site-footer. Nothing in between (the content) can be mistaken for chrome.
-  let headerAnchor = findHeaderAnchor(body, els)
-  let footerAnchor = findFooterAnchor(body, els)
+  let headerAnchor = findHeaderAnchor(body, els, tainted)
+  let footerAnchor = findFooterAnchor(body, els, tainted)
   // Order sanity: the header must precede the footer in document order.
   if (headerAnchor && footerAnchor && els.indexOf(headerAnchor) >= els.indexOf(footerAnchor)) {
     footerAnchor = null
@@ -276,8 +463,20 @@ function findContentRange(body: P5Node): ContentRange | null {
     if (isAncestor(headerAnchor, footerAnchor)) headerAnchor = null
     else if (isAncestor(footerAnchor, headerAnchor)) footerAnchor = null
   }
+  // Meta accessors — anchors are settled from here on; `usedFallback` flips when
+  // the density heuristic bails and the structural failsafe takes over.
+  let usedFallback = false
+  const meta = (): SplitMeta => ({
+    headerFound: !!headerAnchor, footerFound: !!footerAnchor,
+    headerSig: anchorSig(headerAnchor), footerSig: anchorSig(footerAnchor),
+    usedFallback,
+    // Filled by splitPageChrome once both halves exist — see EMPTY_LINKS.
+    links: { ...EMPTY_LINKS },
+  })
+  const done = (range: ContentRange | null) => ({ range, meta: meta() })
+
   // No chrome at all → there's nothing to clone; render the default blog.
-  if (!headerAnchor && !footerAnchor) return null
+  if (!headerAnchor && !footerAnchor) return done(null)
   const chrome = [headerAnchor, footerAnchor].filter((c): c is P5Node => !!c)
 
   // 2. Membership sets: chromeOrInside (a chrome node or any descendant of one) and
@@ -289,10 +488,12 @@ function findContentRange(body: P5Node): ContentRange | null {
     let p = c.parentNode ?? null
     while (p && p !== body) { chromeAncestors.add(p); p = p.parentNode ?? null }
   }
-  // A real content element: neither chrome, inside chrome, nor a chrome-bracketing
-  // wrapper. (The chosen container MAY be a chrome-ancestor — see step 4 — but the
-  // content BLOCKS and the sliced CHILDREN never are.)
-  const isContent = (el: P5Node): boolean => !chromeOrInside.has(el) && !chromeAncestors.has(el)
+  // A real content element: neither chrome, inside chrome, a chrome-bracketing
+  // wrapper, nor an out-of-flow overlay layer. (The chosen container MAY be a
+  // chrome-ancestor — see step 4 — but the content BLOCKS and the sliced
+  // CHILDREN never are.)
+  const isContent = (el: P5Node): boolean =>
+    !chromeOrInside.has(el) && !chromeAncestors.has(el) && !tainted.has(el)
 
   // FAILSAFE: every bail-out below routes through here instead of returning null.
   // We already have the header/footer anchors — so when the content-density
@@ -302,9 +503,21 @@ function findContentRange(body: P5Node): ContentRange | null {
   // the gap between the header and footer (or everything beside a lone anchor); if
   // they are adjacent, inserts an empty slot between them (the blog renders there).
   const fallback = (): ContentRange | null => {
-    const fParent: P5Node = headerAnchor && footerAnchor
+    usedFallback = true
+    let fParent: P5Node = headerAnchor && footerAnchor
       ? (lcaOf(headerAnchor, footerAnchor) ?? body)
       : body
+    // DESCEND while both anchors sit inside the SAME child (Engine v2): builder
+    // themes nest the footer INSIDE the content wrapper (Divi: #main-footer in
+    // #et-main-area), so the naive LCA slice degenerated to an empty insert and
+    // the whole content area leaked into the bottom half. Narrowing into the
+    // shared child until the anchors diverge slots the REAL gap between them.
+    for (;;) {
+      const hc = childContaining(fParent, headerAnchor)
+      const fc = childContaining(fParent, footerAnchor)
+      if (hc && fc && hc === fc) { fParent = hc; continue }
+      break
+    }
     const fkids = fParent.childNodes ?? []
     if (!fkids.length) return null
     const hChild = childContaining(fParent, headerAnchor)
@@ -317,7 +530,6 @@ function findContentRange(body: P5Node): ContentRange | null {
   }
 
   // 3. Content blocks = every content element scoring above the relative threshold.
-  const stats = computeStats(body)
   let pivot: P5Node | null = null
   let bestScore = 0
   for (const el of els) {
@@ -325,7 +537,7 @@ function findContentRange(body: P5Node): ContentRange | null {
     const sc = scoreOf(stats, el)
     if (sc > bestScore) { bestScore = sc; pivot = el }
   }
-  if (!pivot || bestScore <= 0) return fallback() // chrome but no scorable content
+  if (!pivot || bestScore <= 0) return done(fallback()) // chrome but no scorable content
 
   const threshold = Math.max(MIN_BLOCK_SCORE, bestScore * BLOCK_FRACTION)
   let blocks = els.filter(el => isContent(el) && scoreOf(stats, el) >= threshold)
@@ -343,9 +555,9 @@ function findContentRange(body: P5Node): ContentRange | null {
     const lca = lcaOf(parent, blocks[i])
     if (lca) parent = lca
   }
-  if (chromeOrInside.has(parent)) return fallback()
+  if (chromeOrInside.has(parent)) return done(fallback())
   const kids = parent.childNodes ?? []
-  if (!kids.length) return fallback()
+  if (!kids.length) return done(fallback())
 
   // 5. Bound the slice by the chrome that lives INSIDE this container: never cross
   //    the header child (above) or the footer child (below).
@@ -367,7 +579,7 @@ function findContentRange(body: P5Node): ContentRange | null {
     for (let i = 0; i < kids.length; i++) {
       if (i > hIdx && i < fIdx && isElement(kids[i]) && isContent(kids[i])) contentIdx.push(i)
     }
-    if (!contentIdx.length) return fallback()
+    if (!contentIdx.length) return done(fallback())
   }
   let startIdx = contentIdx[0]
   let endIdx = contentIdx[contentIdx.length - 1]
@@ -391,18 +603,48 @@ function findContentRange(body: P5Node): ContentRange | null {
     }
   }
 
-  if (startIdx < 0 || endIdx < startIdx || endIdx >= kids.length) return fallback()
-  return { parent, startIdx, endIdx }
+  if (startIdx < 0 || endIdx < startIdx || endIdx >= kids.length) return done(fallback())
+  return done({ parent, startIdx, endIdx })
 }
 
 // ─── Tree mutation (absolutise / sanitise / slot) ──────────────────────────────
 
-function absolutiseTree(root: P5Node, base: URL): void {
+/**
+ * HREFS THAT CANNOT WORK ON OUR ORIGIN (2026-09-17).
+ *
+ * Two of them, and the first is a security bug as much as a broken link:
+ *
+ *   javascript:  the source's own script, now running on OUR domain, with our
+ *                cookies. It never does anything useful either — whatever bound
+ *                it was left behind with the page it came from. Eleven of these
+ *                were sitting in the Barcelona-100.
+ *   href=""      resolves to the CURRENT page, so a logo click reloads the blog
+ *                and looks like a dead button. Thirty-two of those.
+ *
+ * Both become `#`, which is what a site's own inert menu anchors already use —
+ * so they are indistinguishable from a control that was never meant to navigate.
+ */
+function repairHref(value: string): { value: string; scripted: boolean; empty: boolean } {
+  const v = value.trim()
+  if (/^javascript:/i.test(v)) return { value: '#', scripted: true, empty: false }
+  if (v === '') return { value: '#', scripted: false, empty: true }
+  return { value, scripted: false, empty: false }
+}
+
+function absolutiseTree(root: P5Node, base: URL, tally?: { total: number; scripted: number; empty: number }): void {
   walk(root, n => {
     if (!isElement(n) || !n.attrs) return
     const isUse = tagOf(n) === 'use'
+    const isAnchor = tagOf(n) === 'a'
     for (const a of n.attrs) {
       if (a.name === 'href' || a.name === 'xlink:href') {
+        if (isAnchor && a.name === 'href') {
+          if (tally) tally.total++
+          const fixed = repairHref(a.value)
+          if (fixed.scripted && tally) tally.scripted++
+          if (fixed.empty && tally) tally.empty++
+          if (fixed.value === '#') { a.value = '#'; continue }
+        }
         // SVG <use> external sprite refs must go same-origin (cross-origin <use>
         // is blocked) — route via the proxy; everything else just absolutises.
         a.value = isUse ? proxyUseHref(a.value, base) : absolutiseUrl(a.value, base)
@@ -482,7 +724,15 @@ function serializeBodyAttrs(body: P5Node): string {
 
 const serializeNode = serialize as unknown as (node: P5Node) => string
 const innerHtml = (node: P5Node): string => serializeNode(node)
-const cap = (s: string): string => (s.length > MAX_REGION_HTML ? s.slice(0, MAX_REGION_HTML) : s)
+// Size cap that never cuts MID-TAG: a blind slice could end inside `<div cla…`,
+// and that torn tag then swallowed/garbled everything stitched after it (one of
+// the "clone came out broken" edge cases). Cutting at the last completed `>`
+// keeps the output parseable — parse5 balances any still-open elements at render.
+const cap = (s: string): string => {
+  if (s.length <= MAX_REGION_HTML) return s
+  const cut = s.lastIndexOf('>', MAX_REGION_HTML)
+  return s.slice(0, cut > 0 ? cut + 1 : MAX_REGION_HTML)
+}
 
 function serializeAttrs(el: P5Node): string {
   return (el.attrs ?? [])
@@ -521,23 +771,81 @@ function splitOnSlot(inner: string): [string, string] | [null, null] {
  *     intentionally UNBALANCED (wrappers span the gap), balanced at render time.
  *   · `strategy:'none'`    — no chrome / no content block (→ default blog, no chrome).
  */
+/**
+ * FRAGMENT LINKS WHOSE TARGET WENT OUT WITH THE CONTENT.
+ *
+ * A "skip to content" link, an on-page nav pointing at `#serveis`, a footer
+ * shortcut back to `#dalt`: all of them pointed INTO the region we carved out, so
+ * on the clone they resolve to nothing and the browser does nothing. Seventy-eight
+ * of them across the Barcelona-100, on 54% of sites when counted with the rest.
+ *
+ * `#` is the honest replacement: it is what an inert control already looks like,
+ * and it leaves the visible label untouched. We deliberately do NOT re-point them
+ * at our own content — a menu item labelled "Serveis" must not start meaning
+ * "the blog".
+ *
+ * Runs on the ASSEMBLED chrome, because only then do we know which ids survived.
+ */
+function neutraliseDeadFragments(html: string, ids: Set<string>): { html: string; fixed: number } {
+  let fixed = 0
+  const out = html.replace(/(<a\b[^>]*\bhref\s*=\s*)("#[^"]*"|'#[^']*')/gi, (m, head: string, quoted: string) => {
+    const q = quoted[0]
+    const target = quoted.slice(2, -1) // drop the quote and the '#'
+    if (!target || ids.has(target)) return m
+    fixed++
+    return `${head}${q}#${q}`
+  })
+  return { html: out, fixed }
+}
+
+/** Every id present in the assembled chrome — the surviving anchor targets. */
+function idsIn(html: string): Set<string> {
+  const ids = new Set<string>()
+  for (const m of html.matchAll(/\bid\s*=\s*"([^"]*)"|\bid\s*=\s*'([^']*)'/gi)) {
+    const id = (m[1] ?? m[2] ?? '').trim()
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+/**
+ * Stamp the chrome's OUTERMOST elements so a stylesheet can address them.
+ *
+ * The contrast repair (scrape/chromeContrast.ts) needs somewhere to restore the
+ * page ground the render drops, and the captured chrome has no wrapper of its
+ * own — it is spliced straight into the document. Adding an attribute is the
+ * least invasive hook available: it changes no layout, breaks no selector the
+ * compiled CSS matched, and gives `[data-carma-chrome]` a real target.
+ */
+function markChromeRoots(body: P5Node): void {
+  for (const child of body.childNodes ?? []) {
+    if (!isElement(child) || !child.attrs) continue
+    const t = tagOf(child)
+    if (t === 'script' || t === 'style' || t === 'template' || t === 'noscript') continue
+    if (child.attrs.some(a => a.name === 'data-carma-chrome')) continue
+    child.attrs.push({ name: 'data-carma-chrome', value: '' })
+  }
+}
+
 export function splitPageChrome(html: string, base: URL): PageSplit {
   let body: P5Node | null = null
   try {
     const doc = parse(html) as unknown as P5Node
     body = findFirst(doc, n => tagOf(n) === 'body')
   } catch {
-    return { top: '', bottom: '', bodyAttrs: '', strategy: 'none' }
+    return { top: '', bottom: '', bodyAttrs: '', strategy: 'none', meta: EMPTY_META }
   }
-  if (!body) return { top: '', bottom: '', bodyAttrs: '', strategy: 'none' }
+  if (!body) return { top: '', bottom: '', bodyAttrs: '', strategy: 'none', meta: EMPTY_META }
 
   // Clean the WHOLE body once → both halves come out absolutised + safe.
-  absolutiseTree(body, base)
+  const linkTally = { total: 0, scripted: 0, empty: 0 }
+  absolutiseTree(body, base, linkTally)
   stripOnHandlers(body)
   sanitiseScripts(body)
+  markChromeRoots(body)
   const bodyAttrs = serializeBodyAttrs(body)
 
-  const range = findContentRange(body)
+  const { range, meta } = findContentRange(body)
   if (range) {
     // Collect sprite defs from the WHOLE carved range BEFORE we splice it out, so
     // the chrome's `<use href="#icon">` references still resolve in the light DOM.
@@ -546,14 +854,37 @@ export function splitPageChrome(html: string, base: URL): PageSplit {
     if (replaceRangeWithSlot(range)) {
       const [top, bottom] = splitOnSlot(innerHtml(body))
       if (top !== null) {
-        const t = cap(sprites ? `${sprites}\n${top}` : top), b = cap(bottom)
+        let t = cap(sprites ? `${sprites}\n${top}` : top), b = cap(bottom)
         // Content found but NOTHING surrounds it → there's no chrome to inject.
         // Report 'none' (empty halves) so the render shows the default blog.
-        if (!t.trim() && !b.trim()) return { top: '', bottom: '', bodyAttrs, strategy: 'none' }
-        return { top: t, bottom: b, bodyAttrs, strategy: 'content' }
+        if (!t.trim() && !b.trim()) {
+          return { top: '', bottom: '', bodyAttrs, strategy: 'none', meta: { ...meta, links: { ...EMPTY_LINKS } } }
+        }
+        // Dead fragments can only be judged once both halves exist: an id in the
+        // footer is a perfectly good target for a link in the header.
+        const surviving = idsIn(`${t}\n${b}`)
+        const fixedTop = neutraliseDeadFragments(t, surviving)
+        const fixedBottom = neutraliseDeadFragments(b, surviving)
+        t = fixedTop.html
+        b = fixedBottom.html
+        return {
+          top: t,
+          bottom: b,
+          bodyAttrs,
+          strategy: 'content',
+          meta: {
+            ...meta,
+            links: {
+              total: linkTally.total,
+              scripted: linkTally.scripted,
+              empty: linkTally.empty,
+              deadFragment: fixedTop.fixed + fixedBottom.fixed,
+            },
+          },
+        }
       }
     }
   }
 
-  return { top: '', bottom: '', bodyAttrs, strategy: 'none' }
+  return { top: '', bottom: '', bodyAttrs, strategy: 'none', meta: { ...meta, links: { ...EMPTY_LINKS } } }
 }

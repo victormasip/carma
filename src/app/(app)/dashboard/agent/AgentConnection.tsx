@@ -8,10 +8,11 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Phone, Plus, Trash2, RefreshCw, Check, Clock, ShieldCheck, Globe,
+  Plus, Trash2, RefreshCw, Check, Clock, ShieldCheck, Globe,
   ChevronDown, Copy, MessageCircle, AlertCircle,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import PhoneInput from '@/components/ui/PhoneInput'
 import EndlessKnot from '@/components/ui/EndlessKnot'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/Modal'
@@ -41,7 +42,10 @@ export default function AgentConnection({ agentNumber, identities, sites, scopes
 }) {
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
+  // E.164 net del PhoneInput ('' mentre és incomplet) — mai free-text.
   const [newPhone, setNewPhone] = useState('')
+  // Reset visual del PhoneInput després d'afegir (remunta el component).
+  const [phoneEpoch, setPhoneEpoch] = useState(0)
   const router = useRouter()
   const agentLink = waMeLink(agentNumber)
 
@@ -62,12 +66,12 @@ export default function AgentConnection({ agentNumber, identities, sites, scopes
   }, [hasPending, router])
 
   const add = () => {
-    const value = newPhone.trim()
-    if (!value) return
+    if (!newPhone) return
     startTransition(async () => {
-      const res = await addPhoneNumber(value)
+      const res = await addPhoneNumber(newPhone)
       if (res.ok) {
         setNewPhone('')
+        setPhoneEpoch(e => e + 1)
         toast('Número afegit. Envia el codi per WhatsApp per verificar-lo.', 'success')
         router.refresh()
       } else {
@@ -142,23 +146,12 @@ export default function AgentConnection({ agentNumber, identities, sites, scopes
         <div className="mt-5 border-t border-border pt-5">
           <label className="text-xs font-semibold text-muted" htmlFor="new-phone">Afegeix un número de WhatsApp</label>
           <div className="mt-2 flex flex-col gap-2">
-            <div className="relative">
-              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" />
-              <input
-                id="new-phone"
-                type="tel"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') add() }}
-                placeholder="+34 600 00 00 00"
-                className="h-11 w-full rounded-xl border border-border-strong bg-bg-elevated pl-9 pr-3 text-sm text-text outline-none transition-colors focus:border-accent"
-              />
-            </div>
-            <Button onClick={add} loading={pending} disabled={!newPhone.trim()} iconLeft={<Plus className="h-4 w-4" />}>
+            <PhoneInput key={phoneEpoch} id="new-phone" onChange={setNewPhone} onEnter={add} disabled={pending} />
+            <Button onClick={add} loading={pending} disabled={!newPhone} iconLeft={<Plus className="h-4 w-4" />}>
               Afegir número
             </Button>
           </div>
-          <p className="mt-2 text-xs text-subtle">Els números espanyols no necessiten prefix. Després enviaràs un codi per WhatsApp per verificar-lo.</p>
+          <p className="mt-2 text-xs text-subtle">Després enviaràs un codi per WhatsApp per verificar que el número és teu.</p>
         </div>
       </div>
     </div>

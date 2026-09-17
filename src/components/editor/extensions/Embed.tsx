@@ -1,5 +1,6 @@
 import { Node, mergeAttributes, nodePasteRule } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
+import { embedSrc } from '@/lib/embed'
 
 // Video embed (YouTube / Vimeo).
 //
@@ -18,27 +19,6 @@ declare module '@tiptap/core' {
       setEmbed: (attrs: { provider: string; embedId: string; url?: string | null }) => ReturnType
     }
   }
-}
-
-export type EmbedProvider = 'youtube' | 'vimeo'
-
-// Extract the provider + id from a pasted/typed URL. Returns null when it's not a
-// supported video URL, so callers can fall back (leave it as a link).
-export function parseEmbedUrl(raw: string): { provider: EmbedProvider; id: string } | null {
-  const url = raw.trim()
-  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
-  if (yt) return { provider: 'youtube', id: yt[1] }
-  const vi = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
-  if (vi) return { provider: 'vimeo', id: vi[1] }
-  return null
-}
-
-// Build the iframe src from a validated provider + id. Returns null for anything
-// unknown — the id is assumed already validated by the caller.
-export function embedSrc(provider: string, id: string): string | null {
-  if (provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(id)) return `https://www.youtube-nocookie.com/embed/${id}`
-  if (provider === 'vimeo' && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`
-  return null
 }
 
 export const Embed = Node.create({

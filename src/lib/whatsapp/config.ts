@@ -10,6 +10,57 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
+function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = (process.env[name] || '').trim()
+  if (!raw) return fallback
+  return /^(1|true|yes|on)$/i.test(raw)
+}
+
+// ─── Living Brain (v2) staged rollout ─────────────────────────────────────────
+// Master flag for the "Living Brain" upgrade (docs/plans/2026-07-07-…). When ON,
+// the router receives an OWNER CONTEXT block (two-tier Cortex), the writer receives
+// the site's brand profile, and out-of-punts turns render the context-aware upsell.
+// When OFF, every WhatsApp turn behaves EXACTLY as today (additive, degrades cleanly).
+// Default: ON in dev, staged (opt-in) in prod — "on in dev, staged in prod" (§8).
+export const WA_BRAIN_V2 = boolEnv('WA_BRAIN_V2', process.env.NODE_ENV !== 'production')
+
+// Owner memory (§2.3): standing preferences kept as DATA, FIFO-capped. Eviction is
+// announced, never silent (E-11/C-11).
+export const WA_MEMORY_MAX_FACTS = intEnv('WA_MEMORY_MAX_FACTS', 12)
+
+// A held action (pending_action, §2.6) survives across turns for this long, then
+// expires so a stale "which blog?" never haunts a new conversation.
+export const WA_HELD_ACTION_TTL_HOURS = intEnv('WA_HELD_ACTION_TTL_HOURS', 48)
+
+// Don't repeat the same proactive nudge key within this many days (§2.4.7 / E-21).
+export const WA_NUDGE_COOLDOWN_DAYS = intEnv('WA_NUDGE_COOLDOWN_DAYS', 14)
+
+// Never two nudges in quick succession ("not two turns running", §2.4.7): stay quiet
+// if the last nudge went out within this many hours, whatever its key.
+export const WA_NUDGE_MIN_GAP_HOURS = intEnv('WA_NUDGE_MIN_GAP_HOURS', 20)
+
+// Below this many published posts a brand profile is a `seed` (inferred from
+// origin_url + onboarding only, treated as a light hint) rather than authoritative
+// brand voice distilled from real content (thin-data guard, CEO C-3d / bet B4).
+export const WA_PROFILE_MIN_POSTS = intEnv('WA_PROFILE_MIN_POSTS', 4)
+
+// A photo the owner sent sits on the thread until an article exists to put it on.
+// Kapso media references do not live forever, so past this we stop promising it.
+export const WA_PENDING_IMAGE_TTL_HOURS = intEnv('WA_PENDING_IMAGE_TTL_HOURS', 24)
+
+// AUTO-COVER, OFF BY DEFAULT (founder, 2026-09-17).
+//
+// P2.5 generated an image for EVERY draft, silently. Two things were wrong with
+// that: it spends on an illustration nobody asked for, and it pre-empts the
+// owner's own photo — the thing they actually wanted on the article. The flow is
+// now: their photo if they sent one, otherwise a one-tap offer the moment the
+// article goes live, where a missing image is most obvious.
+// Set WA_COVER_AUTO=1 to restore the old always-generate behaviour.
+export const WA_COVER_AUTO = boolEnv('WA_COVER_AUTO', false)
+
+// Theme edits via chat, per site per day (Family H, later cycle — dormant at P1).
+export const WA_THEME_EDITS_PER_DAY = intEnv('WA_THEME_EDITS_PER_DAY', 10)
+
 // Turn-Budget-1 (founder directive, 2026-06-26): drop a voice note → get a review
 // link. The agent drafts immediately on any usable topic and asks AT MOST this many
 // clarifications per thread — only when the note is empty or incomprehensible.

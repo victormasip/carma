@@ -10,8 +10,8 @@
 // It reads the very same live `capture` state from ThemeStudioContext, so there is
 // zero behavioural divergence — only the presentation is softened.
 
-import { useMemo } from 'react'
-import { Wand2, Check, AlertCircle, ArrowRight, RefreshCw, Download } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
+import { Wand2, Check, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react'
 import type { CaptureStepId } from '@/lib/render/captureProgress'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -29,9 +29,64 @@ const RUNNING_COPY: Record<CaptureStepId, string> = {
   finalize:    'Donant els últims retocs',
 }
 
-export default function ZenCaptureModal() {
+/**
+ * THE SAME PIPELINE, TOLD AS A CONTINUATION.
+ *
+ * Founder, 2026-09-17: "remove the weird jump to 'visiting your site' again
+ * before the QR code. The flow must be seamless."
+ *
+ * The jump was narrative, not technical. Coming out of onboarding the owner has
+ * just watched the Brand Brain read their website for a minute — and then this
+ * modal opened and announced "Visitant el teu lloc", as though nothing had
+ * happened. Two different passes, one website, and the product looked like it
+ * had forgotten where it had just been.
+ *
+ * The visual capture genuinely is a second pass (the brand read takes prose; this
+ * takes the header, the footer and the stylesheets), so it cannot be skipped. But
+ * it can stop introducing itself. When `continued` is set, every line says
+ * "carrying on" instead of "starting", and the success state advances on its own
+ * rather than parking one more button between the owner and the QR.
+ */
+const CONTINUED_COPY: Record<CaptureStepId, string> = {
+  fetch:       'Ara, el disseny',
+  analyze:     'Mirant com està fet',
+  regions:     'Agafant la teva capçalera i el teu peu',
+  styles:      'Copiant colors i tipografies',
+  reconstruct: 'Vestint el teu blog amb tot plegat',
+  finalize:    'Donant els últims retocs',
+}
+
+/** How long the success state is allowed to be admired before the flow moves on.
+ *  Long enough to register as an answer, short enough not to be a wait. */
+const CONTINUE_DELAY_MS = 1_600
+
+export default function ZenCaptureModal({ continued = false }: {
+  /** True when this capture is the second half of onboarding, moments after the
+   *  Brand Brain finished reading the very same website. See CONTINUED_COPY. */
+  continued?: boolean
+}) {
   const { capture, url, grab, closeCapture, cancelCapture, proceedFromCapture, detectedFramework, isPremium } = useThemeStudio()
   const { open, phase, pct, activeStep } = capture
+
+  // ADVANCE ONCE, AND ONLY ONCE.
+  //
+  // `proceedFromCapture` is not idempotent downstream: the second call finds
+  // `wpImportIntent` already consumed and overwrites the queued article import
+  // with nothing (see handleCaptureProceed in SiteDetailClient). So the auto-
+  // advance and the button share one latch, and whichever fires first wins.
+  const advanced = useRef(false)
+  const proceedOnce = () => {
+    if (advanced.current) return
+    advanced.current = true
+    proceedFromCapture()
+  }
+
+  useEffect(() => {
+    if (!continued || !open || phase !== 'success' || advanced.current) return
+    const t = setTimeout(proceedOnce, CONTINUE_DELAY_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [continued, open, phase])
 
   // When the captured site is WordPress, its articles can be imported next — so
   // the success state ADAPTS to what we actually found instead of always showing
@@ -47,17 +102,21 @@ export default function ZenCaptureModal() {
   const headline =
     phase === 'success' ? 'Tot a punt'
     : phase === 'error' ? 'No ha anat bé'
-    : RUNNING_COPY[activeStep ?? 'fetch']
+    : (continued ? CONTINUED_COPY : RUNNING_COPY)[activeStep ?? 'fetch']
 
   // On success, the subline answers "…and how does this go live?" — plan- and
   // CMS-aware (subdomain inherits the cloned chrome; the WP plugin defers to the
-  // theme). WordPress captures also invite the article import that follows.
+  // theme). WordPress captures also announce the article import that follows
+  // (AFTER the WhatsApp connect step, per the 2026-07-13 flow order).
   const subline =
     phase === 'success'
       ? (isWordPress
-          ? `Hem detectat WordPress: pots importar els teus articles ara. ${captureChromeNote(detectedFramework, isPremium)}`
+          ? `Hem detectat WordPress: de seguida importarem els teus articles. ${captureChromeNote(detectedFramework, isPremium)}`
           : `El teu blog ja llueix com el teu lloc. ${captureChromeNote(detectedFramework, isPremium)}`)
     : phase === 'error' ? (capture.error ?? 'Torna-ho a provar d’aquí a un moment.')
+    // "des de <host>" reads as an announcement of a NEW visit. Mid-onboarding we
+    // have just come from there, so the line says so instead.
+    : continued ? 'Seguim on ho havíem deixat'
     : host ? `des de ${host}` : 'Hi treballem ara mateix…'
 
   const statusKey = `${phase}:${activeStep ?? 'fetch'}`
@@ -89,15 +148,13 @@ export default function ZenCaptureModal() {
             </button>
           )}
           {phase === 'success' && (
-            isWordPress ? (
-              <Button glow fullWidth onClick={proceedFromCapture} iconLeft={<Download className="h-4 w-4" />}>
-                Importa els teus articles
-              </Button>
-            ) : (
-              <Button glow fullWidth onClick={proceedFromCapture} iconRight={<ArrowRight className="h-4 w-4" />}>
-                Comencem
-              </Button>
-            )
+            // One honest CTA: the flow decides what comes next (WhatsApp
+            // connect, then the article import when there's a source blog).
+            // Mid-onboarding it is a safety net rather than a gate — the effect
+            // above advances on its own a beat later.
+            <Button glow fullWidth onClick={proceedOnce} iconRight={<ArrowRight className="h-4 w-4" />}>
+              {continued ? 'Seguim' : 'Continuar'}
+            </Button>
           )}
           {phase === 'error' && (
             <div className="flex flex-col gap-2">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
+import { publicSiteUrl } from '@/lib/sites/domain'
 import {
   Sparkles, Code2, Cloud, Copy, Check, Info, AlertTriangle,
   ChevronDown, ChevronUp, ExternalLink, MousePointerClick, Zap,
@@ -53,11 +54,14 @@ function getRecommendation(
 
 export default function IntegrationGuide({
   siteId,
+  subdomain = null,
   apiKey,
   detectedFramework = null,
   detectedHosting = null,
 }: {
   siteId: string
+  /** sites.subdomain — proxy targets point at the public blog, not /render. */
+  subdomain?: string | null
   apiKey: string
   detectedFramework?: string | null
   detectedHosting?: string | null
@@ -77,7 +81,11 @@ export default function IntegrationGuide({
     () => 'https://your-carma.com',
   )
 
-  const renderUrl = `${origin}/render/${siteId}`
+  // Everything below is a REVERSE-PROXY TARGET the client puts in their own
+  // infrastructure — it outlives this page, so it points at the blog's public
+  // address whenever there is one, not at the internal engine path.
+  const publicUrl = publicSiteUrl({ id: siteId, subdomain }, {}).replace(/\/$/, '')
+  const renderUrl = publicUrl.startsWith('http') ? publicUrl : `${origin}${publicUrl}`
   const apiUrl = `${origin}/api/v1/posts`
 
   const fwLabel = detectedFramework ? (FRAMEWORK_LABEL[detectedFramework] ?? detectedFramework) : null

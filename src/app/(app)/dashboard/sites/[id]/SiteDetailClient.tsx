@@ -9,13 +9,17 @@ import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
 import SiteOnboarding from './SiteOnboarding'
+// A three-line localStorage read — not worth a lazy chunk of its own, and it
+// has to resolve before we decide whether to load the panel at all.
+import { wpDiscoveryDismissed } from './WordPressDiscovery'
 import { LockBadge, PremiumPanel } from './PremiumGate'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { publicBlogUrl } from '@/lib/sites/domain'
+import { publicSiteUrl } from '@/lib/sites/domain'
+import { useOpenBlog } from '@/lib/sites/useBlogUrl'
 import { updateSiteLogo } from '@/lib/actions/sites'
 import { formatDate } from '@/lib/format'
 
@@ -29,6 +33,8 @@ import { formatDate } from '@/lib/format'
 // /edit/[siteId] — the Tema tab is a launcher, not an embed.)
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
+// The WordPress moment (Fase 2). Lazy: it renders once, for WordPress sites only.
+const WordPressDiscovery = lazy(() => import('./WordPressDiscovery'))
 const ModulesManager = lazy(() => import('./ModulesManager'))
 // The Connexió/Publicar tab: ApiDocsCard alone drags in the (huge) static
 // IntegrationGuide, and none of it renders on the default Articles tab.
@@ -42,7 +48,7 @@ import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioCo
 import type { PostsMeta } from './PostsManager'
 import type { PostListItem } from '@/lib/actions/posts'
 import type { SiteStats } from '@/lib/analytics/read'
-import type { SiteModules } from '@/lib/modules/registry'
+import type { SiteModules, ModuleTier } from '@/lib/modules/registry'
 
 type Post = PostListItem
 type AssignedUser = { user_id: string; email: string }
@@ -66,6 +72,12 @@ type Props = {
   defaultTab: TabKey
   /** When present (self-serve funnel), auto-starts the Magic Wand on this URL. */
   autoCloneUrl?: string
+  /** Arrived via "encara no tinc web" (?nova=1): open the onboarding on the
+   *  template picker, since there is nothing to capture. */
+  startWithoutSite?: boolean
+  /** Where this blog was cloned from (sites.origin_url). The import prefills
+   *  from it, so "importa articles" never asks which website again. */
+  originUrl?: string | null
   /** False when this user has no ACTIVE WhatsApp identity → show the connect step. */
   waConnected?: boolean
   siteDefaultLocale?: string
@@ -73,6 +85,8 @@ type Props = {
   regenCount?: number
   /** Smart Modules config (site_themes.modules). */
   initialModules?: SiteModules | null
+  /** The account's real plan — decides which modules/archetypes are reachable. */
+  plan?: ModuleTier
   /** First published post slug, for the Modules tab's article preview. */
   previewPostSlug?: string
 }
@@ -99,28 +113,45 @@ const CLIENT_MODULES_ENABLED = true
 export default function SiteDetailClient({
   siteId, siteName, siteCreatedAt, apiKey, subdomain,
   isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
-  initialStats, defaultTab, autoCloneUrl, waConnected = true, siteDefaultLocale, regenCount = 0,
-  initialModules = null, previewPostSlug,
+  initialStats, defaultTab, autoCloneUrl, startWithoutSite = false, originUrl, waConnected = true, siteDefaultLocale, regenCount = 0,
+  initialModules = null, plan = 'free', previewPostSlug,
 }: Props) {
   const { toast } = useToast()
   const router = useRouter()
+  const openBlog = useOpenBlog({ id: siteId, subdomain })
   // Hide the Smart Modules tab from clients for the MVP (see CLIENT_MODULES_ENABLED).
   const hideModules = !isSuperAdmin && !CLIENT_MODULES_ENABLED
   const coerceTab = (t: TabKey): TabKey => (hideModules && t === 'moduls' ? 'articles' : t)
   const [activeTab, setActiveTab] = useState<TabKey>(coerceTab(defaultTab))
   const [showImport, setShowImport] = useState(false)
+  // Shown on the first dashboard visit after a WordPress clone. Starts true and is
+  // narrowed by the framework check + the remembered dismissal inside the panel's
+  // host below, so a non-WordPress site never pays for the check.
+  const [wpDiscoveryOpen, setWpDiscoveryOpen] = useState(true)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
+  /** True while the running capture is the continuation of a brand read. */
+  const [cloneContinues, setCloneContinues] = useState(false)
   // Onboarding is for any pristine site — superadmins provisioning a client site
   // AND self-serve users landing on their freshly-created first blog.
   const showOnboarding = isNewSite && !onboardingDone
-  // Últim pas de l'onboarding (founder 2026-07-06): connectar l'agent de
-  // WhatsApp com a PAS evident — però saltable. Només per a clients sense
-  // identitat activa; l'operador (superadmin) no el necessita.
+  // Pas de l'onboarding (founder 2026-07-06, reordenat 2026-07-13): connectar
+  // l'agent de WhatsApp com a PAS evident — però saltable — que ara va ABANS
+  // de la importació de WordPress (Plantilla/Clonatge → WhatsApp → Importació).
+  // Només per a clients sense identitat activa; l'operador no el necessita.
+  // `afterAgentStep` encadena el que ve després (obrir l'ImportModal) quan el
+  // pas es tanca — connectat O saltat, el flux mai queda penjat.
   const [agentStepVisible, setAgentStepVisible] = useState(false)
-  const maybeShowAgentStep = () => {
-    if (!waConnected && !isSuperAdmin) setAgentStepVisible(true)
+  const afterAgentStep = useRef<(() => void) | null>(null)
+  /** Shows the agent step (when applicable) and queues `next` for its close.
+   *  Returns false when the step isn't needed — caller runs `next` itself. */
+  const showAgentStepThen = (next?: () => void): boolean => {
+    if (waConnected || isSuperAdmin) return false
+    afterAgentStep.current = next ?? null
+    setAgentStepVisible(true)
+    return true
   }
+  const maybeShowAgentStep = () => { showAgentStepThen() }
   const wpImportIntent = useRef(false)
   // True while the post-clone onboarding sequence is running (capture → optional
   // article import → done). NO layout step: the clone replicates the source's
@@ -156,9 +187,13 @@ export default function SiteDetailClient({
   // the source's articles imported after the capture; a styles-only clone (or
   // cloning someone ELSE's blog — never their content) does not. Default true
   // preserves the self-serve funnel's historic behaviour.
-  const handleMagicWandStarted = (opts?: { importArticles?: boolean }) => {
+  const handleMagicWandStarted = (opts?: { importArticles?: boolean; afterBrandRead?: boolean }) => {
     wpImportIntent.current = opts?.importArticles ?? true
     onboardingFlow.current = true
+    // The clone is the SECOND pass over the same website. Telling the capture
+    // modal so is what stops it announcing a fresh visit (and what lets it
+    // advance to the WhatsApp step on its own instead of parking a button).
+    setCloneContinues(!!opts?.afterBrandRead)
     setOnboardingDone(true)
     // Self-serve (arrived with a clone URL): drop the user straight onto Articles —
     // the site already exists and the clone + any import run in the background.
@@ -185,20 +220,22 @@ export default function SiteDetailClient({
     captureInfo.current = { url, framework }
   }
 
-  // Fired when the user clicks the capture success CTA ("Importa els articles" /
-  // "Comencem" / "Editar el tema"). THIS is the moment we advance the onboarding.
+  // Fired when the user clicks the capture success CTA ("Continuar"). THIS is
+  // the moment we advance the onboarding. NEW ORDER (2026-07-13): the WhatsApp
+  // connect step comes FIRST; the article import opens right after it closes.
   const handleCaptureProceed = ({ framework, blogUrl }: { framework: string | null; blogUrl: string | null }) => {
     void framework // import is no longer WP-only — discover handles WP API, RSS and HTML
     if (wpImportIntent.current) {
-      // Full-clone intent: open the article import. Discovery targets the BLOG
-      // URL when the detector found one (site.com/blog) — the web root would
-      // "discover" corporate pages, not articles.
+      // Full-clone intent: article import queued AFTER the agent step. Discovery
+      // targets the BLOG URL when the detector found one (site.com/blog) — the
+      // web root would "discover" corporate pages, not articles.
       wpImportIntent.current = false
-      setImportUrl(blogUrl || captureInfo.current.url)
-      setShowImport(true)
+      const target = blogUrl || captureInfo.current.url
+      const openImport = () => { setImportUrl(target); setShowImport(true) }
+      if (!showAgentStepThen(openImport)) openImport()
     } else if (onboardingFlow.current) {
-      // Styles-only clone: the captured design (cards included) IS the look —
-      // nothing to choose. Done.
+      // No source articles to import: the captured design (cards included) IS
+      // the look — connect the agent and we're done.
       onboardingFlow.current = false
       toast('El teu blog està llest ✨', 'success')
       maybeShowAgentStep()
@@ -230,19 +267,13 @@ export default function SiteDetailClient({
           </div>
         </div>
 
-        {/* Prominent "Veure lloc" — the premium gold CTA. Opens the site's own
-            subdomain when available (falls back to /render/<id>), with a fresh
-            ?v= cache-buster at click time; the href keeps middle-click working. */}
+        {/* Prominent "Veure lloc" — the premium gold CTA. The href is the blog's
+            real public address (hydration-safe: publicSiteUrl needs no browser in
+            production), and the click upgrades it with the dev port + a fresh
+            cache-buster. Middle-click still works because the href is real. */}
         <Button
-          href={`/render/${siteId}`}
-          onClick={(e) => {
-            e.preventDefault()
-            const v = Date.now()
-            const subUrl = subdomain
-              ? publicBlogUrl(subdomain, { currentHost: window.location.host, path: `/?v=${v}` })
-              : null
-            window.open(subUrl ?? `/render/${siteId}?v=${v}`, '_blank', 'noopener,noreferrer')
-          }}
+          href={publicSiteUrl({ id: siteId, subdomain })}
+          onClick={(e: React.MouseEvent) => { e.preventDefault(); openBlog() }}
           target="_blank"
           rel="noopener noreferrer"
           glow
@@ -256,6 +287,7 @@ export default function SiteDetailClient({
       {/* Section workspace: a left nav rail + the active section's content. */}
       <ThemeStudioProvider
         siteId={siteId}
+        subdomain={subdomain ?? null}
         initialTheme={initialTheme}
         defaultLocale={siteDefaultLocale}
         canTranslate={isSuperAdmin}
@@ -264,13 +296,15 @@ export default function SiteDetailClient({
         onCaptureSuccess={handleCaptureSuccess}
         onCaptureProceed={handleCaptureProceed}
       >
-        <ThemeCaptureModal isSuperAdmin={isSuperAdmin} />
+        <ThemeCaptureModal isSuperAdmin={isSuperAdmin} continued={cloneContinues} />
 
         {showOnboarding && (
           <SiteOnboarding
+            siteId={siteId}
             siteName={siteName}
             initialUrl={autoCloneUrl}
             autoStart={!!autoCloneUrl}
+            startOnTemplates={startWithoutSite}
             onMagicWandStarted={handleMagicWandStarted}
             onTemplateApplied={handleTemplateApplied}
             onDismiss={() => setOnboardingDone(true)}
@@ -285,6 +319,11 @@ export default function SiteDetailClient({
                 // waConnected és un prop del servidor: refresquem perquè el
                 // recordatori (banner) desaparegui just després de connectar.
                 if (connected) router.refresh()
+                // Encadena el pas següent (p. ex. la importació d'articles) —
+                // tant si s'ha connectat com si s'ha saltat.
+                const next = afterAgentStep.current
+                afterAgentStep.current = null
+                next?.()
               }}
             />
           </Suspense>
@@ -296,11 +335,25 @@ export default function SiteDetailClient({
           {/* Suggeriment discret (descartable) per connectar l'agent de WhatsApp. */}
           {!waConnected && !showOnboarding && <ConnectAgentBanner />}
 
+          {/* The WordPress moment: only for a site we detected as WordPress, only
+              once, and only after onboarding is out of the way. */}
+          {wpDiscoveryOpen && !showOnboarding && !agentStepVisible && (
+            <Suspense fallback={null}>
+              <WordPressDiscoveryHost
+                siteId={siteId}
+                onImport={() => { setShowImport(true); setWpDiscoveryOpen(false) }}
+                onOpenGuide={() => { switchTab('connexio'); setWpDiscoveryOpen(false) }}
+                onDismiss={() => setWpDiscoveryOpen(false)}
+              />
+            </Suspense>
+          )}
+
           <div className="min-w-0">
             {activeTab === 'resum' && (
               <Suspense fallback={<SectionSkeleton />}>
                 <OverviewPanel
                   siteId={siteId}
+                  subdomain={subdomain ?? null}
                   totalArticles={initialPostsMeta.total}
                   publishedArticles={initialPostsMeta.published}
                   initialStats={initialStats}
@@ -311,6 +364,7 @@ export default function SiteDetailClient({
             {activeTab === 'articles' && (
               <PostsManager
                 siteId={siteId}
+                subdomain={subdomain ?? null}
                 siteName={siteName}
                 initialPosts={initialPosts}
                 initialMeta={initialPostsMeta}
@@ -326,8 +380,10 @@ export default function SiteDetailClient({
                 <Suspense fallback={<SectionSkeleton />}>
                   <ModulesManager
                     siteId={siteId}
+                    subdomain={subdomain ?? null}
                     isPremium={isSuperAdmin}
                     initialModules={initialModules}
+                    plan={plan}
                     previewPostSlug={previewPostSlug}
                   />
                 </Suspense>
@@ -360,17 +416,21 @@ export default function SiteDetailClient({
           <ImportModal
             siteId={siteId}
             isSuperAdmin={isSuperAdmin}
-            autoDiscoverUrl={importUrl ?? undefined}
+            // The URL from a just-finished clone if we have one, otherwise the
+            // site's own origin. Founder: "quan li dones a importar hauria de
+            // detectar ja automaticament de quina web es… perque ara et torna a
+            // demanar url". We have always known the answer; we just never used it.
+            autoDiscoverUrl={importUrl ?? originUrl ?? undefined}
             onClose={() => {
               setShowImport(false)
               setImportUrl(null)
               // Full-clone onboarding ends here — the imported articles render
               // inside the CLONED design (cards included); nothing to choose.
+              // (The WhatsApp step already happened BEFORE the import.)
               if (onboardingFlow.current) {
                 onboardingFlow.current = false
                 router.refresh()
                 toast('El teu blog està llest ✨', 'success')
-                maybeShowAgentStep()
               }
             }}
           />
@@ -572,6 +632,49 @@ function StudioLaunchPanel({ siteId }: { siteId: string }) {
   )
 }
 
+/**
+ * Gate for the WordPress moment.
+ *
+ * Split out so the panel itself stays a dumb presentational component and the
+ * three conditions that decide whether it appears live in one readable place:
+ * the capture detected WordPress, this viewer has not dismissed it for this site,
+ * and we are past the mount (the dismissal lives in localStorage, which a server
+ * render cannot see — reading it during render would hydrate mismatched).
+ */
+function WordPressDiscoveryHost({
+  siteId, onImport, onOpenGuide, onDismiss,
+}: {
+  siteId: string
+  onImport: () => void
+  onOpenGuide: () => void
+  onDismiss: () => void
+}) {
+  const { detectedFramework, url } = useThemeStudio()
+  // localStorage is external state, so it is SUBSCRIBED to, not copied into state
+  // by an effect (a synchronous setState in an effect body is a cascading render —
+  // react-hooks v6 flags it and this repo runs at zero). The server snapshot is
+  // `true` = hidden, so the markup matches on both sides and the panel appears
+  // after hydration rather than flashing and disappearing.
+  const dismissed = useSyncExternalStore(
+    () => () => {},
+    () => wpDiscoveryDismissed(siteId),
+    () => true,
+  )
+
+  const isWordPress = (detectedFramework ?? '').toLowerCase().includes('wordpress')
+  if (dismissed || !isWordPress) return null
+
+  return (
+    <WordPressDiscovery
+      siteId={siteId}
+      originUrl={url || null}
+      onImport={onImport}
+      onOpenGuide={onOpenGuide}
+      onDismiss={onDismiss}
+    />
+  )
+}
+
 function ConnexioTab({ siteId, apiKey, subdomain }: { siteId: string; apiKey: string; subdomain?: string }) {
   const { hasTheme, detectedFramework, detectedHosting } = useThemeStudio()
   return (
@@ -581,6 +684,7 @@ function ConnexioTab({ siteId, apiKey, subdomain }: { siteId: string; apiKey: st
       <ApiDocsCard
         apiKey={apiKey}
         siteId={siteId}
+        subdomain={subdomain ?? null}
         detectedFramework={detectedFramework}
         detectedHosting={detectedHosting}
         themeConfigured={hasTheme}

@@ -16,6 +16,7 @@
 import OpenAI, { toFile } from 'openai'
 import { safeFetchBinary } from '@/lib/scrape/http'
 import { KAPSO_API_BASE, KAPSO_GRAPH_VERSION } from './config'
+import { assessTranscript, type TranscriptConfidence, type TranscriptSegment } from './transcript'
 
 // whisper-1 is the directed model; overridable per the project's env convention.
 const TRANSCRIBE_MODEL = process.env.WA_TRANSCRIBE_MODEL || 'whisper-1'
@@ -113,16 +114,22 @@ function extForType(contentType: string): string {
   return EXT_BY_TYPE[base] ?? 'ogg'
 }
 
+export type TranscriptResult = { text: string; confidence: TranscriptConfidence }
+
 /**
  * Transcribe an audio buffer with OpenAI Whisper. Throws on missing key or a
  * provider error (the worker catches it → localized casual retry, E10).
  * `language` is an optional ISO-639-1 hint; Whisper auto-detects when omitted.
+ *
+ * Returns the text PLUS a confidence verdict from verbose_json's segment logprobs
+ * (E-16). Segment metrics are only available on the whisper-* models; on any other
+ * model (or if the field is absent) confidence degrades to "not low" — never blocks.
  */
 export async function transcribeAudio(
   audio: Uint8Array,
   contentType: string,
   opts: { language?: string } = {},
-): Promise<string> {
+): Promise<TranscriptResult> {
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY no està configurada')
 
   const client = new OpenAI({ maxRetries: 1 })
@@ -130,11 +137,19 @@ export async function transcribeAudio(
     type: contentType.split(';')[0]?.trim() || 'audio/ogg',
   })
 
-  const res = await client.audio.transcriptions.create({
+  // verbose_json (with segment metrics) is a whisper-* feature; other models reject it.
+  const useVerbose = /whisper/i.test(TRANSCRIBE_MODEL)
+  const res = (await client.audio.transcriptions.create({
     file,
     model: TRANSCRIBE_MODEL,
+    ...(useVerbose ? { response_format: 'verbose_json' as const } : {}),
     ...(opts.language ? { language: opts.language } : {}),
-  })
+  })) as { text?: string; segments?: TranscriptSegment[] }
 
-  return (res.text ?? '').trim()
+  const text = (res.text ?? '').trim()
+  const confidence = useVerbose
+    ? assessTranscript(text, Array.isArray(res.segments) ? res.segments : [])
+    : { avgLogprob: null, noSpeechProb: null, compressionRatio: null, lowConfidence: false }
+
+  return { text, confidence }
 }

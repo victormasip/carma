@@ -10,7 +10,7 @@
 // pendents) compta com a "no complert", mai com un error de pàgina.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { KarmaRewardKey } from './config'
+import { KARMA_REWARDS, type KarmaRewardKey } from './config'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -88,6 +88,21 @@ export async function checkRewardEligibility(
         const ids = siteIds ?? await userSiteIds(admin, userId)
         return anyModuleEnabled(themes ?? await fetchThemes(admin, ids))
       }
+
+      case 'aparador': {
+        // Complert quan ALMENYS UN dels seus blogs ha dit que sí a l'aparador.
+        //
+        // 42703-safe cap a NO COMPLERT, no cap a complert: sense la migració 038
+        // la columna no existeix, i per tant ningú hi ha dit que sí. Regalar 40
+        // punts per una decisió que encara no es pot prendre seria pagar per res.
+        const ids = siteIds ?? await userSiteIds(admin, userId)
+        if (!ids.length) return false
+        const { count, error } = await admin
+          .from('sites').select('id', { count: 'exact', head: true })
+          .in('id', ids).eq('showcase', true)
+        if (error) return false
+        return (count ?? 0) > 0
+      }
     }
   } catch { return false }
 }
@@ -97,7 +112,7 @@ export async function getRewardStates(
   admin: Admin,
   userId: string,
 ): Promise<Record<KarmaRewardKey, RewardState>> {
-  const keys: KarmaRewardKey[] = ['benvinguda', 'primer_article', 'whatsapp_connectat', 'estudi_fet', 'primer_modul']
+  const keys: KarmaRewardKey[] = ['benvinguda', 'primer_article', 'whatsapp_connectat', 'estudi_fet', 'primer_modul', 'aparador']
 
   let claimed = new Set<string>()
   try {
@@ -118,4 +133,25 @@ export async function getRewardStates(
   }))
 
   return Object.fromEntries(entries) as Record<KarmaRewardKey, RewardState>
+}
+
+/**
+ * The first repte the owner can claim RIGHT NOW (eligible + unclaimed), for the
+ * context-aware out-of-punts upsell (§3.3). Best-effort; null when none is claimable
+ * or pre-migration. Honest by construction: only surfaces reptes truly ready to redeem.
+ */
+export async function firstUnclaimedReward(
+  admin: Admin,
+  userId: string,
+): Promise<{ title: string; amount: number } | null> {
+  try {
+    const states = await getRewardStates(admin, userId)
+    for (const r of KARMA_REWARDS) {
+      const st = states[r.key]
+      if (st?.eligible && !st.claimed) return { title: r.title, amount: r.amount }
+    }
+  } catch {
+    /* pre-migration or transient — the upsell falls back to the generic reptes line */
+  }
+  return null
 }

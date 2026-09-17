@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, Wand2, MessageCircle, Palette, Sparkles, Users } from 'lucide-react'
+import { LayoutDashboard, Settings, Wand2, MessageCircle, Palette, Sparkles, Users, Activity, FlaskConical } from 'lucide-react'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { cn } from '@/lib/cn'
 import SiteSwitcher, { type SwitcherSite } from './SiteSwitcher'
@@ -64,6 +64,12 @@ export default function SidebarNav({ isSuperAdmin, sites, plan = 'free' }: { isS
         {isSuperAdmin && (
           <>
             <NavItem
+              href="/admin/agent"
+              active={pathname.startsWith('/admin/agent')}
+              icon={<Activity className="w-4 h-4" />}
+              label="Instrumentació"
+            />
+            <NavItem
               href="/admin/users"
               active={pathname.startsWith('/admin/users')}
               icon={<Users className="w-4 h-4" />}
@@ -74,6 +80,12 @@ export default function SidebarNav({ isSuperAdmin, sites, plan = 'free' }: { isS
               active={pathname.startsWith('/admin/grabber-lab')}
               icon={<Wand2 className="w-4 h-4" />}
               label="Grabber Lab"
+            />
+            <NavItem
+              href="/admin/grabber-eval"
+              active={pathname.startsWith('/admin/grabber-eval')}
+              icon={<FlaskConical className="w-4 h-4" />}
+              label="Grabber Eval"
             />
           </>
         )}

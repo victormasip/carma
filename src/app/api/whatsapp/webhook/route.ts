@@ -34,16 +34,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/ratelimit'
 import { WA_WINDOW_HOURS } from '@/lib/whatsapp/config'
-import { sendWhatsApp } from '@/lib/whatsapp/kapso'
+import { sendWhatsApp, sendWhatsAppButtons } from '@/lib/whatsapp/kapso'
 import { publishThreadDraft } from '@/lib/whatsapp/publish'
-import { generateNanoBananaCover, coverImageEnabled } from '@/lib/whatsapp/coverImage'
+import { generateAndAttachCover, coverImageEnabled } from '@/lib/whatsapp/coverImage'
+import { attachHeldPhoto } from '@/lib/whatsapp/executors/image'
 import { spendKarma, outOfPuntsMessage } from '@/lib/karma/karma'
-import { inboundMatchesCode } from '@/lib/whatsapp/verify'
+import { inboundMatchesCode, extractVerifyCode } from '@/lib/whatsapp/verify'
 import { runDueJobs, logOutbound } from '@/lib/whatsapp/worker'
-import { WA_BUTTON, type WaMsgType } from '@/lib/whatsapp/types'
+import { WA_BUTTON, type WaAgentState, type WaMsgType } from '@/lib/whatsapp/types'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 // after() work counts against maxDuration. 300s fits Vercel Fluid on every plan and
 // leaves room for one full generation (OpenAI timeout 160s) plus the pipeline.
 export const maxDuration = 300
@@ -74,9 +73,14 @@ function verifyKapso(rawBody: string, signatureHeader: string | null): boolean {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function toMsgType(kapsoType: string): WaMsgType {
-  if (kapsoType === 'audio' || kapsoType === 'voice') return 'audio'
-  if (kapsoType === 'image') return 'image'
-  return 'text'
+  const t = (kapsoType || '').toLowerCase()
+  if (t === 'audio' || t === 'voice') return 'audio'
+  if (t === 'image') return 'image'
+  if (t === 'text') return 'text'
+  // video / document / sticker / location / contact(s) / anything else → tagged so the
+  // worker answers with a friendly, ZERO-LLM template instead of "no m'ha arribat res"
+  // (B5). (Interactive button taps are read by readButton() before this ever matters.)
+  return 'unsupported'
 }
 
 // Read an interactive postback (the owner tapped an Approve/Edit/… button). Covers
@@ -282,6 +286,72 @@ async function processInbound(i: Inbound): Promise<void> {
     return
   }
 
+  // 4b. CLAIM BY CODE (migration 035). A number we have never seen texts us a
+  //     six-digit code: if it matches a live, phone-less claim, that number
+  //     becomes the claimant's. This is the whole of "zero typing" — the owner
+  //     never tells us their number, they prove it.
+  //
+  //     Only reachable when 4a did not match, i.e. there is no row for this
+  //     phone at all, so it can never hijack an existing binding.
+  if (!identity) {
+    const bodyText =
+      typeof (message.text as Record<string, unknown> | undefined)?.body === 'string'
+        ? ((message.text as Record<string, unknown>).body as string)
+        : ''
+    const code = extractVerifyCode(bodyText)
+    if (code) {
+      // Tighter than the 4a budget: this one is reachable by any stranger, and a
+      // six-digit space deserves a real ceiling rather than a polite one.
+      if (!rateLimit(`wa-claim:${phone}`, 5, 60 * 60_000).ok) return
+
+      const { data: claim } = await admin
+        .from('wa_identities')
+        .select('id, user_id, verify_expires_at')
+        .eq('status', 'pending')
+        .eq('verify_code', code)
+        .is('phone_e164', null)
+        .maybeSingle()
+
+      const fresh = claim?.verify_expires_at
+        ? new Date(claim.verify_expires_at).getTime() > Date.now()
+        : false
+
+      if (claim && fresh) {
+        const nowIso = new Date().toISOString()
+        const { error } = await admin
+          .from('wa_identities')
+          .update({
+            phone_e164: phone,
+            status: 'active',
+            verified_at: nowIso,
+            opt_in_at: nowIso,
+            verify_code: null,
+            verify_expires_at: null,
+          })
+          .eq('id', claim.id)
+          // Only if nobody else claimed it in the meantime.
+          .eq('status', 'pending')
+        if (!error) {
+          if (DEV) console.log(`[wa/webhook] claimed ${phone} → user ${claim.user_id}`)
+          await sendWhatsApp(
+            phone,
+            '✅ Ja estem connectats! Envia\'m una nota de veu o un text amb la idea i et preparo un esborrany.',
+            phoneNumberId,
+          )
+          return
+        }
+      }
+      // A wrong or stale code says so plainly. Saying nothing here is how the
+      // owner concludes the product is broken.
+      await sendWhatsApp(
+        phone,
+        'Aquest codi no em consta o ja ha caducat. Obre Carma, genera\'n un de nou i torna-me\'l a enviar.',
+        phoneNumberId,
+      )
+      return
+    }
+  }
+
   if (!identity || identity.status !== 'active') {
     if (DEV) console.log(`[wa/webhook] dropped: no ACTIVE wa_identities row for ${phone} (status=${identity?.status ?? 'none'})`)
     return
@@ -364,12 +434,18 @@ async function processInbound(i: Inbound): Promise<void> {
   const mediaUrl =
     (typeof kapso?.media_url === 'string' ? (kapso.media_url as string) : null) ??
     (typeof mediaData?.url === 'string' ? (mediaData.url as string) : null)
+  // Caption on image/video/document arrives under the media node, not message.text.
   const text = typeof (message.text as Record<string, unknown> | undefined)?.body === 'string'
     ? ((message.text as Record<string, unknown>).body as string)
-    : null
+    : typeof mediaNode?.caption === 'string'
+      ? (mediaNode.caption as string)
+      : null
+  // B4/C-12: persist the media reference so a promise like "he rebut la foto" is real.
+  const mediaPath = mediaUrl ?? mediaId ?? null
   const jobPayload = {
     candidate_site_ids: candidateSiteIds,
     msg_type: msgType,
+    kapso_type: kapsoType, // the specific type, so the worker varies the B5 template
     media_id: mediaId,
     media_url: mediaUrl,
     phone_number_id: phoneNumberId,
@@ -378,7 +454,7 @@ async function processInbound(i: Inbound): Promise<void> {
   // Idempotent insert: UNIQUE(wa_message_id) is the dedupe guard.
   const { data: msgRow, error: mErr } = await admin
     .from('wa_messages')
-    .insert({ thread_id: threadId, direction: 'in', wa_message_id: sid, msg_type: msgType, text, raw: body })
+    .insert({ thread_id: threadId, direction: 'in', wa_message_id: sid, msg_type: msgType, text, media_path: mediaPath, raw: body })
     .select('id')
     .single()
 
@@ -432,7 +508,11 @@ async function handleButton(
   if (button.id === WA_BUTTON.approve) {
     const res = await publishThreadDraft(admin, threadId, host)
     const reply = res.ok
-      ? (res.already ? `Aquest article ja és online 🎉\n${res.url}` : `Publicat! 🎉 Ja és online:\n${res.url}`)
+      ? (res.already
+          ? `Aquest article ja és online 🎉\n${res.url}`
+          : res.applied
+            ? `Fet — els canvis ja són a l’article 🎉\n${res.url}`
+            : `Publicat! 🎉 Ja és online:\n${res.url}`)
       : res.reason === 'expired'
         ? 'Aquest esborrany ja ha caducat 😕 Envia’m el tema un altre cop i te’n preparo un de nou.'
         : res.reason === 'no_draft'
@@ -440,6 +520,36 @@ async function handleButton(
           : 'Ups, no he pogut publicar-lo 😕 Torna-ho a provar d’aquí un moment.'
     if (res.ok) await admin.from('wa_threads').update({ agent_state: { ...stateNow, phase: 'done' } }).eq('id', threadId)
     await say(reply)
+
+    // THE PROACTIVE COVER OFFER, on the path most people actually publish by.
+    // Drafts no longer arrive with a generated image (see WA_COVER_AUTO), so the
+    // moment an article goes live without one is the moment to ask — one tap,
+    // nothing spent until they take it.
+    if (res.ok && coverImageEnabled()) {
+      const postId = (th?.current_post_id as string | null) ?? null
+      const offeredFor = (stateNow as unknown as WaAgentState).cover_offered_for
+      if (postId && offeredFor !== postId) {
+        const { data: post } = await admin.from('posts').select('featured_image').eq('id', postId).maybeSingle()
+        if (!post?.featured_image) {
+          const offer = 'Li falta la foto de portada. Vols que te’n prepari una? 🎨'
+          const ok = await sendWhatsAppButtons(
+            phone,
+            offer,
+            [
+              { id: WA_BUTTON.coverYes, title: '🎨 Sí, fes-me-la' },
+              { id: WA_BUTTON.coverNo, title: 'Així està bé' },
+            ],
+            phoneNumberId,
+          )
+          if (ok) {
+            await logOutbound(admin, threadId, offer)
+            await admin.from('wa_threads')
+              .update({ agent_state: { ...stateNow, phase: 'done', cover_offered_for: postId } })
+              .eq('id', threadId)
+          }
+        }
+      }
+    }
     return
   }
 
@@ -475,17 +585,47 @@ async function handleButton(
       }
     }
     await say('✨ Perfecte! Estic preparant la portada…')
-    const res = await generateNanoBananaCover(admin, postId, { siteId: (th?.site_id as string | null) ?? null })
+    const res = await generateAndAttachCover(admin, postId, { siteId: (th?.site_id as string | null) ?? null })
     const reply = res.ok
-      ? (res.mocked
-          ? '🖼️ Portada encarregada! (mode de proves — quan activem el generador d’imatges apareixerà a l’article). Pots publicar quan vulguis.'
-          : `🖼️ Ja tens la portada a l’article! Fes-hi un cop d’ull i publica quan vulguis.`)
-      : 'Ara mateix no he pogut preparar la portada 😕 La pots afegir des del Carma.'
+      ? '🖼️ Ja tens la portada a l’article! Fes-hi un cop d’ull i publica quan vulguis.'
+      : res.reason === 'not_configured'
+        ? 'Ara mateix el generador d’imatges no està actiu 😕 La pots afegir des del Carma.'
+        : 'Ara mateix no he pogut preparar la portada 😕 La pots afegir des del Carma.'
     await say(reply)
     return
   }
   if (button.id === WA_BUTTON.coverNo) {
     await say('Cap problema! 👍 La pots afegir més tard des del Carma.')
+    return
+  }
+
+  // ── THEIR OWN PHOTOGRAPH ────────────────────────────────────────────────────
+  // Free, always: a picture of their own shop is not an AI cost, and charging for
+  // it would be charging for storage. The processing (EXIF, attention crop,
+  // upscale, sharpen, WebP) lives in lib/whatsapp/inboundImage.ts.
+  if (button.id === WA_BUTTON.photoCover) {
+    const postId = (th?.current_post_id as string | null) ?? null
+    const siteId = (th?.site_id as string | null) ?? null
+    const state = { ...(stateNow as unknown as WaAgentState) }
+    if (!postId || !siteId) {
+      await say('No tinc cap article obert per posar-hi la foto 🤔 Envia’m de què vols que vagi i te’l preparo.')
+      return
+    }
+    await say('Marxant! Estic ajustant-la… 🖼️')
+    const attached = await attachHeldPhoto(admin, state, postId, siteId)
+    await admin.from('wa_threads').update({ agent_state: state }).eq('id', threadId)
+    if (!attached) {
+      await say('No trobo cap foto pendent 🤔 Torna-me-la a enviar i te la poso.')
+      return
+    }
+    await say(attached.ok ? `🖼️ Ja la té! ${attached.note ?? ''}`.trim() : attached.note)
+    return
+  }
+
+  if (button.id === WA_BUTTON.photoSkip) {
+    const state = { ...(stateNow as unknown as WaAgentState), pending_image: undefined }
+    await admin.from('wa_threads').update({ agent_state: state }).eq('id', threadId)
+    await say('Entesos, la deixo estar 👍')
     return
   }
 

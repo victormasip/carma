@@ -161,7 +161,18 @@ export function buildExtractedHead(root: HTMLElement, base: URL): string {
     // TITLE / META / BASE / everything else: intentionally dropped.
   }
 
-  return parts.join('\n').slice(0, MAX_HEAD_HTML)
+  // Budget by WHOLE parts — a blind `.slice(MAX_HEAD_HTML)` could tear a <style>
+  // or <script> in half, and the dangling open tag then ate the rest of the
+  // document (one of the "capture broke the page" edge cases). Each part is a
+  // complete element, so dropping the overflow keeps the head well-formed.
+  const kept: string[] = []
+  let budget = MAX_HEAD_HTML
+  for (const part of parts) {
+    if (part.length + 1 > budget) break
+    kept.push(part)
+    budget -= part.length + 1
+  }
+  return kept.join('\n')
 }
 
 /**

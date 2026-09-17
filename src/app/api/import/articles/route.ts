@@ -11,7 +11,6 @@ import { detectLocale, htmlToPlain } from '@/lib/i18n/detect'
 
 // node-html-parser needs the Node runtime; the merge step may fetch each page's
 // HTML for hreflang alternates, so give the handler ample headroom.
-export const runtime = 'nodejs'
 export const maxDuration = 60
 
 function slugFromUrl(url: string): string {
