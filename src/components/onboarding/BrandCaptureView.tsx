@@ -358,7 +358,9 @@ function BrandReveal({ siteId, brain, onContinue }: {
       {!editing && facts.length > 0 && (
         <dl className="mt-7 grid gap-3 sm:grid-cols-2">
           {facts.map(f => (
-            <div key={f.label} className="rounded-2xl border border-border bg-surface p-4 shadow-card">
+            // role="presentation" — a <dl>'s only legal <div> child is one that
+            // wraps exactly one <dt>/<dd> group, which is what this is.
+            <div key={f.label} role="presentation" className="rounded-2xl border border-border bg-surface p-4 shadow-card">
               <dt className="text-xs font-bold uppercase tracking-wider text-subtle">{f.label}</dt>
               <dd className="mt-1.5 text-sm leading-relaxed text-text">{f.value}</dd>
             </div>

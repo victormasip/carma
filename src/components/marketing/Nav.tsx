@@ -72,7 +72,9 @@ export default function Nav({ c, locale }: { c: LandingCopy['nav']; locale: UiLo
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden xl:block"><LangSwitch locale={locale} onPick={pick} /></span>
+          {/* <div>, not <span>: LangSwitch's root IS a <div role="group">, and a
+              <span> may only contain phrasing content (a11y audit, 2026-09-18). */}
+          <div className="hidden xl:block"><LangSwitch locale={locale} onPick={pick} /></div>
 
           <Link
             href="/login"

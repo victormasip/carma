@@ -562,7 +562,8 @@ function TemplateCard({ tpl, siteName, selected, disabled, onPick }: {
         <Check className="h-4 w-4" strokeWidth={3} />
       </span>
 
-      <div className="flex flex-1 items-center gap-2.5 p-4">
+      {/* <span>, not <div>: a <button> may only contain phrasing content. */}
+      <span className="flex flex-1 items-center gap-2.5 p-4">
         <span className="w-3.5 h-3.5 shrink-0 rounded-full ring-2 ring-bg-elevated shadow-sm" style={{ background: tpl.swatch.accent }} aria-hidden />
         <span className="min-w-0">
           <span className={cn('block text-base font-semibold', selected ? 'text-accent' : 'text-text')}>{tpl.name}</span>

@@ -92,7 +92,10 @@
   --c-surface-subtle: #191510;
   --c-text:           #faf7f0;
   --c-text-muted:     #bdb4a2;
-  --c-text-subtle:    #8b8272;
+  /* Nudged with the app palette (globals.css): #8b8272 was 4.22:1 on the ink
+     scene's own --c-surface-hover. #968c7a is 5.33:1 on the panel and 4.82:1 on
+     the hover ground — AA everywhere ink is painted. */
+  --c-text-subtle:    #968c7a;
   --c-border:         #2e2819;
   --c-border-strong:  #433a25;
   --c-accent:         #ffcf1a;

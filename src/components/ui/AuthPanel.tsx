@@ -31,10 +31,11 @@ function GoogleMark() {
 function GoogleButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button type="button" onClick={onClick} className="w-full">
-      <div className="relative overflow-hidden bg-white/5 text-white h-10 rounded-lg border border-white/10 hover:border-white/20 active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2">
+      {/* <span>, not <div>: a <button> may only contain phrasing content. */}
+      <span className="relative overflow-hidden bg-white/5 text-white h-10 rounded-lg border border-white/10 hover:border-white/20 active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2">
         <GoogleMark />
         <span className="text-white/80 text-xs font-medium">{label}</span>
-      </div>
+      </span>
     </button>
   )
 }

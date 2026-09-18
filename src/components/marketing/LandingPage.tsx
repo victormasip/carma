@@ -365,16 +365,24 @@ function Veu({ c }: { c: LandingCopy }) {
             <p className="mt-1.5 text-sm font-semibold text-subtle">{c.veu.cardSub}</p>
           </div>
 
+          {/* A <dl> may only contain <dt>/<dd> — or a <div> wrapping exactly one
+              group of them. The first version wrapped each pair in a flex row
+              that ALSO held the number badge and a second nested <div>, which is
+              invalid and reaches assistive tech as a broken term/definition list
+              (the a11y audit, 2026-09-18). The badge now lives inside its own
+              <dt>, where it belongs — it is part of the term — and the indent
+              that used to come from the flex row is an explicit margin on the
+              <dd> (1.75rem badge + 0.875rem gap = 2.625rem). */}
           <dl className="mt-7 grid gap-x-8 gap-y-6 sm:grid-cols-2">
             {c.veu.keeps.map((k, i) => (
-              <div key={k.label} className="flex gap-3.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[0.7rem] font-extrabold text-on-accent">
-                  {i + 1}
-                </span>
-                <div className="min-w-0">
-                  <dt className="text-base font-extrabold tracking-tight text-text">{k.label}</dt>
-                  <dd className="mt-1 text-sm leading-relaxed text-muted">{k.body}</dd>
-                </div>
+              <div key={k.label} role="presentation" className="min-w-0">
+                <dt className="flex items-start gap-3.5 text-base font-extrabold tracking-tight text-text">
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[0.7rem] font-extrabold text-on-accent" aria-hidden>
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0">{k.label}</span>
+                </dt>
+                <dd className="ms-[2.625rem] mt-1 text-sm leading-relaxed text-muted">{k.body}</dd>
               </div>
             ))}
           </dl>

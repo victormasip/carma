@@ -235,12 +235,24 @@ function Hero({ label, value, tone = 'default' }: { label: string; value: string
   )
 }
 
+/**
+ * One number in a <dl>.
+ *
+ * Every Metric on this page is a grid cell of a <dl>, so it has to BE a
+ * term/definition group: a <dl> may contain <dt>/<dd> directly, or a <div>
+ * wrapping exactly one group — never three anonymous <div>s, which is what this
+ * used to render (a11y audit, 2026-09-18).
+ *
+ * HTML also fixes the ORDER: every <dt> comes before its <dd>s. The design wants
+ * the number on top and its label underneath, so the DOM keeps the legal order
+ * and flex `order` puts them on screen the other way round.
+ */
 function Metric({ label, value, tone = 'default', sub }: { label: string; value: string; tone?: Tone; sub?: React.ReactNode }) {
   return (
-    <div>
-      <div className={cn('text-xl font-extrabold tabular-nums', TONE_TEXT[tone])}>{value}</div>
-      <div className="text-xs font-medium text-muted">{label}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-muted">{sub}</div>}
+    <div role="presentation" className="flex flex-col">
+      <dt className="order-2 text-xs font-medium text-muted">{label}</dt>
+      <dd className={cn('order-1 text-xl font-extrabold tabular-nums', TONE_TEXT[tone])}>{value}</dd>
+      {sub && <dd className="order-3 mt-0.5 text-[11px] text-muted">{sub}</dd>}
     </div>
   )
 }

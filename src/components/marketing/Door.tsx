@@ -524,7 +524,9 @@ export default function Door({
                     [c.sectorLabel, result.synthesis.sector],
                     [c.audienceLabel, result.synthesis.audience],
                   ] as const).filter(([, v]) => v).map(([label, value]) => (
-                    <div key={label}>
+                    // role="presentation": the only <div> a <dl> is allowed to
+                    // contain is one wrapping a single term/definition group.
+                    <div key={label} role="presentation">
                       <dt className="text-[0.68rem] font-extrabold uppercase tracking-wider text-subtle">{label}</dt>
                       <dd className="text-sm font-medium leading-snug text-text">{value}</dd>
                     </div>

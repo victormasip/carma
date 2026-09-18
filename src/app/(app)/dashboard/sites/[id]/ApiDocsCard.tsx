@@ -298,7 +298,8 @@ export default function ApiDocsCard({
           onClick={() => setShowParams(v => !v)}
           className="cursor-pointer w-full flex items-center justify-between px-5 py-3.5 hover:bg-surface-subtle transition-colors"
         >
-          <p className="text-xs font-bold text-subtle uppercase tracking-widest">Paràmetres de consulta</p>
+          {/* <span>, not <p>: a <button> may only contain phrasing content. */}
+          <span className="block text-xs font-bold text-subtle uppercase tracking-widest">Paràmetres de consulta</span>
           {showParams ? <ChevronUp className="w-4 h-4 text-subtle" /> : <ChevronDown className="w-4 h-4 text-subtle" />}
         </button>
 

@@ -188,22 +188,26 @@ function PathCard({
           Recomanat
         </span>
       )}
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-accent text-white' : 'bg-surface-hover text-muted'}`}>
+      {/* Every box below is a <span>: a <button> may only contain phrasing
+          content, so a <div>/<h4>/<p>/<ul> in here is invalid markup. Nothing is
+          lost — a heading and a list inside a button are flattened into the
+          button's accessible name either way. */}
+      <span className="flex items-start justify-between mb-3">
+        <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-accent text-white' : 'bg-surface-hover text-muted'}`}>
           <Icon className="w-5 h-5" />
-        </div>
+        </span>
         <span className={`text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded ${active ? 'bg-accent-soft text-accent' : 'bg-surface-hover text-muted'}`}>{badge}</span>
-      </div>
-      <h4 className="text-sm font-bold text-text mb-1">{title}</h4>
-      <p className="text-xs text-muted mb-3">{subtitle}</p>
-      <ul className="space-y-1">
+      </span>
+      <span className="block text-sm font-bold text-text mb-1">{title}</span>
+      <span className="block text-xs text-muted mb-3">{subtitle}</span>
+      <span className="block space-y-1">
         {features.map(f => (
-          <li key={f} className="text-xs text-muted flex items-start gap-1.5">
+          <span key={f} className="text-xs text-muted flex items-start gap-1.5">
             <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${active ? 'bg-accent' : 'bg-subtle'}`} />
             {f}
-          </li>
+          </span>
         ))}
-      </ul>
+      </span>
     </button>
   )
 }
@@ -269,17 +273,17 @@ function RenderInstructions({
                 {isRec && method !== m.key && (
                   <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold uppercase bg-success text-white px-1.5 py-0.5 rounded">★</span>
                 )}
-                <div className="flex items-center justify-between mb-0.5">
+                <span className="flex items-center justify-between mb-0.5">
                   <span>{m.label}</span>
                   <span className="flex gap-0.5">
                     {[1,2,3].map(i => (
                       <span key={i} className={`w-1 h-1 rounded-full ${i <= m.difficulty ? (method === m.key ? 'bg-carma-400' : 'bg-surface-subtle') : 'bg-transparent'}`} />
                     ))}
                   </span>
-                </div>
-                <p className={`text-xs font-medium leading-tight ${method === m.key ? 'text-subtle' : 'text-muted'}`}>
+                </span>
+                <span className={`block text-xs font-medium leading-tight ${method === m.key ? 'text-subtle' : 'text-muted'}`}>
                   {m.description}
-                </p>
+                </span>
               </button>
             )
           })}
@@ -1448,13 +1452,13 @@ function Step({ n, title, subtitle, children }: { n: number; title: string; subt
         onClick={() => setOpen(v => !v)}
         className="cursor-pointer w-full flex items-center gap-3 px-4 py-3 bg-surface hover:bg-surface-subtle transition-colors text-left"
       >
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${n === 0 ? 'bg-warning-soft text-warning' : 'bg-text text-white'}`}>
+        <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${n === 0 ? 'bg-warning-soft text-warning' : 'bg-text text-white'}`}>
           {n === 0 ? '!' : n}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-text leading-tight">{title}</p>
-          {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
-        </div>
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-bold text-text leading-tight">{title}</span>
+          {subtitle && <span className="block text-xs text-muted mt-0.5">{subtitle}</span>}
+        </span>
         {open ? <ChevronUp className="w-4 h-4 text-subtle shrink-0" /> : <ChevronDown className="w-4 h-4 text-subtle shrink-0" />}
       </button>
       {open && (
