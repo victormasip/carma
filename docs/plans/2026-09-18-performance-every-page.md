@@ -1,8 +1,9 @@
 # EL PES — performance on every single page
 
-**Status:** approved plan, not yet executed · **Opened:** 2026-09-18
+**Status:** W1 + W2 SHIPPED 2026-09-18 · W3–W8 open · **Opened:** 2026-09-18
 **Predecessors:** `2026-07-06-tech-debt-audit.md`, `2026-09-16-super-mvp-master-plan.md`
 **Gate this plan must never break:** `npm run test:landing`, `test:render`, `test:brand`, `test:fidelity`
+**Gate this plan SHIPPED:** `npm run test:perf` — every route, every build
 
 ---
 
@@ -67,7 +68,7 @@ identical on every route, and not ours to shrink.**
 
 | Route | own JS | CSS | chunks | verdict |
 |---|---:|---:|---:|---|
-| **`/edit/[siteId]`** | **293.1KB** | 29.9KB | 16 | ✗ catastrophic |
+| **`/edit/[siteId]`** | ~~293.1KB~~ → **64.9KB** | 29.9KB | 16 | ✓ **W1 shipped** |
 | **`/login`** | **135.5KB** | 29.9KB | 14 | ✗ a login form |
 | **`/registre`** | **135.5KB** | 29.9KB | 14 | ✗ a signup form |
 | `/reset-password` | 84.4KB | 29.9KB | 12 | ✗ |
@@ -93,7 +94,7 @@ number nobody can re-derive is a number nobody will defend.
 These were found by the sweeps in §5 before this document was written. They are not
 hypotheses; each one names the file and the line.
 
-### F1 — 262KB of an HTML parser is shipped to the browser · `/edit` · **~95KB gzip**
+### F1 — 262KB of an HTML parser is shipped to the browser · `/edit` · **~95KB gzip** — ✅ OFF THE CRITICAL PATH (W1)
 
 `src/app/(app)/dashboard/sites/[id]/studio/ChromeDrawer.tsx:14` imports `NavEditor`
 eagerly. `NavEditor.tsx:19` imports `@/lib/render/navEdit`, whose header cheerfully
@@ -109,7 +110,7 @@ of a nav fragment — something `DOMParser` does natively for **zero bytes**.
 **Fix:** `lazy()` the drawer, and give `navEdit.ts` a browser path that uses
 `DOMParser`. **Two lines and a small function.**
 
-### F2 — TipTap is lazy-loaded on one route and eager on the other · `/edit` · **~145KB gzip**
+### F2 — TipTap is lazy-loaded on one route and eager on the other · `/edit` · **~145KB gzip** — ✅ FIXED (W1)
 
 `src/components/editor/PostEditorClient.tsx:47` does it right:
 `const TipTapEditor = lazy(() => import('./TipTapEditor'))`.
@@ -121,8 +122,16 @@ So the Studio pays **144.7KB gzip / 472KB raw** of TipTap + ProseMirror as a blo
 
 **Fix:** one line — make it match `PostEditorClient`.
 
-> F1 + F2 together are **~240KB gzip of blocking JavaScript on one route, removable
-> in three lines.** `/edit/[siteId]` goes from 429KB (293 own + 136 floor) to ~190KB.
+> **SHIPPED 2026-09-18.** Both split points moved to the render site in
+> `StudioStage.tsx` (a component cannot split itself), each behind a `<Suspense>`
+> wearing the shape of what is arriving. `/edit/[siteId]` went from **293.1KB to
+> 64.9KB** of own JS — **−228KB, −78%** — and from 429KB to 201KB including the
+> framework floor. Both chunks still exist (144.4KB TipTap, 82.3KB entities);
+> they simply load when a drawer opens.
+>
+> F1's second half is still open: `navEdit.ts` should use `DOMParser` in the
+> browser so the entity tables are never shipped at all, not merely deferred.
+> `test:perf` §2 warns about it on every run until it is.
 
 ### F3 — 40KB of framer-motion to fade in a login form · `/login`, `/registre`
 
@@ -257,23 +266,44 @@ re-measure → record. Never the other way round.
 
 ## 6 — What ships
 
-### 6.1 `npm run test:perf` — the gate, generalised
+### 6.1 `npm run test:perf` — the gate, generalised — ✅ SHIPPED
 
-`tests/perf.mjs`, modelled on `tests/landing.mjs`, which already proves the pattern
-works. Per route: own-JS gzip, CSS gzip, chunk count, blocking-script count, the
-server-only-import check, and the budgets in §4. Fails the build at the hard number,
-warns between target and hard — so drift is visible before it is a breach.
+`tests/perf.mjs`, modelled on `tests/landing.mjs`. Three sections:
 
-This is the single most important deliverable. **Without it, everything below is
-undone within two sprints**, the same way the landing regressed to 211KB before
-`test:landing` existed.
+1. **Critical-path budget**, per route, against the classes in §4. It counts only
+   `<script src>` in the prerendered shell — never modulepreload, never lazy
+   chunks — so a split that actually splits disappears from the number. `hard` is
+   a RATCHET: today's figure rounded up, so nothing can get worse while the waves
+   that lower `target` are still in flight.
+2. **Server-only code in the browser**, convicting ONLY on ground truth: a
+   fingerprint found inside a built chunk. On the critical path fails; in a lazy
+   chunk warns. The static import graph is used only to NAME the culprit once the
+   bundle has convicted it.
+3. **Split points actually split.** Walks static imports from every route entry
+   WITHOUT stepping through a split point; whatever it reaches is the eager set.
+   A module that is `lazy()` somewhere and statically imported from the eager set
+   is not split at all.
+
+**A lesson worth keeping.** The first draft of §2 walked the import graph instead
+and reported five leaks, four of them false — a client component importing a
+`'use server'` module bundles nothing, and `import type` is erased at compile
+time. A gate that cries wolf gets muted, and a muted gate is worse than no gate.
+The bundle cannot lie; the graph can.
+
+**It earned its place on the first run**, catching three more defeated split
+points nobody had gone looking for: `ConnectAgentStep` (lazy in SiteDetailClient,
+static in AgentClient) and `VoiceRecorder` (lazy in Door, static in both
+BrandIntake and BrandCaptureView). All three fixed.
+
+Without this, everything below is undone within two sprints — the same way the
+landing regressed to 211KB before `test:landing` existed.
 
 ### 6.2 The waves
 
 | Wave | Content | Est. saving |
 |---|---|---|
-| **W1 — the three lines** | F1 + F2 | **~240KB gzip** on `/edit` |
-| **W2 — the gate** | `test:perf` + budgets in CI | prevents regression |
+| ~~W1 — the three lines~~ ✅ | F1 + F2 | **−228KB gzip** on `/edit` (293.1 → 64.9KB) |
+| ~~W2 — the gate~~ ✅ | `tests/perf.mjs` + per-class budgets | caught 3 more defeated split points on its first run |
 | **W3 — the shared weight** | F5 (route-scoped landing.css) | ~12KB × 21 routes |
 | **W4 — the auth path** | F3 + F4 | ~100KB on 3 routes |
 | **W5 — images** | F6 through the `/api/img` we own | LCP on 4 surfaces |

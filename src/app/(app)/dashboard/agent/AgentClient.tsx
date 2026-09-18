@@ -3,7 +3,7 @@
 // Agent — the surface layout. Chat console front and centre (the fastest way to
 // an article), WhatsApp connection + recent activity in the side rail.
 
-import { useCallback, useState, useSyncExternalStore } from 'react'
+import { Suspense, lazy, useCallback, useState, useSyncExternalStore } from 'react'
 import { MessageCircle, Smartphone, History, ExternalLink, Check } from 'lucide-react'
 import Link from 'next/link'
 import PageHeader from '@/components/ui/PageHeader'
@@ -11,9 +11,14 @@ import { cn } from '@/lib/cn'
 import { formatDate } from '@/lib/format'
 import AgentChat from './AgentChat'
 import Button from '@/components/ui/Button'
-import ConnectAgentStep from '../sites/[id]/ConnectAgentStep'
 import { type Identity, type Scope, type Site } from './AgentConnection'
 import type { AgentActivityRow } from './page'
+
+// LAZY, like SiteDetailClient already loads it. A static import here defeated
+// that split: this page is the route entry, so every owner who opened the Agent
+// paid for the connection screen — and for the QR generator behind it — whether
+// or not it ever rendered. Caught by `npm run test:perf` §3.
+const ConnectAgentStep = lazy(() => import('../sites/[id]/ConnectAgentStep'))
 
 /**
  * STRAIGHT TO THE QR FOR SOMEONE WHO HAS NEVER CONNECTED.
@@ -72,16 +77,20 @@ export default function AgentClient({ identities, sites, activity }: {
   return (
     <div className="space-y-6">
       {connecting && (
-        <ConnectAgentStep
-          onClose={(connected) => {
-            markQrOffered()
-            setManual(false)
-            setDismissed(true)
-            // A fresh binding changes what the whole page should say, and the
-            // state lives on the server — a reload is the honest way to get it.
-            if (connected) window.location.reload()
-          }}
-        />
+        // No fallback: the step is a full-screen portal that paints its own
+        // "preparing" state, and a spinner underneath it would only flash.
+        <Suspense fallback={null}>
+          <ConnectAgentStep
+            onClose={(connected) => {
+              markQrOffered()
+              setManual(false)
+              setDismissed(true)
+              // A fresh binding changes what the whole page should say, and the
+              // state lives on the server — a reload is the honest way to get it.
+              if (connected) window.location.reload()
+            }}
+          />
+        </Suspense>
       )}
 
       <PageHeader

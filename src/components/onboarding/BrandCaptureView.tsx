@@ -15,13 +15,20 @@
 // It also gives them a chance to say "that's wrong" before an article exists.
 
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Check, Loader2, Minus, Sparkles, ArrowRight, AlertCircle, PenLine, Mic, X } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Wordmark from '@/components/ui/Wordmark'
-import VoiceRecorder from '@/components/onboarding/VoiceRecorder'
 import { refineBrandProfile } from '@/lib/actions/brand'
 import { BRAND_STEPS, type BrandBrain, type BrandEvent, type BrandStepId } from '@/lib/brand/types'
 import { cn } from '@/lib/cn'
+
+// The mic is a decision, not a default: most owners type or paste. Loading
+// the recorder (and the MediaRecorder plumbing behind it) only when the tab
+// is opened keeps it off every first paint — the same split Door already
+// makes on the landing. `next/dynamic` rather than `lazy`, so no Suspense
+// boundary is needed for a component that renders inside a tab panel.
+const VoiceRecorder = dynamic(() => import('@/components/onboarding/VoiceRecorder'))
 
 type StepState = { status: 'pending' | 'running' | 'done' | 'skipped'; detail?: string }
 

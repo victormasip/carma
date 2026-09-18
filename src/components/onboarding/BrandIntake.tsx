@@ -21,10 +21,17 @@
 // brand on turn one instead of after enough posts to distil.
 
 import { useCallback, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Globe, FileText, X, Sparkles, ArrowRight, Wand2, Palette, Upload, Check } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import VoiceRecorder from './VoiceRecorder'
 import { cn } from '@/lib/cn'
+
+// The mic is a decision, not a default: most owners type or paste. Loading
+// the recorder (and the MediaRecorder plumbing behind it) only when the tab
+// is opened keeps it off every first paint — the same split Door already
+// makes on the landing. `next/dynamic` rather than `lazy`, so no Suspense
+// boundary is needed for a component that renders inside a tab panel.
+const VoiceRecorder = dynamic(() => import('./VoiceRecorder'))
 
 const ACCEPT = '.pdf,.docx,.txt,.md,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 const MAX_FILES = 6

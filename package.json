@@ -19,7 +19,8 @@
     "wa:replay": "node scripts/wa-replay.mjs",
     "test:fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/chrome-fidelity.mjs",
     "test:brand": "node --experimental-strip-types --import ./tests/register.mjs tests/brand.mjs",
-    "test:landing": "node --experimental-strip-types --import ./tests/register.mjs tests/landing.mjs"
+    "test:landing": "node --experimental-strip-types --import ./tests/register.mjs tests/landing.mjs",
+    "test:perf": "node --experimental-strip-types --import ./tests/register.mjs tests/perf.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

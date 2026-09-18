@@ -12,17 +12,36 @@
 // through to the page. Visual token edits stream LIVE via injected CSS (no reload);
 // only structural chrome/body changes reload.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { MousePointerClick } from 'lucide-react'
 import KnotLoader from '@/components/ui/KnotLoader'
 import { studioLiveCss } from '@/lib/render/studioLiveCss'
 import { cn } from '@/lib/cn'
 import { useThemeStudio } from '../ThemeStudioContext'
-import StudioBodyEditor from './StudioBodyEditor'
 import StudioToolbar from './StudioToolbar'
-import ChromeDrawer from './ChromeDrawer'
 import { regionForElement, highlightTargetFor, type RegionId } from './regions'
 import { DEVICE_WIDTH, type Device } from './types'
+
+/**
+ * THE TWO HEAVIEST THINGS IN THE PRODUCT, BEHIND THE DOORS THAT OPEN THEM.
+ *
+ * Both of these render only when the owner opens a drawer, and both used to be
+ * plain imports — so /edit/[siteId] paid for them as blocking <script> tags on
+ * every load, whether or not anyone touched a drawer. They were 240KB gzip of
+ * the route's 293KB:
+ *
+ *   StudioBodyEditor → TipTapEditor → @tiptap + prosemirror        ~145KB gzip
+ *   ChromeDrawer     → NavEditor → lib/render/navEdit → node-html-parser
+ *                      (and its HTML entity decode tables)          ~95KB gzip
+ *
+ * PostEditorClient already lazy-loads the very same TipTapEditor; this route
+ * simply never got the same treatment. The split belongs HERE, at the render
+ * site, rather than inside each component — a component cannot split itself.
+ *
+ * See docs/plans/2026-09-18-performance-every-page.md §F1–F2.
+ */
+const StudioBodyEditor = lazy(() => import('./StudioBodyEditor'))
+const ChromeDrawer = lazy(() => import('./ChromeDrawer'))
 
 const CLICK_SLOP = 6 // px of movement still treated as a click (vs a scroll/drag)
 
@@ -391,8 +410,32 @@ export default function StudioStage({ device, interact }: { device: Device; inte
         </div>
       )}
 
-      {chromeOpen && <ChromeDrawer onClose={() => setChromeOpen(false)} />}
-      {editingBody && <StudioBodyEditor device={device} onClose={() => { setEditingBody(false); setReloadTick((t) => t + 1) }} />}
+      {/* The fallbacks wear the shape of what is arriving: the drawer is a
+          right-side panel, the body editor takes the whole stage. Both chunks
+          are small enough over a warm connection that this is a flicker, and
+          on a cold one it is the difference between a slow canvas and a fast
+          one for every owner who never opens them. */}
+      {chromeOpen && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
+            <aside className="relative flex h-full w-full max-w-[560px] items-center justify-center border-l border-border bg-bg-elevated shadow-2xl">
+              <KnotLoader size={48} label="Obrint l&rsquo;editor de capçalera…" />
+            </aside>
+          </div>
+        }>
+          <ChromeDrawer onClose={() => setChromeOpen(false)} />
+        </Suspense>
+      )}
+      {editingBody && (
+        <Suspense fallback={
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface">
+            <KnotLoader size={56} label="Carregant l&rsquo;editor…" />
+          </div>
+        }>
+          <StudioBodyEditor device={device} onClose={() => { setEditingBody(false); setReloadTick((t) => t + 1) }} />
+        </Suspense>
+      )}
     </div>
   )
 }
