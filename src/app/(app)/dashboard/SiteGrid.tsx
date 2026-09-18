@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { formatDate, formatNumber } from '@/lib/format'
 import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
+import { ICON_WIDTHS, optimizedImg } from '@/lib/images/url'
 
 export type SiteWithCounts = {
   id: string
@@ -146,8 +147,20 @@ function SiteCard({
         )}
         {site.logo_url ? (
           <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-white">
+            {/* Through /api/img, not raw. A customer logo is whatever they
+                uploaded to their own CMS — frequently a multi-megabyte PNG — and
+                this box is 40 CSS pixels. next/image cannot help: the host is
+                theirs, not ours. See lib/images/url.ts. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={site.logo_url} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+            <img
+              {...optimizedImg(site.logo_url, ICON_WIDTHS, '40px')}
+              alt=""
+              width={40}
+              height={40}
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+              decoding="async"
+            />
           </span>
         ) : (
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-soft to-surface-subtle text-base font-bold uppercase text-accent">

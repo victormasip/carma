@@ -20,6 +20,7 @@
 import { cacheLife, cacheTag } from 'next/cache'
 import { ArrowUpRight } from 'lucide-react'
 import { readWall, WALL_TAG, type WallBlog } from '@/lib/marketing/wall'
+import { optimizedImg } from '@/lib/images/url'
 import { LANDING } from './copy'
 import type { UiLocale } from '@/lib/i18n/config'
 
@@ -106,13 +107,16 @@ function WallCard({ b, c }: { b: WallBlog; c: (typeof LANDING)['ca']['comunitat'
           </p>
         )}
 
-        {/* A REAL cover from a REAL post. No next/image: these are arbitrary
-            customer hosts, and the point of the card is the blog's own look, at
-            17rem, lazily, below the fold. */}
+        {/* A REAL cover from a REAL post, at 17rem, lazily, below the fold.
+            Still no next/image — these are arbitrary customer hosts and that
+            list can never be complete — but no longer the raw original either:
+            /api/img is ours, it is SSRF-guarded, and it is edge-cached for a
+            year, so the landing gets a ~272px WebP instead of whatever a member
+            happened to upload. See lib/images/url.ts. */}
         {b.cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={b.cover}
+            {...optimizedImg(b.cover, [400, 640], '272px')}
             alt=""
             width={320}
             height={200}

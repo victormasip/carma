@@ -105,6 +105,22 @@ const ALLOWED_IN_BROWSER = [
   ['franc-min', 'lib/i18n/detect.ts is client-side language detection by design (small, MIT)'],
 ]
 
+
+/**
+ * Dynamic <img> sources that must NOT go through /api/img, and why.
+ *
+ * Both entries are decisions, not oversights — the point of a list like this is
+ * that the next person gets to disagree with a reason rather than with a
+ * silence. Matched as plain path prefixes.
+ */
+const ALLOWED_RAW_IMG = [
+  ['src/components/editor/',
+    'the editor is a WORKSPACE, not a page: its sources are routinely blob: and data: URIs mid-upload, where a round trip to /api/img is slower than bytes already in memory — and an editor showing a transformed image misrepresents what will be published'],
+  ['src/components/marketing/StudioDemo.tsx',
+    '/studio/*.webp are our own pre-sized WebP assets; canOptimize() passes relative paths through anyway, so wrapping them would add a call and change nothing'],
+]
+
+
 let failures = 0
 let warnings = 0
 const ok = (l, x = '') => console.log(`  ✓ ${l}${x ? `  ${x}` : ''}`)
@@ -408,6 +424,122 @@ function splitsHold() {
   }
 }
 
+/* ══ 4. COMPONENTS THAT COULD BE SERVER COMPONENTS ═════════════════════════ */
+
+/**
+ * `'use client'` is a BOUNDARY, not a label.
+ *
+ * A component below an existing boundary is in the client bundle whether or not
+ * it carries the directive, so removing it there changes exactly nothing. The
+ * only removal that saves bytes is one on a component a SERVER component
+ * renders — and that is the only thing this check reports.
+ *
+ * Run across the whole repo on 2026-09-18 it found nothing, which is the useful
+ * result: `Button` has 31 client parents and zero server ones, and the same goes
+ * for CostBadge, RewardTicker and auth-card-shell. The plan's W6 assumed
+ * 30–60KB was sitting here; measurement said otherwise, and this check is what
+ * keeps that true rather than what proved it once.
+ */
+function needlessClient() {
+  head('4. NEEDLESS CLIENT BOUNDARIES')
+  const files = sourceTree()
+
+  // Next REQUIRES these to be client components; they are not candidates.
+  const REQUIRED_CLIENT = /\/(error|global-error)\.tsx$/
+
+  const HOOK = /\buse[A-Z]\w*\s*\(/
+  const HANDLER = /\son(Click|Change|Submit|Input|KeyDown|KeyUp|Focus|Blur|MouseEnter|MouseLeave|Drop|DragOver|Scroll|Wheel|Pointer\w*|Touch\w*)\s*=/
+  const BROWSER = /\b(window|document|navigator|localStorage|sessionStorage|matchMedia|requestAnimationFrame|IntersectionObserver|DOMParser)\b/
+
+  // Who renders what, and from which side of the boundary.
+  const serverParents = new Map()
+  for (const [f, src] of files) {
+    if (isClient(src)) continue
+    for (const spec of valueImports(src)) {
+      const t = resolveLocal(spec, f, files)
+      if (!t) continue
+      if (!serverParents.has(t)) serverParents.set(t, [])
+      serverParents.get(t).push(f)
+    }
+  }
+
+  const candidates = []
+  for (const [f, src] of files) {
+    if (!isClient(src) || REQUIRED_CLIENT.test(f)) continue
+    const body = src.replace(/^\s*['"]use client['"];?\s*$/m, '')
+    if (HOOK.test(body) || HANDLER.test(body) || BROWSER.test(body)) continue
+    const parents = serverParents.get(f)
+    if (parents?.length) candidates.push({ f, parents })
+  }
+
+  if (!candidates.length) {
+    ok('no client component is rendered from a server tree without needing to be')
+    return
+  }
+  for (const c of candidates) {
+    warn(`${rel(c.f)} needs no browser API but is a client boundary`,
+      `rendered by ${c.parents.map(rel).join(', ')}`)
+  }
+}
+
+/* ══ 5. IMAGES GO THROUGH THE OPTIMISER WE OWN ═════════════════════════════ */
+
+/**
+ * A dynamic `src` is somebody else's file at whatever size they uploaded it.
+ *
+ * Carma's images are overwhelmingly other people's — a logo on a customer CDN, a
+ * cover scraped from a cloned site — so `next/image` cannot help (its
+ * `remotePatterns` list could never be complete) and the answer is `/api/img`,
+ * which we own and which the public renderer has used since July. Until W5 the
+ * product's own screens hot-linked the originals: a 3MB JPEG at 40×40.
+ *
+ * Only DYNAMIC sources count. A literal `src="/logo.svg"` is ours and already
+ * small; template literals are blanked first because IntegrationGuide is full of
+ * `<img>` tags inside code samples meant for the customer's own site, not for
+ * this app to render.
+ */
+/**
+ * Blank every template literal, keeping line numbers intact.
+ *
+ * A scanner rather than a regex on purpose: matching backtick strings needs
+ * doubled backslashes, and a doubled backslash is exactly the thing that does
+ * not survive being written through three layers of tooling. A naive backtick
+ * toggle is also correct enough here — an escaped backtick inside a template
+ * would only make the check skip an <img>, never invent one.
+ */
+function blankTemplates(src) {
+  let out = ''
+  let inTpl = false
+  for (const ch of src) {
+    if (ch === String.fromCharCode(96)) { inTpl = !inTpl; out += ' '; continue }
+    out += (inTpl && ch !== String.fromCharCode(10)) ? ' ' : ch
+  }
+  return out
+}
+function imagesOptimised() {
+  head('5. IMAGE SOURCES')
+  const files = sourceTree()
+  const blank = m => m.replace(/[^\n]/g, ' ')
+  const raw = []
+  for (const [f, src] of files) {
+    if (!f.endsWith('.tsx')) continue
+    const stripped = src
+      .replace(/\/\*[\s\S]*?\*\//g, blank)
+      .replace(/^[ \t]*\/\/.*$/gm, blank)
+    const code = blankTemplates(stripped)
+    for (const m of code.matchAll(/<img\b[\s\S]{0,600}?\/>/g)) {
+      const tag = m[0]
+      if (!/\ssrc=\{/.test(tag)) continue            // a literal src is already ours
+      if (/optimizedImg|imgUrl|imgSrcSet/.test(tag)) continue
+      raw.push(`${rel(f)}:${code.slice(0, m.index).split('\n').length}`)
+    }
+  }
+  const unexplained = raw.filter(r => !ALLOWED_RAW_IMG.some(([prefix]) => r.startsWith(prefix)))
+  if (!unexplained.length) ok("every dynamic <img> outside the allow-list goes through /api/img", raw.length ? String(raw.length) + " allowed" : "none to allow")
+  else for (const r of unexplained) warn('a dynamic <img> bypasses /api/img', `${r} — see lib/images/url.ts`)
+}
+
+
 /* ══ run ═══════════════════════════════════════════════════════════════════ */
 
 console.log('PERF GATE — every route')
@@ -419,6 +551,8 @@ if (existsSync(APP)) {
 budgets()
 serverOnlyLeaks()
 splitsHold()
+needlessClient()
+imagesOptimised()
 
 console.log(`\n${failures ? '✗ FAIL' : '✓ PASS'}  ${failures} failure(s), ${warnings} warning(s)`)
 process.exit(failures ? 1 : 0)

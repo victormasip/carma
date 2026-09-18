@@ -25,6 +25,7 @@ import { Check, ChevronsUpDown, Clock, Crown, Globe, Palette, Plus, Search } fro
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n/LocaleProvider'
 import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
+import { ICON_WIDTHS, optimizedImg } from '@/lib/images/url'
 
 export type SwitcherSite = {
   id: string
@@ -348,8 +349,19 @@ function SiteAvatar({ site, size = 'sm' }: { site: SwitcherSite | null; size?: '
   const box = size === 'md' ? 'h-8 w-8' : size === 'xs' ? 'h-6 w-6' : 'h-7 w-7'
   if (site?.logo_url) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- favicons/logos externs de mida fixa; next/image no aporta res aquí
-      <img src={site.logo_url} alt="" className={cn(box, 'shrink-0 rounded-lg border border-border bg-white object-contain p-0.5 shadow-sm')} />
+      // Logos externs de mida fixa: no els serveix next/image (el host és del
+      // client, no nostre) però sí /api/img, que és nostre — un PNG de 3 MB no
+      // pot arribar sencer a una caixa de 32 px. Vegeu lib/images/url.ts.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        {...optimizedImg(site.logo_url, ICON_WIDTHS, '32px')}
+        alt=""
+        width={32}
+        height={32}
+        loading="lazy"
+        decoding="async"
+        className={cn(box, 'shrink-0 rounded-lg border border-border bg-white object-contain p-0.5 shadow-sm')}
+      />
     )
   }
   return (

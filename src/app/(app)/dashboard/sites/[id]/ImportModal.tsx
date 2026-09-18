@@ -14,6 +14,7 @@ import Button from '@/components/ui/Button'
 import KnotLoader from '@/components/ui/KnotLoader'
 import KnotSpinner from '@/components/ui/KnotSpinner'
 import { cn } from '@/lib/cn'
+import { CARD_WIDTHS, optimizedImg } from '@/lib/images/url'
 
 type DiscoveredArticle = { url: string; title: string; language?: string | null }
 type ImportResult = { url: string; success: boolean; title?: string; slug?: string; error?: string; skipped?: boolean }
@@ -501,8 +502,16 @@ export default function ImportModal({ siteId, onClose, autoDiscoverUrl, isSuperA
                 <div className="space-y-5">
                   <div className="bg-surface-subtle border border-border rounded-xl p-4 space-y-3">
                     {previewData.image && (
+                      // Straight off the site being imported, so it is whatever
+                      // they published — through /api/img for a 128px-tall strip.
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={previewData.image} alt="" className="w-full h-32 object-cover rounded-lg" />
+                      <img
+                        {...optimizedImg(previewData.image, CARD_WIDTHS, '(min-width: 640px) 560px, 100vw')}
+                        alt=""
+                        className="w-full h-32 object-cover rounded-lg"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     )}
                     <FieldRow label="Títol">
                       {previewData.title ? <p className="text-sm font-semibold text-text">{previewData.title}</p> : <p className="text-sm text-subtle italic">No detectat</p>}

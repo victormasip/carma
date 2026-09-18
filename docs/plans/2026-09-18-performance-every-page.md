@@ -1,6 +1,6 @@
 # EL PES — performance on every single page
 
-**Status:** W1–W4 + F1 SHIPPED 2026-09-18 · W5–W8 open · **Opened:** 2026-09-18
+**Status:** W1–W6 + F1 SHIPPED 2026-09-18 · W7–W8 open · **Opened:** 2026-09-18
 **Predecessors:** `2026-07-06-tech-debt-audit.md`, `2026-09-16-super-mvp-master-plan.md`
 **Gate this plan must never break:** `npm run test:landing`, `test:render`, `test:brand`, `test:fidelity`
 **Gate this plan SHIPPED:** `npm run test:perf` — every route, every build
@@ -201,7 +201,7 @@ almost nothing next to Tailwind's utility layer, which is what the remaining
 but a tenth of the guess. **Per-route CSS splitting is a wave of its own** — one
 sheet is how Tailwind v4 and Next ship CSS by default.
 
-### F6 — Zero `next/image`, and the dashboard's images are raw originals
+### F6 — Zero `next/image`, and the dashboard's images are raw originals — ✅ SHIPPED (W5)
 
 `next/image` usage: **0**. The *public renderer* is fine — it has a real, hardened
 optimizer at `/api/img` (WebP/AVIF, resize, `s-maxage=31536000, immutable`, SSRF
@@ -211,17 +211,40 @@ it: `SiteGrid.tsx:150` (site logos), `ArticleCard.tsx:205` (featured images),
 landing) all hot-link full-size originals. A 3MB customer JPEG is loaded at 44×44 in
 the sidebar.
 
-**Fix:** route them through the `/api/img` we already own. No new infrastructure,
-no `next/image` config, no remote-pattern allowlist — the optimizer exists.
+**Shipped.** `lib/images/url.ts` is the React-side counterpart to
+`lib/render/image.ts` — a separate, dependency-free file on purpose, because the
+renderer's version imports `node-html-parser` and one convenient import would put
+82KB of entity tables straight back in the browser. `optimizedImg()` returns
+`{src, srcSet, sizes}` for anything absolute-http(s) or `data:`, and `{src}`
+untouched for everything else, so a call site never branches.
 
-### F7 — `IntegrationGuide.tsx` is 66KB of client code that never changes
+Applied to the site logos (SiteGrid + SiteSwitcher), the article thumbnails, the
+import preview and the landing's community wall.
+
+**The finding under-counted by more than half.** A manual grep found four raw
+`<img>` tags; the mechanical check added to `test:perf` §5 found **thirteen**.
+Nine of those are deliberate and are now allow-listed WITH REASONS rather than
+silently skipped — the editor's are a workspace showing blob:/data: URIs
+mid-upload (a round trip to /api/img would be slower than bytes already in
+memory, and a transformed preview misrepresents what gets published), and
+StudioDemo's are our own pre-sized `/studio/*.webp`.
+
+### F7 — `IntegrationGuide.tsx` is 66KB of client code that never changes — ⚠️ PREMISE WAS WRONG
 
 1,554 lines, second-largest client component in the repo, and the overwhelming
 majority of it is **static code samples** (PHP, Vue, WordPress, nginx snippets)
 shipped as JSX to every owner who opens the Connexió tab.
 
-**Fix:** it is a server component with one small client island for the method
-picker. Same treatment the landing got in the Super MVP sprint.
+**Measured before refactoring, and the refactor was not worth doing.**
+`IntegrationGuide` is imported by `ApiDocsCard`, which `SiteDetailClient` already
+lazy-loads — so it sits in a **19.2KB gzip chunk that is not on any route's
+critical path**, and no owner downloads it unless they open the Connexió tab.
+The finding was written from a source-size sweep (1,554 lines, 66KB of .tsx) and
+never checked against the bundle.
+
+Turning 1,554 lines with ten `useState` hooks into a server shell plus islands,
+to save bytes nobody on a critical path is paying, is the kind of work that looks
+like progress. Left alone, deliberately.
 
 ---
 
@@ -348,6 +371,42 @@ BrandIntake and BrandCaptureView). All three fixed.
 Without this, everything below is undone within two sprints — the same way the
 landing regressed to 211KB before `test:landing` existed.
 
+### 6.1.1 What W6 actually found — a wave that came back empty, on purpose
+
+W6 was scoped as "the server pass": F7 plus Sweep 4's ranked list, estimated at
+30–60KB across the product. **It delivered close to nothing, and that is the
+result worth keeping**, because the alternative was two days of refactoring to
+move bytes that were not there.
+
+**Sweep 4, run across all 90 client components, found one candidate.** The list
+of components with no hook, no handler and no browser API looked promising —
+`Button` (102 loc), `CostBadge` (117), `RewardTicker`, `auth-card-shell` — until
+the parent question was asked:
+
+| component | server parents | client parents | removing `'use client'` |
+|---|---:|---:|---|
+| `Button.tsx` | **0** | 31 | changes nothing |
+| `CostBadge.tsx` | **0** | 1 | changes nothing |
+| `RewardTicker.tsx` | **0** | 1 | changes nothing |
+| `auth-card-shell.tsx` | **0** | 1 | changes nothing |
+| `FullscreenStudio.tsx` | 1 | 0 | **real** — done |
+
+`'use client'` is a BOUNDARY, not a label: a component below an existing boundary
+is in the client bundle whether or not it carries the directive. Only a component
+a SERVER component renders can be moved, and the repo had exactly one.
+
+**The floor is the shell, and the shell is earning it.** Every product route sits
+within ~4KB of a 29.9KB shared floor, and that floor is: 14.2KB of dashboard
+shell (sidebar, site switcher with search, user menu, karma widget, i18n), 7.9KB
+of framework glue, 3.7KB of lucide + Toast, and change. The three locale
+dictionaries together are 3.9KB of source. There is no fat there to trim without
+redesigning the shell.
+
+**So W6 shipped checks instead of changes.** `test:perf` §4 encodes Sweep 4 as a
+standing invariant (it reports only candidates with a server parent, and excludes
+the `error.tsx` files Next requires to be client), and §5 encodes W5. A sweep run
+once tells you about today; a sweep in the gate tells you about every commit.
+
 ### 6.2 The waves
 
 | Wave | Content | Est. saving |
@@ -356,8 +415,8 @@ landing regressed to 211KB before `test:landing` existed.
 | ~~W2 — the gate~~ ✅ | `tests/perf.mjs` + per-class budgets | caught 3 more defeated split points on its first run |
 | ~~W3 — the shared weight~~ ✅ | F5 (route-scoped landing.css) | 3.2KB × 21 routes (not the 12KB predicted) |
 | ~~W4 — the auth path~~ ✅ | F3 + F4 | **−101.8KB** on /login + /registre, **−61.5KB** on /preview, **−61.4KB** on /reset-password |
-| **W5 — images** | F6 through the `/api/img` we own | LCP on 4 surfaces |
-| **W6 — the server pass** | F7 + Sweep 4's ranked list | 30–60KB across product |
+| ~~W5 — images~~ ✅ | F6 through the `/api/img` we own | 5 surfaces + a gate check that found 9 more |
+| ~~W6 — the server pass~~ ✅ | F7 + Sweep 4 | **≈0KB, and that is the finding** — see below |
 | **W7 — the recorded pass** | `chrome-devtools-mcp` traces, all 22 routes | the unknown unknowns |
 | **W8 — data & cache** | Sweep 5's list | TTFB |
 

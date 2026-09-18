@@ -23,6 +23,7 @@ import SaveStatus, { type SaveState } from '@/components/ui/SaveStatus'
 import { cn } from '@/lib/cn'
 import { formatDate } from '@/lib/format'
 import { blogHref, useOpenBlog } from '@/lib/sites/useBlogUrl'
+import { CARD_WIDTHS, optimizedImg } from '@/lib/images/url'
 
 // ── Inline, click-to-edit text field ─────────────────────────────────────────
 function InlineEdit({
@@ -201,8 +202,17 @@ export default function ArticleCard({
       {/* ── Thumbnail ── */}
       <div className="relative aspect-[16/9] bg-surface-subtle overflow-hidden shrink-0">
         {post.featured_image ? (
+          // Through /api/img with a srcset: the same cover the blog serves
+          // responsively should not arrive here at full size for a card. The
+          // wrapper already fixes the 16/9 box, so there is no CLS to add.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.featured_image} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
+          <img
+            {...optimizedImg(post.featured_image, CARD_WIDTHS, '(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw')}
+            alt=""
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           <button type="button" onClick={pick} className="cursor-pointer w-full h-full flex flex-col items-center justify-center gap-1.5 text-subtle hover:text-accent hover:bg-accent-soft/40 transition-colors">
             <ImageIcon className="w-7 h-7" />
