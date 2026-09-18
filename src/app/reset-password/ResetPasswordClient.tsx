@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { completePasswordRecovery, hasSession, signOut } from '@/lib/actions/auth'
 import { ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import KnotLoader from '@/components/ui/KnotLoader'
@@ -11,7 +11,6 @@ import Wordmark from '@/components/ui/Wordmark'
 type Phase = 'verifying' | 'ready' | 'done' | 'error'
 
 export default function ResetPasswordClient() {
-  const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -31,30 +30,43 @@ export default function ResetPasswordClient() {
   // The /auth/callback server route already exchanged the code and set the
   // session cookie before redirecting us here. Just confirm a session exists —
   // if it does, the user is in a recovery state and can set a new password.
+  //
+  // THE SDK IS NO LONGER ON THIS PAGE'S CRITICAL PATH. The session check, the
+  // password change and the sign-out are Server Actions now (lib/actions/auth),
+  // which took 61.6KB gzip of @supabase/supabase-js off a route whose whole job
+  // is two password fields. What remains in the browser is the LEGACY hash flow:
+  // old recovery links that carry `#access_token=…` instead of `?code=…` and are
+  // only readable client-side. That listener still exists, it is just imported
+  // dynamically AND only when the URL actually has a hash — so on the normal
+  // PKCE path the SDK is never fetched at all.
   useEffect(() => {
     if (phase === 'error') return
     let cancelled = false
+    let unsubscribe: (() => void) | null = null
 
-    const run = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+    void hasSession().then(signedIn => {
       if (cancelled) return
-      if (session) setPhase('ready')
+      if (signedIn) setPhase('ready')
       else {
         setErrorMsg('No s’ha trobat cap sessió de recuperació activa. Torna a sol·licitar l’enllaç.')
         setPhase('error')
       }
-    }
-    run()
-
-    // Also honor a PASSWORD_RECOVERY event (legacy hash-flow paths).
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' && !cancelled) setPhase('ready')
     })
 
-    return () => { cancelled = true; sub.subscription.unsubscribe() }
+    if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+      void import('@/lib/supabase/client').then(({ createClient }) => {
+        if (cancelled) return
+        const { data: sub } = createClient().auth.onAuthStateChange(event => {
+          if (event === 'PASSWORD_RECOVERY' && !cancelled) setPhase('ready')
+        })
+        unsubscribe = () => sub.subscription.unsubscribe()
+      })
+    }
+
+    return () => { cancelled = true; unsubscribe?.() }
     // Intentionally only runs once on mount — phase changes shouldn't re-fire.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,15 +82,15 @@ export default function ResetPasswordClient() {
     }
 
     setSubmitting(true)
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) {
-      setFieldError(error.message)
+    const res = await completePasswordRecovery(password)
+    if (!res.ok) {
+      setFieldError(res.error)
       setSubmitting(false)
       return
     }
     // Sign out the recovery session so the next visit needs a fresh login
     // with the new password.
-    await supabase.auth.signOut()
+    await signOut()
     setPhase('done')
     setSubmitting(false)
   }

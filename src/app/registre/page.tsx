@@ -1,14 +1,9 @@
-import { Suspense } from 'react'
-import AuthPanel from '@/components/ui/AuthPanel'
-import KnotLoader from '@/components/ui/KnotLoader'
+import AuthRoute, { type AuthSearchParams } from '@/components/ui/AuthRoute'
 
-// Auth pages depend on runtime session/env (Supabase client) — never prerender
-// them, so a missing build-time env can't crash `next build` on this route.
+// The session check happens on the SERVER (see AuthRoute): a signed-in visitor
+// is redirected before a form exists, and everyone else gets the form in the
+// first response — no loader, no round trip, no Supabase SDK in the bundle.
 
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-bg"><KnotLoader /></main>}>
-      <AuthPanel initialMode="register" />
-    </Suspense>
-  )
+export default function RegisterPage({ searchParams }: { searchParams: AuthSearchParams }) {
+  return <AuthRoute mode="register" searchParams={searchParams} />
 }

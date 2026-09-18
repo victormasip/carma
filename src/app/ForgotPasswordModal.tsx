@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Mail, Check } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { sendPasswordReset } from '@/lib/actions/auth'
 import { Modal, ModalClose } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 
@@ -13,7 +13,6 @@ type Props = {
 }
 
 export default function ForgotPasswordModal({ open, onClose, defaultEmail }: Props) {
-  const supabase = createClient()
   const [email, setEmail] = useState(defaultEmail ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,13 +33,16 @@ export default function ForgotPasswordModal({ open, onClose, defaultEmail }: Pro
     setLoading(true)
     setError(null)
     // PKCE: the email link must hit the SERVER callback so the cookie verifier
-    // is in scope when we exchange the code. The callback then forwards to
+    // is in scope when we exchange the code — and the verifier is now WRITTEN on
+    // the server too, by the action below. The callback forwards to
     // /reset-password with a live recovery session.
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-    })
+    //
+    // A Server Action rather than the browser SDK: this modal is rendered by
+    // AuthPanel, so importing @supabase/supabase-js here would have put all
+    // 61.6KB of it back on /login and /registre through the back door.
+    const res = await sendPasswordReset(email, `${window.location.origin}/auth/callback?next=/reset-password`)
     setLoading(false)
-    if (err) { setError(err.message); return }
+    if (!res.ok) { setError(res.error); return }
     setSent(true)
   }
 

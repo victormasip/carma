@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, Globe, MailCheck } from 'lucide-react'
-import KnotLoader from '@/components/ui/KnotLoader'
 import KnotSpinner from '@/components/ui/KnotSpinner'
-import { createClient } from '@/lib/supabase/client'
+import { signInWithPassword, signUpWithPassword, startGoogleOAuth } from '@/lib/actions/auth'
+import { authNextFor, cloneNextFor } from '@/lib/auth/next'
 import { AuthCardShell, AuthInput } from '@/components/ui/auth-card-shell'
 import ForgotPasswordModal from '@/app/ForgotPasswordModal'
 
@@ -16,6 +15,20 @@ type Mode = 'login' | 'register'
 // instantly in-place (no full navigation) with a fast crossfade, and the URL is
 // kept in sync (replaceState) so a refresh lands on the same mode and the funnel
 // query (?url= / ?next=) is preserved. Animations are deliberately quick (~0.2s).
+//
+// NOTHING ABOUT AUTH HAPPENS IN THIS BUNDLE (2026-09-18)
+// ──────────────────────────────────────────────
+// This file used to import `@supabase/supabase-js` (61.6KB gzip) and
+// `framer-motion` (39.8KB gzip) — 101KB of library to show two inputs and a gold
+// button, on the first page of the funnel, over whatever connection the visitor
+// happens to have. Both are gone:
+//
+//   · every auth call is a Server Action (lib/actions/auth.ts), so the SDK stays
+//     on the server where the session cookie is set anyway;
+//   · the three animations are CSS keyframes (`.auth-card-in`, `.auth-swap`,
+//     `.auth-pill` in globals.css) — same curves, same durations, no library.
+//
+// See docs/plans/2026-09-18-performance-every-page.md §F3–F4 / W4.
 
 function GoogleMark() {
   return (
@@ -76,24 +89,18 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
 export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
   const router = useRouter()
   const search = useSearchParams()
-  const supabase = createClient()
 
   const [mode, setMode] = useState<Mode>(initialMode)
 
-  // Funnel context (preserved across the toggle).
+  // Funnel context (preserved across the toggle). The rules live in
+  // lib/auth/next.ts because the SERVER gate on these two routes needs the same
+  // answer to redirect an already-signed-in visitor, and the two must never
+  // disagree about where the funnel goes.
   const cloneUrl = search.get('url') || ''
   const displayUrl = cloneUrl.replace(/^https?:\/\//i, '').replace(/\/$/, '')
-  // When a clone URL is present, BOTH register AND login must continue to the
-  // provisioning hub — otherwise toggling register→login (the same query carries
-  // no ?next=) would drop the clone and dump the user on /dashboard instead of the
-  // onboarding/import flow.
-  // "I have no website" is a funnel intent too, and it has to survive signup the
-  // same way ?url= does — including the register↔login toggle, which carries no
-  // ?next= of its own.
-  const noWeb = search.get('nova') === '1'
-  const cloneNext = `/benvinguda${cloneUrl ? `?url=${encodeURIComponent(cloneUrl)}` : noWeb ? '?nova=1' : ''}`
-  const registerNext = cloneNext
-  const loginNext = search.get('next') || (cloneUrl || noWeb ? cloneNext : '/dashboard')
+  const get = (k: string) => search.get(k)
+  const registerNext = cloneNextFor(get)
+  const loginNext = authNextFor('login', get)
 
   // Shared form state.
   const [email, setEmail] = useState('')
@@ -108,18 +115,8 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
   // the mount effect never has to setState synchronously.
   const [error, setError] = useState<string | null>(() => search.get('error'))
   const [loading, setLoading] = useState(false)
-  const [checkingSession, setCheckingSession] = useState(true)
   const [emailSent, setEmailSent] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace(mode === 'register' ? registerNext : loginNext)
-      else setCheckingSession(false)
-    })
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const switchMode = (next: Mode) => {
     if (next === mode) return
@@ -133,17 +130,22 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
   const handleGoogle = async () => {
     setError(null)
     const next = mode === 'register' ? registerNext : loginNext
+    // `window.location.origin` is a browser fact, so the absolute callback URL is
+    // still built here and handed to the action.
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
-    if (error) setError(error.message)
+    const res = await startGoogleOAuth(redirectTo)
+    if (!res.ok) { setError(res.error); return }
+    // The SDK would have done this itself; with `skipBrowserRedirect` the travel
+    // is ours to make, and the PKCE verifier is already a cookie from the action.
+    window.location.assign(res.url)
   }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setError(error.message); setLoading(false); return }
+    const res = await signInWithPassword(email, password)
+    if (!res.ok) { setError(res.error); setLoading(false); return }
     router.replace(loginNext)
     router.refresh()
   }
@@ -156,31 +158,19 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
     setLoading(true)
     try {
       const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(registerNext)}`
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name.trim(), phone: phone.trim() || null }, emailRedirectTo },
-      })
-      if (error) throw error
-      if (data.session) {
-        router.replace(registerNext)
-        router.refresh()
-      } else {
+      const res = await signUpWithPassword({ email, password, name, phone, emailRedirectTo })
+      if (!res.ok) throw new Error(res.error)
+      if (res.needsConfirmation) {
         setEmailSent(true)
         setLoading(false)
+      } else {
+        router.replace(registerNext)
+        router.refresh()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconegut')
       setLoading(false)
     }
-  }
-
-  if (checkingSession) {
-    return (
-      <main className="flex min-h-screen w-full items-center justify-center bg-bg">
-        <KnotLoader />
-      </main>
-    )
   }
 
   if (emailSent) {
@@ -214,11 +204,13 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
       <AuthCardShell title={title} subtitle={subtitle}>
         {/* Segmented mode toggle */}
         <div className="relative mb-5 grid grid-cols-2 rounded-xl bg-white/5 p-1 text-sm font-semibold">
-          <motion.span
+          {/* The gold pill. Same geometry as before; the spring is now a curve
+              with a little overshoot (`.auth-pill` in globals.css), and the
+              position is an inline transform driven by state. */}
+          <span
             aria-hidden
-            className="absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-lg bg-carma-400 shadow-[0_4px_14px_-4px_rgba(245,188,0,0.6)]"
-            animate={{ x: mode === 'login' ? 4 : 'calc(100% + 4px)' }}
-            transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+            className="auth-pill absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-lg bg-carma-400 shadow-[0_4px_14px_-4px_rgba(245,188,0,0.6)]"
+            style={{ transform: mode === 'login' ? 'translateX(4px)' : 'translateX(calc(100% + 4px))' }}
           />
           <button
             type="button"
@@ -236,14 +228,10 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
           </button>
         </div>
 
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={mode}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-          >
+        {/* `key={mode}` remounts this on every switch, so the CSS entrance
+            replays exactly as AnimatePresence's `initial` did. Only the exit half
+            is gone, and at 160ms the exit half was never visible. */}
+        <div key={mode} className="auth-swap">
             {mode === 'login' ? (
               <form onSubmit={handleLogin} className="space-y-3">
                 <IconField icon={<Mail className="h-4 w-4" />}>
@@ -306,8 +294,7 @@ export default function AuthPanel({ initialMode }: { initialMode: Mode }) {
                 </p>
               </form>
             )}
-          </motion.div>
-        </AnimatePresence>
+        </div>
       </AuthCardShell>
 
       <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} defaultEmail={email} />

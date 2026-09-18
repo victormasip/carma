@@ -1,9 +1,23 @@
 @import "tailwindcss";
 
-/* EL FIL D'OR — the landing page's motion layer (scroll timelines, the gold
-   thread, the living knot). Kept in its own file because it is a
-   self-contained system with its own rules; see the header comment there. */
-@import "./landing.css";
+/* EL FIL D'OR — the landing page's motion layer — IS NOT IMPORTED HERE.
+ *
+ * It used to be, one line below this one, and that single line put 873 lines of
+ * scroll timelines, the gold thread, the living knot and the WhatsApp demo on
+ * the dashboard, the editor, the admin panel and the auth pages — every one of
+ * which renders none of it. CSS was a flat 29.9KB gzip on all 22 routes.
+ *
+ * It now lives where it is used: `components/marketing/LandingPage.tsx` imports
+ * it directly, so Next emits it as that route's own stylesheet and no other
+ * route asks for it. Verified mechanically before the move: of the 55 class
+ * names landing.css defines and globals.css does not, exactly zero are used
+ * anywhere outside `components/marketing/`.
+ *
+ * If you need one of those classes somewhere else, move the RULE here rather
+ * than putting the import back.
+ *
+ * See docs/plans/2026-09-18-performance-every-page.md §F5 / W3.
+ */
 
 /* ── Brand palette (Carma gold) — vivid, yellow-leaning "super gold" ─────────── */
 @theme {
@@ -835,6 +849,39 @@ section[id] { scroll-margin-top: 110px; }
 .zen-fade-up { animation: zen-fade-up .55s var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1)); }
 @keyframes zen-pop { 0% { transform: scale(0.55); opacity: 0; } 60% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
 .zen-pop { animation: zen-pop .6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+ * THE AUTH SURFACE — three animations that used to cost 40KB of JavaScript.
+ *
+ * /login and /registre were importing framer-motion (39.8KB gzip / 121KB raw) to
+ * fade a card in, slide a 2-item toggle indicator, and cross-fade between two
+ * forms. Every one of those is a transform or an opacity on a single element —
+ * the compositor's home ground — and the rest of this product has animated that
+ * way from the start. The library was doing nothing CSS could not, at the price
+ * of the third-largest chunk on the funnel's front door.
+ *
+ * `auth-card-in` matches the old entrance exactly (12px rise, 320ms, the same
+ * cubic-bezier framer was given). `auth-swap` replaces the AnimatePresence
+ * cross-fade: React remounts the panel on `key={mode}`, so the animation replays
+ * on every switch. Only the EXIT half is gone, and at 160ms nobody has ever seen
+ * an exit half.
+ * ════════════════════════════════════════════════════════════════════════════ */
+@keyframes auth-card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.auth-card-in { animation: auth-card-in .32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes auth-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.auth-swap { animation: auth-swap .18s ease-out both; }
+
+/* The segmented toggle's gold pill. `transform` is driven by an inline style so
+   the position is React state, and the easing carries a little overshoot so it
+   still reads as the spring it replaces. */
+.auth-pill { transition: transform .34s cubic-bezier(0.34, 1.36, 0.5, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* These are entrances, not signature brand motion — they yield. */
+  .auth-card-in, .auth-swap { animation: none; }
+  .auth-pill { transition: none; }
+}
 
 /* THE "+N" THAT LIFTS OFF THE BALANCE when a repte is claimed.
    One element, one keyframe, transform + opacity only, and it runs once — the

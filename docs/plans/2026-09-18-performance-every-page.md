@@ -1,6 +1,6 @@
 # EL PES — performance on every single page
 
-**Status:** W1 + W2 SHIPPED 2026-09-18 · W3–W8 open · **Opened:** 2026-09-18
+**Status:** W1–W4 + F1 SHIPPED 2026-09-18 · W5–W8 open · **Opened:** 2026-09-18
 **Predecessors:** `2026-07-06-tech-debt-audit.md`, `2026-09-16-super-mvp-master-plan.md`
 **Gate this plan must never break:** `npm run test:landing`, `test:render`, `test:brand`, `test:fidelity`
 **Gate this plan SHIPPED:** `npm run test:perf` — every route, every build
@@ -69,10 +69,10 @@ identical on every route, and not ours to shrink.**
 | Route | own JS | CSS | chunks | verdict |
 |---|---:|---:|---:|---|
 | **`/edit/[siteId]`** | ~~293.1KB~~ → **64.9KB** | 29.9KB | 16 | ✓ **W1 shipped** |
-| **`/login`** | **135.5KB** | 29.9KB | 14 | ✗ a login form |
-| **`/registre`** | **135.5KB** | 29.9KB | 14 | ✗ a signup form |
-| `/reset-password` | 84.4KB | 29.9KB | 12 | ✗ |
-| `/preview` | 83.8KB | 29.9KB | 12 | ✗ |
+| **`/login`** | ~~135.5KB~~ → **33.7KB** | 26.7KB | 6 | ✅ **W4** |
+| **`/registre`** | ~~135.5KB~~ → **33.7KB** | 26.7KB | 6 | ✅ **W4** |
+| `/reset-password` | ~~84.4KB~~ → **23.2KB** | 26.7KB | 5 | ✅ **W4** |
+| `/preview` | ~~83.8KB~~ → **22.3KB** | 26.7KB | 5 | ✅ **W4** |
 | `/` (landing) | 35.5KB | 30.5KB | 12 | ✓ gated |
 | `/dashboard/sites/[id]` | 33.5KB | 29.9KB | 13 | ~ |
 | `/dashboard/agent` | 33.5KB | 29.9KB | 13 | ~ |
@@ -94,7 +94,7 @@ number nobody can re-derive is a number nobody will defend.
 These were found by the sweeps in §5 before this document was written. They are not
 hypotheses; each one names the file and the line.
 
-### F1 — 262KB of an HTML parser is shipped to the browser · `/edit` · **~95KB gzip** — ✅ OFF THE CRITICAL PATH (W1)
+### F1 — 262KB of an HTML parser is shipped to the browser · `/edit` · **~95KB gzip** — ✅ GONE
 
 `src/app/(app)/dashboard/sites/[id]/studio/ChromeDrawer.tsx:14` imports `NavEditor`
 eagerly. `NavEditor.tsx:19` imports `@/lib/render/navEdit`, whose header cheerfully
@@ -129,40 +129,77 @@ So the Studio pays **144.7KB gzip / 472KB raw** of TipTap + ProseMirror as a blo
 > framework floor. Both chunks still exist (144.4KB TipTap, 82.3KB entities);
 > they simply load when a drawer opens.
 >
-> F1's second half is still open: `navEdit.ts` should use `DOMParser` in the
-> browser so the entity tables are never shipped at all, not merely deferred.
-> `test:perf` §2 warns about it on every run until it is.
+> **F1 finished 2026-09-18.** `navEdit.ts` turned out to have exactly one
+> consumer — `NavEditor.tsx`, a client component — so the header comment claiming
+> it "runs on client or server" was half wrong and wholly expensive. It is a
+> browser module now, parsing with `DOMParser`: the same parser the page was
+> built with, so it agrees with the browser about malformed third-party markup by
+> construction. `node-html-parser` is **orphaned from every client chunk, lazy
+> ones included** — the 82.3KB entity-table chunk no longer exists.
 
-### F3 — 40KB of framer-motion to fade in a login form · `/login`, `/registre`
+### F3 — 40KB of framer-motion to fade in a login form · `/login`, `/registre` — ✅ SHIPPED (W4)
 
 `src/components/ui/AuthPanel.tsx:5` and `src/components/ui/auth-card-shell.tsx:4`
 import `framer-motion`. The chunk is **39.8KB gzip / 121KB raw**. The entire app
 elsewhere animates with CSS — `landing.css` runs 17 scroll timelines and a whole
 motion system on **zero** JavaScript.
 
-**Fix:** replace the auth entrance animations with the CSS the rest of the product
-already uses; drop the dependency from the auth path. Audit `ModulesManager.tsx:22`
-(the third importer) separately — a slide-over may keep it, lazily.
+**Shipped.** Three keyframes in globals.css — `.auth-card-in` (the same 12px
+rise, 320ms and cubic-bezier framer was given), `.auth-swap` (the mode
+cross-fade, replayed by `key={mode}` remounting the panel) and `.auth-pill` (the
+segmented toggle, a transform transition with a little overshoot where the spring
+was). framer-motion is off the auth path entirely. `ModulesManager.tsx:22` still
+imports it, on `/dashboard/sites/[id]`, which is inside budget — left alone
+deliberately rather than churned.
 
-### F4 — The full Supabase client on the auth pages · `/login`, `/registre`, `/preview` · **61.6KB gzip**
+### F4 — The full Supabase client on the auth pages · `/login`, `/registre`, `/preview` · **61.6KB gzip** — ✅ SHIPPED (W4)
 
 `@supabase/supabase-js` is **61.6KB gzip / 236KB raw** in the browser. On `/login`
 and `/registre` some of it is genuinely needed (client-side sign-in). On `/preview`
 it is not needed at all.
 
-**Fix:** (a) get it off `/preview` entirely; (b) on the auth pages, move sign-in
-behind a Server Action or `import()` the client on first submit, so the form paints
-before the SDK arrives.
+**Shipped, and it went further than the finding.** Every auth call is a Server
+Action now (`lib/actions/auth.ts`) — sign-in, sign-up, the Google flow, the
+recovery email, the password change, sign-out. A Server Action is an RPC
+boundary, so its imports never cross into the client bundle; that is the same
+property `test:perf` §2 relies on. The SDK is off `/login`, `/registre`,
+`/preview` **and** `/reset-password`, where the only remaining browser need — the
+legacy `#access_token=…` hash flow's `onAuthStateChange` listener — is now a
+dynamic `import()` behind a check for an actual hash, so the normal PKCE path
+never fetches it.
 
-### F5 — Every route downloads the landing's motion layer · **all 22 routes**
+**It is also more correct.** The verifier cookie for the Google PKCE flow is now
+written on the server, which is exactly where `/auth/callback` needs it; the
+browser flow worked because that cookie *happened* to be readable server-side.
+
+**A regression caught on the way.** The first cut replaced the SDK's local
+session read with a `hasSession()` Server Action on mount — fewer bytes, but a
+POST round trip behind a full-screen loader before the form appeared, for the
+logged-out visitor who is almost everyone on that page. Fewer bytes and a slower
+form is not a win. The check moved into the server render instead (see
+`components/ui/AuthRoute.tsx`): a signed-in visitor is redirected before a form
+exists, everyone else gets the form in the first response, and the loader is
+gone entirely.
+
+### F5 — Every route downloads the landing's motion layer · **all 22 routes** — ✅ SHIPPED (W3)
 
 `globals.css` line 6: `@import "./landing.css"`. That is 873 lines of scroll
 timelines, the gold thread, the living knot and the WhatsApp demo — **on the
 dashboard, the editor, the admin panel and the auth pages**, which render none of
 it. CSS is a flat **29.9KB gzip on every single route**.
 
-**Fix:** move `landing.css` to a route-scoped import on the marketing tree. Expected:
-~30KB → ~18KB everywhere except `/`.
+**Shipped, and the estimate above was wrong — worth recording.** `landing.css` is
+imported by `components/marketing/LandingPage.tsx` now, so Next emits it as that
+route's own stylesheet (19KB raw / 4.4KB gzip) and nobody else asks for it.
+Verified mechanically before the move: of the 55 class names landing.css defines
+and globals.css does not, **exactly zero** are used outside `components/marketing/`.
+
+The saving is **29.9KB → 26.7KB gzip**, not the ~12KB predicted. The prediction
+was made by eye from a raw-size ratio; landing.css is repetitive and gzips to
+almost nothing next to Tailwind's utility layer, which is what the remaining
+26.7KB actually is (126.9KB raw of the 168KB sheet). Real, and 3.2KB × 21 routes,
+but a tenth of the guess. **Per-route CSS splitting is a wave of its own** — one
+sheet is how Tailwind v4 and Next ship CSS by default.
 
 ### F6 — Zero `next/image`, and the dashboard's images are raw originals
 
@@ -193,14 +230,27 @@ picker. Same treatment the landing got in the Super MVP sprint.
 Every route gets a number, enforced in CI. Targets are deliberately reachable, hard
 limits are where we refuse to ship.
 
-| Class | Routes | own JS target | own JS hard | CSS hard |
-|---|---|---:|---:|---:|
-| Marketing | `/` | 40KB | 60KB | 33KB |
-| Auth | `/login`, `/registre`, `/reset-password` | 25KB | 45KB | 20KB |
-| Funnel | `/benvinguda`, `/preview`, `/review/[token]` | 25KB | 45KB | 20KB |
-| Product | `/dashboard/**` | 35KB | 55KB | 20KB |
-| Admin | `/admin/**` | 35KB | 60KB | 20KB |
-| Editor | `/edit/[siteId]`, post editor | 60KB | 110KB | 20KB |
+The first version of this table was written **before anything was measured** —
+25KB for an auth page, 20KB of CSS everywhere. After W1–W4 landed, those figures
+were still 9KB and 7KB below what the routes actually weigh, and a gate that
+warns forever about a number nobody intends to reach is a gate people learn to
+scroll past. So the budgets in `tests/perf.mjs` are now **achieved + headroom**,
+and this table records both.
+
+| Class | Routes | achieved | target | hard | CSS |
+|---|---|---:|---:|---:|---:|
+| Marketing | `/` | 35.4KB | 40KB | 55KB | 33/36 |
+| Auth | `/login`, `/registre`, `/reset-password` | 33.7KB | 36KB | 48KB | 28/31 |
+| Funnel | `/benvinguda`, `/preview`, `/review/[token]` | 28.9KB | 30KB | 42KB | 28/31 |
+| Product | `/dashboard/**` | 33.5KB | 35KB | 45KB | 28/31 |
+| Admin | `/admin/**` | 29.9KB | 32KB | 42KB | 28/31 |
+| Editor | `/edit/[siteId]`, post editor | 64.8KB | 66KB | 78KB | 28/31 |
+
+What is left is the floor of this architecture, not slack: ~27KB of CSS on every
+route is Tailwind's generated utility layer for the whole app, and 33.7KB on
+`/login` is lucide's icons, the modal, the brand loader and the form, with no
+library left to remove. When a future wave lowers one of these for real, lower
+the number with it.
 
 Field targets (measured with `chrome-devtools-mcp`, throttled to Slow 4G / 4× CPU):
 
@@ -304,8 +354,8 @@ landing regressed to 211KB before `test:landing` existed.
 |---|---|---|
 | ~~W1 — the three lines~~ ✅ | F1 + F2 | **−228KB gzip** on `/edit` (293.1 → 64.9KB) |
 | ~~W2 — the gate~~ ✅ | `tests/perf.mjs` + per-class budgets | caught 3 more defeated split points on its first run |
-| **W3 — the shared weight** | F5 (route-scoped landing.css) | ~12KB × 21 routes |
-| **W4 — the auth path** | F3 + F4 | ~100KB on 3 routes |
+| ~~W3 — the shared weight~~ ✅ | F5 (route-scoped landing.css) | 3.2KB × 21 routes (not the 12KB predicted) |
+| ~~W4 — the auth path~~ ✅ | F3 + F4 | **−101.8KB** on /login + /registre, **−61.5KB** on /preview, **−61.4KB** on /reset-password |
 | **W5 — images** | F6 through the `/api/img` we own | LCP on 4 surfaces |
 | **W6 — the server pass** | F7 + Sweep 4's ranked list | 30–60KB across product |
 | **W7 — the recorded pass** | `chrome-devtools-mcp` traces, all 22 routes | the unknown unknowns |

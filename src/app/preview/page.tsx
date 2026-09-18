@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Lock, Sparkles, ArrowRight } from 'lucide-react'
 import KnotLoader from '@/components/ui/KnotLoader'
 import Wordmark from '@/components/ui/Wordmark'
-import { createClient } from '@/lib/supabase/client'
+import { hasSession } from '@/lib/actions/auth'
 import { normalizeUrl, displayUrl as toDisplay } from '@/lib/onboarding/url'
 
 // Auto-advance to the wall after this long (a calm 30s — long enough to look,
@@ -42,8 +42,11 @@ function PreviewInner() {
   useEffect(() => {
     if (!url) { router.replace('/'); return }
     let cancelled = false
-    createClient().auth.getSession().then(({ data }) => {
-      if (!cancelled) setAuthed(!!data.session)
+    // A Server Action, not the browser SDK. This page was loading 61.6KB gzip of
+    // @supabase/supabase-js to answer one boolean — whether "unlock" points at
+    // /benvinguda or /registre. See lib/actions/auth.ts.
+    void hasSession().then(signedIn => {
+      if (!cancelled) setAuthed(signedIn)
     })
     return () => { cancelled = true }
   }, [url, router])

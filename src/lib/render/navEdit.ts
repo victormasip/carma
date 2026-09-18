@@ -11,10 +11,33 @@
 // the most <a> children, or the region root as a fallback), treat its direct-ish
 // <a> elements as the editable nav items, and re-render that container's links
 // from the edited list — cloning the FIRST original link's tag/class/attributes
-// as the template so new links inherit the real styling. Pure + dependency-light
-// (node-html-parser, already a project dep). No DOM, runs on client or server.
-
-import { parse, type HTMLElement } from 'node-html-parser'
+// as the template so new links inherit the real styling.
+//
+// ── IT PARSES WITH THE BROWSER'S OWN PARSER, AND THAT IS THE POINT ───────────
+//
+// This module used to open with `import { parse } from 'node-html-parser'` under
+// a comment claiming it "runs on client or server". Only half of that was ever
+// true: its single consumer is NavEditor.tsx, a client component, so the server
+// half never existed — while the cost very much did. node-html-parser carries the
+// full HTML named-character reference table (`&spades;`, `&hearts;`, the lot), and
+// it was arriving in the browser at 262KB raw / 82.3KB gzip to pull the links out
+// of a <nav>.
+//
+// `DOMParser` does the same job, better, for zero bytes: it is the same parser
+// the page itself was built with, so it agrees with the browser about malformed
+// markup by construction — which a cloned third-party header frequently is.
+//
+// Everything below therefore speaks the DOM, not node-html-parser. The two APIs
+// look alike and are not:
+//   · `.text` → `.textContent`
+//   · `.attributes` is a NamedNodeMap, not a plain object
+//   · `querySelectorAll` returns a NodeList, which has no `.filter`
+//   · `replaceWith(string)` inserts TEXT in the DOM, so a string replacement has
+//     to go through `insertAdjacentHTML` instead
+//   · `root.toString()` → `root.innerHTML`
+// Getting any of those wrong is silent, so they are all named here on purpose.
+//
+// See docs/plans/2026-09-18-performance-every-page.md §F1.
 
 export type NavLink = { label: string; href: string }
 
@@ -49,18 +72,41 @@ export function serializeChromeValue(v: ChromeValue): string {
   return JSON.stringify(v.mode ? { html: v.html, css: v.css, mode: v.mode } : { html: v.html, css: v.css })
 }
 
+/**
+ * Parse a chrome fragment into a container element, or null where there is no
+ * DOM to parse with.
+ *
+ * The null is not defensive clutter: this module is imported by a client
+ * component, and a client component can still be RENDERED on the server (React
+ * does exactly that for the initial HTML). `DOMParser` is not a Node global, so
+ * every caller treats null as "leave it exactly as it was" — never as "empty".
+ *
+ * `body` rather than `documentElement`: the stored value is a fragment, and the
+ * HTML parser puts fragment content in the body. `<link>`/`<meta>` encountered
+ * mid-fragment are inserted at the current node by the in-body insertion mode,
+ * so they stay where they were written rather than being hoisted to <head>.
+ */
+function parseFragment(html: string): HTMLElement | null {
+  if (typeof DOMParser === 'undefined') return null
+  try {
+    return new DOMParser().parseFromString(html, 'text/html').body
+  } catch {
+    return null
+  }
+}
+
 const SKIP_LABEL = /^\s*$/
 
-function cleanLabel(el: HTMLElement): string {
-  return (el.text || '').replace(/\s+/g, ' ').trim()
+function cleanLabel(el: Element): string {
+  return (el.textContent || '').replace(/\s+/g, ' ').trim()
 }
 
 // Find the element that best represents the primary navigation: the descendant
 // (or the root) with the highest count of DIRECT <a> children. A direct-child
 // count avoids picking an outer wrapper that merely contains the nav.
-function findNavContainer(root: HTMLElement): HTMLElement {
-  const candidates: HTMLElement[] = [root, ...root.querySelectorAll('nav, ul, ol, div')]
-  let best: HTMLElement = root
+function findNavContainer(root: Element): Element {
+  const candidates: Element[] = [root, ...root.querySelectorAll('nav, ul, ol, div')]
+  let best: Element = root
   let bestCount = directLinkCount(root)
   for (const el of candidates) {
     const n = directLinkCount(el)
@@ -69,32 +115,25 @@ function findNavContainer(root: HTMLElement): HTMLElement {
   return best
 }
 
-function directLinkCount(el: HTMLElement): number {
+function directLinkCount(el: Element): number {
   let n = 0
-  for (const child of el.childNodes) {
-    if (isElement(child) && child.tagName === 'A') n++
+  for (const child of el.children) {
+    if (child.tagName === 'A') n++
     // Also count an <a> directly inside an <li>/<span> wrapper (the common list pattern).
-    else if (isElement(child)) {
-      const inner = child.childNodes.filter(c => isElement(c) && (c as HTMLElement).tagName === 'A')
-      if (inner.length === 1 && child.childNodes.filter(isElement).length === 1) n++
-    }
+    else if (child.children.length === 1 && child.children[0].tagName === 'A') n++
   }
   return n
-}
-
-function isElement(n: unknown): n is HTMLElement {
-  return !!n && typeof n === 'object' && (n as HTMLElement).nodeType === 1
 }
 
 /**
  * Extract the editable nav links from a chrome region's HTML. Returns the link
  * list in document order. Empty array when no nav links are found (the UI then
- * shows an "add link" affordance only).
+ * shows an "add link" affordance only) or when there is no DOM to parse with.
  */
 export function extractNavLinks(html: string): NavLink[] {
   if (!html.trim()) return []
-  let root: HTMLElement
-  try { root = parse(html) } catch { return [] }
+  const root = parseFragment(html)
+  if (!root) return []
   const container = findNavContainer(root)
   const links: NavLink[] = []
   for (const a of container.querySelectorAll('a')) {
@@ -123,11 +162,12 @@ function renderLink(link: NavLink, template: { wrapperTag: string | null; wrappe
   return anchor
 }
 
-function attrsString(el: HTMLElement, dropHref = false): string {
+// NamedNodeMap, not a plain object — `Object.entries` returns nothing useful here.
+function attrsString(el: Element, dropHref = false): string {
   let out = ''
-  for (const [k, v] of Object.entries(el.attributes)) {
-    if (dropHref && k.toLowerCase() === 'href') continue
-    out += ` ${k}="${escapeAttr(v)}"`
+  for (const attr of el.attributes) {
+    if (dropHref && attr.name.toLowerCase() === 'href') continue
+    out += ` ${attr.name}="${escapeAttr(attr.value)}"`
   }
   return out
 }
@@ -139,21 +179,23 @@ function attrsString(el: HTMLElement, dropHref = false): string {
  * region had no nav container/links, the links are appended into the best
  * candidate container (or the root) so the user can still build a menu.
  *
- * Returns the rewritten HTML string (idempotent-ish: re-extract → re-apply round
- * trips cleanly for typical chrome).
+ * Returns the rewritten HTML string, or the input unchanged when there is no DOM
+ * to parse with (idempotent-ish: re-extract → re-apply round trips cleanly for
+ * typical chrome).
  */
 export function applyNavLinks(html: string, links: NavLink[]): string {
-  let root: HTMLElement
-  try { root = parse(html) } catch { return html }
+  const root = parseFragment(html)
+  if (!root) return html
   const container = findNavContainer(root)
 
   // Discover the styling template + the set of nodes we're going to replace.
-  const anchors = container.querySelectorAll('a').filter(a => !SKIP_LABEL.test(cleanLabel(a)))
+  // Array.from: a NodeList has no `.filter`.
+  const anchors = Array.from(container.querySelectorAll('a')).filter(a => !SKIP_LABEL.test(cleanLabel(a)))
   const first = anchors[0]
 
   let template: { wrapperTag: string | null; wrapperAttrs: string; anchorAttrs: string }
   if (first) {
-    const parent = first.parentNode as HTMLElement | null
+    const parent = first.parentElement
     const useWrapper = !!parent && parent !== container && parent.tagName === 'LI'
     template = {
       wrapperTag: useWrapper ? 'li' : null,
@@ -166,10 +208,10 @@ export function applyNavLinks(html: string, links: NavLink[]): string {
 
   // The nodes to remove: each editable anchor's outermost node within `container`
   // (the <li> wrapper if present, else the anchor itself). Collect uniquely.
-  const removed = new Set<HTMLElement>()
-  const toRemove: HTMLElement[] = []
+  const removed = new Set<Element>()
+  const toRemove: Element[] = []
   for (const a of anchors) {
-    const parent = a.parentNode as HTMLElement | null
+    const parent = a.parentElement
     const node = (parent && parent !== container && parent.tagName === 'LI') ? parent : a
     if (!removed.has(node)) { removed.add(node); toRemove.push(node) }
   }
@@ -180,15 +222,18 @@ export function applyNavLinks(html: string, links: NavLink[]): string {
     .join('')
 
   if (toRemove.length > 0) {
-    // Replace the first removed node with the full rendered set; drop the rest.
-    toRemove[0].replaceWith(rendered)
-    for (let i = 1; i < toRemove.length; i++) toRemove[i].remove()
+    // `replaceWith(rendered)` would insert the markup as TEXT — the DOM only
+    // treats a string as HTML through insertAdjacentHTML. Write the new set in
+    // front of the first old node, then drop every old node (including that one),
+    // which also gets the empty-`rendered` case right: everything goes.
+    if (rendered) toRemove[0].insertAdjacentHTML('beforebegin', rendered)
+    for (const node of toRemove) node.remove()
   } else {
     // No existing links — append into the container.
     container.insertAdjacentHTML('beforeend', rendered)
   }
 
-  return root.toString()
+  return root.innerHTML
 }
 
 // ── Convenience wrappers operating on the stored JSON region value ────────────

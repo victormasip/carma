@@ -1,16 +1,19 @@
 'use client'
 
 import React from 'react'
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import EndlessKnot from '@/components/ui/EndlessKnot'
 
 // Shared dark/gold glass shell for the auth cards (login + register).
 //
-// Perf: the ambient gold glows are now STATIC gradients (previously two infinite
+// Perf: the ambient gold glows are STATIC gradients (previously two infinite
 // framer-motion opacity loops on huge blurred layers — continuous repaint that
-// made the page feel sluggish). The only motion is a single fast card entrance.
-// Result: premium look, zero idle GPU cost. NO mouse-tilt (it was laggy).
+// made the page feel sluggish). The only motion is a single fast card entrance,
+// and as of 2026-09-18 that entrance is a CSS keyframe (`.auth-card-in` in
+// globals.css) rather than a `motion.div`: identical 12px rise, identical 320ms,
+// identical curve, minus the 39.8KB gzip of framer-motion this page was loading
+// to perform it. Result: premium look, zero idle GPU cost, zero library.
+// NO mouse-tilt (it was laggy).
 
 export function AuthInput({ className, type, ...props }: React.ComponentProps<'input'>) {
   return (
@@ -47,12 +50,7 @@ export function AuthCardShell({
       <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[120vh] h-[60vh] rounded-b-[50%] bg-carma-400/15 blur-[80px]" />
       <div className="pointer-events-none absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-[90vh] h-[70vh] rounded-t-full bg-carma-500/10 blur-[70px]" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm relative z-10"
-      >
+      <div className="auth-card-in w-full max-w-sm relative z-10">
         <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-carma-400/15 shadow-[0_20px_60px_-20px_rgba(245,188,0,0.25),0_8px_24px_-12px_rgba(0,0,0,0.6)] overflow-hidden">
           <div className="text-center space-y-1 mb-5">
             <div
@@ -67,7 +65,7 @@ export function AuthCardShell({
 
           {children}
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

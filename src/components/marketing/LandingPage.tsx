@@ -35,6 +35,17 @@
 
 import Link from 'next/link'
 import { Fraunces } from 'next/font/google'
+
+// THE MOTION LAYER, SCOPED TO THE ONE PAGE THAT HAS IT.
+//
+// Imported here rather than from globals.css, so Next emits it as this route's
+// own stylesheet: the dashboard, the editor, the admin panel and the auth pages
+// stop downloading 873 lines of scroll timelines they never render. Every
+// component that uses these classes (Nav, Door, StudioDemo, CommunityWall,
+// PhoneScene) is rendered by this file, so importing it once here covers them
+// all — a stylesheet imported anywhere in a route's module graph is emitted for
+// that whole route. See the note at the top of globals.css.
+import '@/app/landing.css'
 import { ArrowRight, Check, FileText, Globe, Mic, Palette, ShieldCheck } from 'lucide-react'
 import Wordmark from '@/components/ui/Wordmark'
 import EndlessKnot, { KNOT_PATH, KNOT_VIEWBOX, KNOT_GRADIENT_ID } from '@/components/ui/EndlessKnot'
