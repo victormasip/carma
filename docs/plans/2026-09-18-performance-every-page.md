@@ -1,9 +1,9 @@
 # EL PES — performance on every single page
 
-**Status:** W1–W6 + F1 SHIPPED 2026-09-18 · W7–W8 open · **Opened:** 2026-09-18
+**Status:** W1–W7 + F1 SHIPPED 2026-09-18 · W8 open · **Opened:** 2026-09-18
 **Predecessors:** `2026-07-06-tech-debt-audit.md`, `2026-09-16-super-mvp-master-plan.md`
 **Gate this plan must never break:** `npm run test:landing`, `test:render`, `test:brand`, `test:fidelity`
-**Gate this plan SHIPPED:** `npm run test:perf` — every route, every build
+**Gates this plan SHIPPED:** `npm run test:perf` (bytes, every commit) · `npm run test:vitals` (recorded LCP/CLS/TBT, before a release)
 
 ---
 
@@ -275,15 +275,24 @@ route is Tailwind's generated utility layer for the whole app, and 33.7KB on
 library left to remove. When a future wave lowers one of these for real, lower
 the number with it.
 
-Field targets (measured with `chrome-devtools-mcp`, throttled to Slow 4G / 4× CPU):
+Field targets, and what W7 actually recorded (Lighthouse 13.4.1, real Chrome,
+Slow 4G / 4× CPU — see §6.1.2):
 
-| Metric | Landing | Product routes |
-|---|---:|---:|
-| LCP | ≤ 1.8s | ≤ 2.5s |
-| CLS | ≤ 0.02 | ≤ 0.05 |
-| INP | ≤ 150ms | ≤ 200ms |
-| Long tasks > 200ms | 0 | ≤ 1 |
-| TBT | ≤ 150ms | ≤ 300ms |
+| Metric | Landing target | measured | Product target | measured | |
+|---|---:|---:|---:|---:|---|
+| LCP | ≤ 1.8s | **3.77s** | ≤ 2.5s | **2.89–3.26s** | ✗ font-bound |
+| CLS | ≤ 0.02 | 0.000 | ≤ 0.05 | 0.000–0.020 | ✓ |
+| TBT | ≤ 150ms | 128ms | ≤ 300ms | 134–154ms | ✓ |
+| Long tasks > 200ms | 0 | 0 | ≤ 1 | 0 | ✓ |
+| INP | ≤ 150ms | — | ≤ 200ms | — | needs interaction, not a navigation audit |
+
+The LCP targets were written before anything was recorded, like the byte targets
+in the table above them. They are kept here as the ambition; `tests/vitals.mjs`
+holds the ratchet at what is currently achieved, and §6.1.2 sets out exactly what
+it would take to close the gap and why that call is not an engineer's to make.
+
+Desktop, for scale: the landing scores **99** with an LCP of **863ms** and a TBT
+of **0ms**. Everything above is the worst case, on purpose.
 
 ---
 
@@ -407,6 +416,102 @@ standing invariant (it reports only candidates with a server parent, and exclude
 the `error.tsx` files Next requires to be client), and §5 encodes W5. A sweep run
 once tells you about today; a sweep in the gate tells you about every commit.
 
+### 6.1.2 W7 — the recorded pass, and what a real browser said
+
+Every test file in this repo used to open with the same confession: *"this repo
+has no headless browser."* On 2026-09-18 that stopped being true. The
+`chrome-devtools-mcp` plugin bundles **Lighthouse 13.4.1**, and this machine has
+Chrome, so `npm run test:vitals` boots the production build and records what
+actually happens.
+
+**Throttled mobile** — Lighthouse's default Slow 4G + 4× CPU, deliberately the
+worst case rather than the median visitor:
+
+| route | score | FCP | LCP | TBT | CLS | fonts | page |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `/` | 87 | 1.52s | **3.77s** | 128ms | 0.000 | 175KB | 466KB |
+| `/preview` | 92 | 1.06s | **3.26s** | 134ms | 0.020 | 175KB* | 391KB* |
+| `/login` | 93 | 1.06s | **2.90s** | 154ms | 0.000 | 57KB | 275KB |
+| `/registre` | 94 | 1.06s | **2.89s** | 137ms | 0.000 | 57KB | 275KB |
+| `/` **desktop** | **99** | 383ms | **863ms** | **0ms** | 0.000 | | |
+
+\* `/preview` embeds the cloned site in an iframe, so its byte totals include the
+previewed blog's assets, not only Carma's chrome.
+
+**Against §4's field targets: CLS passes everywhere. TBT passes everywhere. Long
+tasks pass (three, longest 160ms). LCP misses everywhere.**
+
+#### What LCP is actually bound by — and it is nothing a byte budget can see
+
+It is not the network: every request on the landing finishes inside ~110ms. It is
+not JavaScript bytes; six waves took care of those. The landing's gap between
+first paint (1.52s) and largest paint (3.77s) is **2.25 seconds of font**.
+
+  · **Zero `<link rel="preload" as="font">` on any route.** Next 16.2.6 emits
+    none in this configuration, so every font is discoverable only after the
+    browser has fetched and parsed the CSS that declares it — and on the landing
+    that is the *third* stylesheet.
+  · **175KB of fonts on the landing** (118KB Fraunces variable + 4×~14KB Ubuntu);
+    57KB everywhere else.
+  · Main-thread work totals 3.18s, of which **Style & Layout is 853ms** — the
+    scroll timelines and the large rotating marks — and script evaluation is
+    446ms.
+
+CLS is 0.000 because `next/font`'s metric-matched fallback is doing its job, so
+the swap costs no layout shift. It still costs LCP, because LCP is recorded when
+the headline repaints in its real face.
+
+#### Two hypotheses, tested, one wrong
+
+**Move the font declaration into the page.** `next/font` documents preloading for
+faces declared in a page or layout, and Fraunces lived in
+`components/marketing/LandingPage.tsx`. Moved it to `app/page.tsx` and measured:
+**no preload link appeared and LCP did not move — 3.77s, twice.** No route in the
+app emits a font preload, with the font declared in a page, a layout or a
+component. This is framework behaviour, not placement. **Reverted**, because
+keeping a change whose stated reason the measurement refuted is how a codebase
+fills up with folklore.
+
+**Drop the `opsz` axis from Fraunces.** Measured, twice: **fonts 175KB → 118KB
+(−33%), LCP 3.77s → 3.49s (−0.28s)**. Real, reproducible — and **not shipped**,
+because it is a typographic decision and not an engineer's to take alone. Optical
+size is what makes a display face look considered at `display-xl`.
+
+#### The decision this leaves on the table
+
+The landing's LCP is the price of its display face. Three options, with numbers:
+
+| option | LCP | cost |
+|---|---:|---|
+| keep as it is | 3.77s | none — and desktop is 99/100 at 863ms |
+| drop the `opsz` axis | 3.49s | letterforms stop adapting to size |
+| `display: 'optional'` | ≈ FCP (1.5s) | first-time visitors see the fallback serif for that whole visit; the real face arrives for their next one |
+
+Not an engineering call. The measurements are here so it can be made on evidence.
+
+#### What shipped
+
+`npm run test:vitals` — boots the build, audits the public routes, prints the
+table, and holds a ratchet on LCP/TBT/CLS per route. Two things it does on
+purpose:
+
+  · **It is not in the commit loop.** A Lighthouse navigation is 30–60s per route
+    and needs a real browser. This is a before-a-release gate; `test:perf` is the
+    per-commit one.
+  · **It refuses to look like a pass when it cannot run.** No Lighthouse or no
+    Chrome and it says SKIPPED, loudly, and exits 0 — it must not block a build
+    on a machine that lacks a browser, and it must never be mistaken for green.
+
+It also retries once per route with a pause: `chrome-launcher`'s teardown throws
+on Windows often enough that roughly one audit in three failed on a leftover
+process rather than on anything about the page. A flaky gate gets muted, so the
+flake is handled inside it.
+
+**Still unmeasured: everything behind a login.** `/dashboard`, `/edit` and the
+admin routes need an authenticated run, which is its own piece of work. The byte
+numbers for those routes are in `test:perf`; the field numbers are not in
+anything yet.
+
 ### 6.2 The waves
 
 | Wave | Content | Est. saving |
@@ -417,7 +522,7 @@ once tells you about today; a sweep in the gate tells you about every commit.
 | ~~W4 — the auth path~~ ✅ | F3 + F4 | **−101.8KB** on /login + /registre, **−61.5KB** on /preview, **−61.4KB** on /reset-password |
 | ~~W5 — images~~ ✅ | F6 through the `/api/img` we own | 5 surfaces + a gate check that found 9 more |
 | ~~W6 — the server pass~~ ✅ | F7 + Sweep 4 | **≈0KB, and that is the finding** — see below |
-| **W7 — the recorded pass** | `chrome-devtools-mcp` traces, all 22 routes | the unknown unknowns |
+| ~~W7 — the recorded pass~~ ✅ | Lighthouse 13.4.1 + real Chrome, public routes | **LCP is font-bound, and no byte budget could see it** |
 | **W8 — data & cache** | Sweep 5's list | TTFB |
 
 W1 and W2 are the whole plan in miniature: fix what is measured, then make it
