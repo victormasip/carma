@@ -32,6 +32,14 @@
 // El comptador compta amunt en lloc de saltar. No és decoració: és el que fa que
 // «+75» es llegeixi com una cosa que has guanyat i no com un número que ha
 // canviat de valor.
+//
+// I EL WIDGET DE LA BARRA LATERAL ES MOU AMB AQUESTA PANTALLA (2026-09-18)
+// ──────────────────────────────────────────────────────────────────────
+// Faltava la meitat: aquesta pantalla era instantània i el comptador de punts del
+// menú lateral — el número que el propietari MIRA mentre reclama — el pinta el
+// layout al servidor, així que es quedava amb la xifra vella. Cada moviment del
+// saldo d'aquí (optimista, reconciliació i també la marxa enrere d'un error) es
+// publica a lib/karma/live.ts, i el widget s'hi subscriu.
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
@@ -44,6 +52,7 @@ import EndlessKnot from '@/components/ui/EndlessKnot'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { claimKarmaReward, claimAllKarmaRewards } from '@/lib/actions/karma'
+import { publishKarmaBalance } from '@/lib/karma/live'
 import {
   KARMA_COSTS, KARMA_REWARDS, karmaActionLabel,
   type KarmaPlan, type KarmaRewardKey,
@@ -182,7 +191,13 @@ export default function KarmaClient({
     const prevEntries = entries
 
     // ── optimistic ──
-    if (balance !== null) setBalance(balance + amount)
+    // `karma.balance` is the figure the SERVER last rendered — the same prop the
+    // sidebar widget is holding — so it is the baseline every publish is taken
+    // against. See resolveKarmaBalance.
+    if (balance !== null) {
+      setBalance(balance + amount)
+      publishKarmaBalance({ balance: balance + amount, base: karma.balance })
+    }
     setStates(s => {
       const next = { ...s }
       for (const k of keys) next[k] = { ...(next[k] ?? { eligible: true, claimed: false }), claimed: true }
@@ -203,8 +218,10 @@ export default function KarmaClient({
     startTransition(async () => {
       const res = await call()
       if (!res.ok) {
-        // A failed optimistic claim left painted is worse than never painting it.
+        // A failed optimistic claim left painted is worse than never painting it
+        // — in the sidebar too, which is why the rollback publishes as well.
         setBalance(prevBalance)
+        publishKarmaBalance({ balance: prevBalance, base: karma.balance })
         setStates(prevStates)
         setEntries(prevEntries)
         setWin(null)
@@ -214,6 +231,7 @@ export default function KarmaClient({
       }
       // ── reconcile with the real numbers ──
       setBalance(res.data.balance)
+      publishKarmaBalance({ balance: res.data.balance, base: karma.balance })
       setStates(res.data.states)
       setEntries(e => {
         const real = e.filter(x => !x.id.startsWith('optimistic-'))
@@ -232,7 +250,7 @@ export default function KarmaClient({
       if (res.data.already && res.data.amount === 0) toast('Això ja ho tenies reclamat 👍', 'success')
       else toast(`+${res.data.amount} Punts de Carma ✨`, 'success')
     })
-  }, [balance, states, entries, busyKey, toast])
+  }, [balance, states, entries, busyKey, karma.balance, toast])
 
   const claimOne = (key: KarmaRewardKey) => {
     const amount = KARMA_REWARDS.find(r => r.key === key)?.amount ?? 0

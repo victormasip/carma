@@ -77,6 +77,10 @@ export default function ConnectAgentStep({ onClose }: {
   const { toast } = useToast()
   const isMobile = useCoarsePointer()
   const [pending, startTransition] = useTransition()
+  // `null` means WE HAVE NOT ASKED YET — which is emphatically not the same
+  // thing as "there is no agent in this environment". Conflating the two is what
+  // made a brand-new owner meet a warning telling them to skip the step, for the
+  // one frame before ensureAgentClaim() answered. See the render below.
   const [state, setState] = useState<AgentConnectState | null>(null)
   const [view, setView] = useState<'connect' | 'success'>('connect')
   const [stalled, setStalled] = useState(false)
@@ -248,9 +252,32 @@ export default function ConnectAgentStep({ onClose }: {
     </p>
   )
 
+  // THE GHOST SCREEN, AND WHY IT IS GONE.
+  //
+  // Founder QA, 2026-09-18: moving to connect WhatsApp flashes "L'agent encara
+  // no està configurat en aquest entorn. Salta aquest pas…" before the QR
+  // appears. A new owner should never see that sentence at all.
+  //
+  // It was not a timing accident, it was a missing state. `agentNumber` is
+  // `state?.agentNumber ?? ''`, and `state` is null until ensureAgentClaim()
+  // comes back — so the very first committed frame took the empty string as
+  // PROOF that the environment has no agent, and rendered the one screen whose
+  // job is to send the owner away. The claim then landed and the screen swapped.
+  //
+  // There are three states here, not two: still asking, asked-and-there-is-none,
+  // and asked-and-here-it-is. `ready` is the one that was missing. While we are
+  // still asking, the screen shows the half it already KNOWS is true — the
+  // headline and the shape of the panel — and holds the verdict until it has one.
+  const ready = state !== null
+
   return (
-    <Canvas onSkip={() => onClose(false)} wide={!!agentNumber}>
-      {!agentNumber ? (
+    // `wide` stays true through the wait so the canvas does not resize under the
+    // owner when the real screen arrives; only the narrow no-agent verdict is
+    // ever centred.
+    <Canvas onSkip={() => onClose(false)} wide={!ready || !!agentNumber}>
+      {!ready ? (
+        <Preparing isMobile={isMobile} />
+      ) : !agentNumber ? (
         <div className="flex flex-col items-center text-center">
           <Wordmark size="text-lg" />
           <h1 className="mt-6 text-3xl font-bold leading-[1.1] tracking-tight text-text sm:text-4xl">
@@ -423,6 +450,55 @@ export default function ConnectAgentStep({ onClose }: {
   )
 }
 
+
+/**
+ * The wait, wearing the shape of the answer.
+ *
+ * ensureAgentClaim() is one round trip; this is what fills it. It is deliberately
+ * the SAME two-column skeleton the connected screen uses — headline on the left,
+ * the waiting panel on the right — so when the real screen lands nothing moves
+ * except the contents of the boxes. It says nothing it does not know yet: no
+ * number, no verdict about the environment, no instructions.
+ *
+ * `isMobile` is threaded through for one reason: the real panel shows a QR on a
+ * fine pointer and a sentence on a coarse one, so the placeholder has to make
+ * the same choice or the plate would appear and then vanish on a phone — a
+ * second flash, in the screen built to remove the first one.
+ */
+function Preparing({ isMobile }: { isMobile: boolean }) {
+  return (
+    <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] lg:gap-14">
+      <div className="text-center lg:text-left">
+        <Wordmark size="text-lg" />
+        <h1 className="mt-5 text-3xl font-bold leading-[1.08] tracking-tight text-text sm:text-4xl lg:text-5xl">
+          El teu blog, des del
+          <br />
+          <span className="text-accent">WhatsApp</span>.
+        </h1>
+        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted lg:mx-0">
+          Una nota de veu i tens l&apos;article escrit. Tu aproves, ell publica.
+        </p>
+        <div className="skeleton mx-auto mt-8 h-[4.75rem] w-full max-w-md rounded-3xl lg:mx-0" aria-hidden />
+      </div>
+
+      <div className="mx-auto w-full max-w-sm rounded-3xl border border-border bg-bg-elevated p-6 shadow-card">
+        <p className="flex items-center justify-center gap-2 text-sm font-semibold text-muted" role="status">
+          <KnotSpinner className="h-4 w-4" /> Preparant la connexió…
+        </p>
+        {!isMobile && (
+          <div className="mx-auto mt-4 grid h-44 w-44 place-items-center rounded-2xl bg-[#14110c]" aria-hidden>
+            <KnotSpinner className="h-6 w-6 text-accent" />
+          </div>
+        )}
+        <div className="mt-5 space-y-2.5 border-t border-border pt-5" aria-hidden>
+          <div className="skeleton h-4 w-4/5 rounded-full" />
+          <div className="skeleton h-4 w-3/5 rounded-full" />
+          <div className="skeleton h-4 w-2/3 rounded-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Full-bleed canvas with the brand's drifting halos. One screen, one decision. */
 const noopSubscribe = () => () => {}

@@ -217,6 +217,34 @@
 @keyframes knot-rotate     { to { transform: rotate(360deg); } }
 @keyframes knot-rotate-rev { to { transform: rotate(-360deg); } }
 
+/* THE BOX MUST BE THE MARK, OR THE MARK ORBITS ITS OWN BOX.
+ *
+ * `rotate()` turns an element about the centre of its BORDER BOX, and a <span>
+ * holding an inline <svg> is taller than the svg: the replaced element sits on a
+ * text baseline, so the strut's descent and half-leading add several pixels
+ * underneath it. The centre of the box is therefore BELOW the centre of the
+ * mark, and the knot wobbles instead of turning — ~4.5px of eccentricity at the
+ * hero's 860px, and it MOVES when Fraunces finishes loading, because the strut
+ * is measured from whatever font is current. That is the "glitchy on certain
+ * screens" half of the report; the other half was the off-centre viewBox, fixed
+ * in components/ui/EndlessKnot.tsx.
+ *
+ * `line-height: 0` zeroes the strut, so the line box is exactly the mark and the
+ * two centres coincide. It changes no `display`, which matters: `.knot-hero`
+ * carries `hidden lg:block` and must keep it.
+ *
+ * Wrappers that are already `inline-flex` (a flex item is blockified, so there
+ * is no baseline gap) or explicitly sized are unaffected — this is simply true
+ * for all of them now, rather than true by accident for most of them.
+ */
+.knot-rotate,
+.knot-rotate-fast,
+.knot-rotate-rev,
+.knot-thinking,
+.knot-flare,
+.knot-hero,
+.knot-mark { line-height: 0; }
+
 /* 2 ── The hero knot. Enormous, behind everything, turning. This is the "massive
         visual presence" the brief asked for — at this size it reads as an
         atmosphere rather than a logo. */
@@ -296,6 +324,14 @@
   stroke-dasharray: 100;
   stroke-dashoffset: 0;
 }
+/* The fill is the FADE only; a child span does the turning.
+ *
+ * They used to be the same element (`class="knot-tie__fill knot-rotate"`), and
+ * `.knot-rotate`'s `!important` shorthand won every longhand the fade needed —
+ * `animation-name`, and `animation-timeline` with it. So the knot turned and the
+ * scroll-driven "then it fills" beat never ran at all: the filled mark was
+ * simply always there, under a stroke drawing itself over the top. One element,
+ * one animation; see KnotTie in LandingPage.tsx. */
 .knot-tie__fill { opacity: 1; }
 
 @supports (animation-timeline: view()) {
@@ -502,6 +538,11 @@
     /* The phone drifts a hair across the pin: stillness inside a pin reads as a
        frozen page. This one IS autonomous-feeling, so reduced motion drops it. */
     .sc-conversa__phone--drift {
+      /* The device is a fixed 19.5:9 now (see PhoneScene), so its HEIGHT follows
+         its width — and this one lives inside a 100svh pin. Deriving the width
+         back from the height available is what keeps a 340px phone from standing
+         taller than the stage it is pinned in on a short laptop screen. */
+      max-width: min(330px, calc((100svh - 7rem) * 1125 / 2436));
       animation-name: wa-phone-drift;
       animation-fill-mode: both;
       animation-timing-function: linear;
@@ -699,10 +740,23 @@
  * SCENE 7 — LA COMUNITAT. The wall moves with the scroll, never on a clock: no
  * idle animation is left running on this page.
  * ══════════════════════════════════════════════════════════════════════════ */
-.wall { display: flex; gap: 1rem; width: max-content; }
+/* The rail CENTRES the wall. `safe` is the whole trick: while the row is
+   narrower than the page (the real state of the Aparador until dozens of
+   members have opted in) it is centred like everything else on the page; the
+   moment it is wider, `safe` falls back to flex-start so a centred overflow can
+   never clip the first card off the left edge. A browser that does not know
+   `safe center` drops the declaration and gets flex-start — exactly today's
+   behaviour, which is the right thing to degrade to. */
+.wall-rail { display: flex; justify-content: safe center; }
+/* `flex: 0 0 auto` — never shrink. As a flex item the row would otherwise be
+   squeezed down to the rail's width, which would silently shorten the drift
+   (it translates by a percentage of its OWN width) on exactly the long walls
+   the drift exists for. */
+.wall { display: flex; flex: 0 0 auto; gap: 1rem; width: max-content; }
 @supports (animation-timeline: view()) {
   @media (min-width: 768px) {
-    .wall {
+    /* Only a wall long enough to run off the page drifts — see CommunityWall. */
+    .wall--drift {
       animation-name: wall-drift;
       animation-fill-mode: both;
       animation-timing-function: linear;
@@ -714,6 +768,9 @@
 @keyframes wall-drift { from { transform: translateX(2%); } to { transform: translateX(-26%); } }
 
 @media (max-width: 767px) {
+  /* On a phone the wall is a scroller, not a centred row: the rail gets out of
+     the way so `overflow-x` belongs to the wall itself. */
+  .wall-rail { display: block; }
   .wall {
     width: auto;
     overflow-x: auto;

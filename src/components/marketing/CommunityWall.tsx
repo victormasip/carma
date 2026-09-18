@@ -44,10 +44,25 @@ export default async function CommunityWall({ locale }: { locale: UiLocale }) {
     )
   }
 
+  // CENTRED WHILE IT FITS, AND STILL WHILE IT FITS.
+  //
+  // `.wall` is a `width: max-content` flex row, which is what lets the drift
+  // translate it sideways — and it is also why, with the handful of members the
+  // Aparador has opted in so far, the whole wall sat flush against the left edge
+  // of a page where everything else is centred (founder QA, 2026-09-18).
+  //
+  // Two halves to the fix, and the second one matters as much as the first:
+  //   · `.wall-rail` centres the row (see landing.css — `safe center`, so a long
+  //     wall is never clipped at its START once it does overflow);
+  //   · the sideways drift is only attached once there is enough wall to drift.
+  //     Sliding four centred cards 26% to the left is not a marquee, it is the
+  //     same misalignment arriving slowly.
+  const drifts = blogs.length > 4
+
   return (
     <>
-      <div className="mt-6 overflow-hidden">
-        <div className="wall">
+      <div className="wall-rail mt-6 overflow-hidden">
+        <div className={drifts ? 'wall wall--drift' : 'wall'}>
           {blogs.map(b => <WallCard key={b.id} b={b} c={c} />)}
         </div>
       </div>

@@ -192,7 +192,11 @@ function Entrada({ c }: { c: LandingCopy }) {
           <div className="lg:pointer-events-none lg:absolute lg:-right-16 lg:top-1/2 lg:w-[340px] lg:-translate-y-1/2 lg:rotate-[5deg]">
             <PhoneScene p={c.conversa.phone} mode="live" />
           </div>
-          <div className="hidden lg:block lg:h-[560px]" />
+          {/* Reserves the cell the tilted phone is centred in. Sized to the
+              device now that the device has real proportions (340px × 19.5:9
+              ≈ 736px); it is deliberately a little shorter, so the phone still
+              runs past the fold the way an object in a room does. */}
+          <div className="hidden lg:block lg:h-[620px]" />
         </div>
       </div>
     </section>
@@ -755,8 +759,14 @@ function Tancament({ c }: { c: LandingCopy }) {
 function KnotTie() {
   return (
     <span className="relative block h-[240px] w-[240px]" aria-hidden>
-      <span className="knot-tie__fill knot-rotate absolute inset-0">
-        <EndlessKnot size={240} />
+      {/* TWO ELEMENTS, TWO ANIMATIONS. `.knot-tie__fill` fades in on the scroll
+          timeline and the child turns on the clock. They used to be one element
+          wearing both classes, and `.knot-rotate`'s !important shorthand simply
+          deleted the fade (see landing.css). */}
+      <span className="knot-tie__fill absolute inset-0">
+        <span className="knot-rotate block h-full w-full">
+          <EndlessKnot size={240} />
+        </span>
       </span>
       <svg className="knot-tie absolute inset-0" viewBox={KNOT_VIEWBOX} width={240} height={240} style={{ overflow: 'visible' }}>
         <defs>

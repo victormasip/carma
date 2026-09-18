@@ -45,6 +45,66 @@ export type BrandCaptureViewProps = {
   onContinue: (brain: BrandBrain | null) => void
 }
 
+/**
+ * A progress bar that keeps moving between the events that drive it.
+ *
+ * THE BUG. The bar was bound directly to the SSE `pct`, which arrives five
+ * times in a run that can last a minute — so it sat perfectly still for ten,
+ * fifteen, thirty seconds at a stretch. A frozen progress bar is not "no news",
+ * it reads as a crash, and this screen is precisely where an owner decides
+ * whether the product works (founder QA, 2026-09-18).
+ *
+ * THE SHAPE. Real milestones remain the truth; between them the bar CREEPS
+ * towards a ceiling a little above the last one, asymptotically, so it is always
+ * moving and never overtakes reality. The ceiling is capped at 90% until the run
+ * actually resolves — the last tenth belongs to the result, not to a guess.
+ *
+ * TWO THINGS MAKE THIS CHEAP:
+ *   · it writes the scale straight to the node as a custom property behind a
+ *     constant `transform: scaleX(var(--cap))`, so the browser composites it and
+ *     no React render happens per frame — and a re-render can never yank the bar
+ *     back to the value the JSX declares, because that value never changes. The
+ *     old bar animated `width`, which is layout, for up to a minute;
+ *   · the effect re-runs only when a milestone lands — five times, not sixty
+ *     times a second.
+ *
+ * It stays alive under reduced motion on purpose: this is feedback, not
+ * decoration, and it carries the same exemption `.knot-thinking` does.
+ */
+function useCreepingProgress(pct: number, settled: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // Never below where the server has already got to, never above 90 until the
+    // run is over. The +14 is the headroom the creep is allowed to spend.
+    const ceiling = settled ? 100 : Math.min(90, Math.max(pct, 4) + 14)
+    // The animated value lives in a custom property, NOT in the `transform`
+    // string: the element's inline `transform` is then a constant that React
+    // re-renders to the identical value forever, so a milestone landing can
+    // never yank the bar back to where the JSX says it started.
+    const read = () => (parseFloat(el.style.getPropertyValue('--cap')) || 0.04) * 100
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(200, now - last)
+      last = now
+      const from = read()
+      // Exponential approach: fast while the gap is wide, imperceptible as it
+      // closes — which is exactly how a real download feels.
+      const k = 1 - Math.exp(-dt / (settled ? 160 : 2600))
+      const next = Math.min(ceiling, from + (ceiling - from) * k)
+      el.style.setProperty('--cap', (next / 100).toFixed(4))
+      if (ceiling - next > 0.08) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [pct, settled])
+
+  return ref
+}
+
 export default function BrandCaptureView({ siteId, siteName, input, seed, onContinue }: BrandCaptureViewProps) {
   const [steps, setSteps] = useState<Record<BrandStepId, StepState>>(() => ({
     read: { status: 'pending' }, documents: { status: 'pending' }, voice: { status: 'pending' },
@@ -55,6 +115,9 @@ export default function BrandCaptureView({ siteId, siteName, input, seed, onCont
   const [error, setError] = useState<string | null>(null)
   const [finished, setFinished] = useState(false)
   const fired = useRef(false)
+  // `pct` is the last thing the server actually told us; the bar eases towards
+  // a little beyond it and parks at 90% until the run resolves.
+  const barRef = useCreepingProgress(pct, finished || !!brain)
 
   useEffect(() => {
     if (fired.current) return
@@ -196,12 +259,19 @@ export default function BrandCaptureView({ siteId, siteName, input, seed, onCont
         <p className="mt-2 text-sm text-muted">Un moment — això només passa un cop.</p>
       </div>
 
-      {/* One slim bar. Width is a transform-free layout change but it happens a
-          handful of times, not per frame. */}
+      {/* THE BAR MOVES BETWEEN EVENTS, NOT ONLY ON THEM.
+          See useCreepingProgress: five SSE milestones over a minute left it
+          frozen for ten seconds at a time, which reads as a crash. */}
       <div className="mt-7 h-1.5 w-full overflow-hidden rounded-full bg-surface-hover">
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
-          style={{ width: `${Math.min(100, Math.max(4, pct))}%` }}
+          ref={barRef}
+          className="h-full w-full origin-left bg-accent"
+          style={{ transform: 'scaleX(var(--cap, 0.04))' }}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(Math.min(100, Math.max(4, pct)))}
+          aria-label="Progrés de l’anàlisi"
         />
       </div>
 

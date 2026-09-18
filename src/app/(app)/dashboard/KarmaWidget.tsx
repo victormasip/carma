@@ -14,13 +14,21 @@
 // page where punts can be EARNED, not to a pricing table.
 //
 // The balance is server-rendered from the layout and refreshes with navigation —
-// no polling for a number that changes a few times a day.
+// no polling for a number that changes a few times a day. The ONE thing that has
+// to beat a navigation is a claim the owner just made two panes away, which is
+// what lib/karma/live.ts carries: the challenges page publishes the new figure
+// the instant it paints it, and this widget moves with it. Everything about why
+// that is a module store rather than a context is documented there.
 
+import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Infinity as InfinityIcon } from 'lucide-react'
 import EndlessKnot from '@/components/ui/EndlessKnot'
 import { useT } from '@/lib/i18n/LocaleProvider'
+import {
+  karmaBalanceServerSnapshot, karmaBalanceSnapshot, resolveKarmaBalance, subscribeKarmaBalance,
+} from '@/lib/karma/live'
 import { cn } from '@/lib/cn'
 
 export type KarmaWidgetData = {
@@ -35,11 +43,16 @@ export type KarmaWidgetData = {
 export default function KarmaWidget({ karma }: { karma: KarmaWidgetData }) {
   const t = useT()
   const pathname = usePathname()
+  // Read BEFORE the early return: hooks cannot live behind a condition.
+  const live = useSyncExternalStore(subscribeKarmaBalance, karmaBalanceSnapshot, karmaBalanceServerSnapshot)
   if (!karma.available && !karma.superadmin) return null
 
   const active = pathname.startsWith('/dashboard/karma')
-  const infinite = karma.superadmin || karma.balance === null
-  const balance = karma.balance ?? 0
+  // The live figure while it is still newer than the server's; the server's the
+  // moment a fresh render disagrees. See resolveKarmaBalance.
+  const shownBalance = resolveKarmaBalance(karma.balance, live)
+  const infinite = karma.superadmin || shownBalance === null
+  const balance = shownBalance ?? 0
   const allocation = karma.allocation ?? 0
   // A top-up can push the balance above the monthly allocation; the bar clamps
   // rather than overflowing its track.

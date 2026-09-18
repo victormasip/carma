@@ -60,12 +60,22 @@ function PhoneFrame({ contact, status, composer, mode, className = '', children 
         aria-hidden
       />
 
-      <div className="relative overflow-hidden rounded-[2.6rem] border-[10px] border-[#0c0a09] bg-[#0b141a] shadow-2xl">
+      {/* A REAL DEVICE'S PROPORTIONS, NOT ITS CONTENT'S.
+          The frame used to be as tall as whatever was inside it (`min-h-[23rem]`
+          on the conversation), so the two scenes — which hold different numbers
+          of bubbles — came out as two different phones, and neither matched
+          anything you can buy. Founder QA, 2026-09-18: the second mockup "has a
+          weird aspect ratio".
+          `aspect-[1125/2436]` is the iPhone X's panel, exactly, and it is on the
+          BORDER box, so the 10px bezel is part of the device the way it is on a
+          real one. The conversation then flexes into whatever is left between
+          the header and the composer instead of dictating the height. */}
+      <div className="relative flex aspect-[1125/2436] flex-col overflow-hidden rounded-[2.6rem] border-[10px] border-[#0c0a09] bg-[#0b141a] shadow-2xl">
         {/* Notch */}
         <div className="absolute left-1/2 top-0 z-10 h-5 w-28 -translate-x-1/2 rounded-b-2xl bg-[#0c0a09]" aria-hidden />
 
         {/* Chat header */}
-        <div className="flex items-center gap-2.5 bg-[#1f2c34] px-4 pb-3 pt-8">
+        <div className="flex shrink-0 items-center gap-2.5 bg-[#1f2c34] px-4 pb-3 pt-8">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ffd23d] to-[#b58f27]">
             <span className="knot-rotate-fast inline-flex"><EndlessKnot size={20} /></span>
           </span>
@@ -75,11 +85,14 @@ function PhoneFrame({ contact, status, composer, mode, className = '', children 
           </span>
         </div>
 
-        {/* Conversation. Fixed min-height so the loop never resizes the device. */}
-        <div className="flex min-h-[23rem] flex-col justify-end gap-2.5 px-3.5 py-4">{children}</div>
+        {/* Conversation. It FILLS the screen the device has, rather than setting
+            it: `justify-end` keeps the thread pinned to the composer the way a
+            real chat does, and `min-h-0` is what lets a flex child actually
+            shrink inside a fixed-ratio parent. */}
+        <div className="flex min-h-0 flex-1 flex-col justify-end gap-2.5 overflow-hidden px-3.5 py-4">{children}</div>
 
         {/* Composer */}
-        <div className="flex items-center gap-2 border-t border-white/5 bg-[#1f2c34] px-3 py-2.5" aria-hidden>
+        <div className="flex shrink-0 items-center gap-2 border-t border-white/5 bg-[#1f2c34] px-3 py-2.5" aria-hidden>
           <Smile className="h-5 w-5 shrink-0 text-[#8696a0]" />
           <span className="min-w-0 flex-1 truncate text-[0.82rem] text-[#8696a0]">{composer}</span>
           <Plus className="h-5 w-5 shrink-0 text-[#8696a0]" />

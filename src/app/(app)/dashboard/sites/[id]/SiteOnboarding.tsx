@@ -170,6 +170,36 @@ export default function SiteOnboarding({
     }
   }, [])
 
+  /**
+   * THE DETECT IS A PROMISE, NOT A HOPE.
+   *
+   * What this one round trip decides is not cosmetic: `detected.blogUrl` is what
+   * `startClone` hands to the capture as `importArticles`, and `detected.isBlog`
+   * is what the confirmation screen says out loud. Both used to READ `detected`
+   * — a piece of state that starts null — from code paths that can run before
+   * the request has landed:
+   *
+   *   · on the seamless funnel the detect fires in an effect while the brand
+   *     capture runs, and a capture seeded by the Door finishes in ~10s. Beat
+   *     the detect and `blogUrl` is '' — the owner's articles are silently not
+   *     imported, with nothing anywhere saying why;
+   *   · on the confirm screen the copy flips from "la teva identitat" to "el
+   *     teu disseny" mid-read when the answer arrives late.
+   *
+   * So the in-flight request is kept as a promise and every consumer AWAITS it.
+   * A ref (not state): it is a handle to work, never something to render, and it
+   * is written from an effect or an event handler, never during a render.
+   */
+  const detecting = useRef<{ url: string; run: Promise<Detected | null> } | null>(null)
+  const detectOnce = useCallback((url: string): Promise<Detected | null> => {
+    // Keyed on the URL, so a second one can never be answered by the first
+    // one's promise — and a repeat of the same URL is never a second request.
+    if (detecting.current?.url !== url) {
+      detecting.current = { url, run: runDetect(url).then(d => { setDetected(d); return d }) }
+    }
+    return detecting.current.run
+  }, [runDetect])
+
   const handleIntake = async (value: BrandIntakeValue) => {
     setBusy(true)
     // Anything carried from the landing Door joins what they typed here. It is
@@ -188,7 +218,7 @@ export default function SiteOnboarding({
     }
     clearDoorCarry()
     setIntake(merged)
-    if (merged.url) setDetected(await runDetect(merged.url))
+    if (merged.url) await detectOnce(merged.url)
     setBusy(false)
     setView('capturing')
   }
@@ -209,7 +239,8 @@ export default function SiteOnboarding({
    * the app, where they have not agreed to anything yet.
    */
   const afterCapture = () => {
-    if (!intake?.url) { setView('templates'); return }
+    const url = intake?.url
+    if (!url) { setView('templates'); return }
     // ONE YES IS ENOUGH. Two paths arrive here having already agreed: the landing
     // Door (we carry its glimpse) and the registration funnel (we were handed the
     // URL and told to start). Showing either of them "shall we clone it?" is
@@ -217,19 +248,33 @@ export default function SiteOnboarding({
     // kept hitting on the way to the QR. Someone who typed a URL INSIDE the app
     // has agreed to nothing yet, so they still get the confirmation.
     if (boot || seed) { startClone(); return }
-    setView('confirm')
+    // The confirmation screen is entirely ABOUT what we detected — its heading,
+    // its bullet list and its button all change on `isBlog`. Rendering it before
+    // the answer arrives is what made the copy rewrite itself mid-read. It is
+    // only ever shown with a settled verdict now (in practice instant: the
+    // request has been in flight since the intake was accepted).
+    setBusy(true)
+    void detectOnce(url).then(() => { setBusy(false); setView('confirm') })
   }
 
   const startClone = () => {
     const target = intake?.url
     if (!target) return
-    const blog = detected?.blogUrl ?? ''
-    setBlogUrl(blog)
-    // `afterBrandRead` is how the capture modal knows not to introduce itself
-    // ("Visitant el teu lloc") to someone who watched us read that very site
-    // thirty seconds ago. See CONTINUED_COPY in ZenCaptureModal.
-    onMagicWandStarted({ importArticles: !!blog, afterBrandRead: view === 'capturing' || !!seed })
-    void grab(target)
+    setBusy(true)
+    // AWAIT the detect rather than reading whatever state happens to be there.
+    // On the seamless funnel this resolves instantly (it has been running since
+    // mount); when it does not, waiting a moment is the difference between
+    // importing the owner's articles and quietly not.
+    void detectOnce(target).then(d => {
+      const blog = d?.blogUrl ?? ''
+      setBlogUrl(blog)
+      // `afterBrandRead` is how the capture modal knows not to introduce itself
+      // ("Visitant el teu lloc") to someone who watched us read that very site
+      // thirty seconds ago. See CONTINUED_COPY in ZenCaptureModal.
+      onMagicWandStarted({ importArticles: !!blog, afterBrandRead: view === 'capturing' || !!seed })
+      setBusy(false)
+      void grab(target)
+    })
   }
 
   // Seamless funnel: the capture is ALREADY running (see the `boot` note above —
@@ -241,8 +286,8 @@ export default function SiteOnboarding({
     if (!bootUrl || fired.current) return
     fired.current = true
     clearDoorCarry()
-    void runDetect(bootUrl).then(setDetected)
-  }, [bootUrl, runDetect])
+    void detectOnce(bootUrl)
+  }, [bootUrl, detectOnce])
 
   // Applying a template also SEEDS the starter articles (awaited inside
   // applyTemplate), so the CTA shows progress until the blog is truly alive.
@@ -576,7 +621,7 @@ function TemplateCard({ tpl, siteName, selected, disabled, onPick }: {
             </span>
           )}
         </span>
-      </div>
+      </span>
     </button>
   )
 }
