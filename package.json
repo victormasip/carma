@@ -21,7 +21,8 @@
     "test:brand": "node --experimental-strip-types --import ./tests/register.mjs tests/brand.mjs",
     "test:landing": "node --experimental-strip-types --import ./tests/register.mjs tests/landing.mjs",
     "test:perf": "node --experimental-strip-types --import ./tests/register.mjs tests/perf.mjs",
-    "test:vitals": "node --experimental-strip-types --import ./tests/register.mjs tests/vitals.mjs"
+    "test:vitals": "node --experimental-strip-types --import ./tests/register.mjs tests/vitals.mjs",
+    "test:genome": "node --experimental-strip-types --import ./tests/register.mjs tests/genome.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
