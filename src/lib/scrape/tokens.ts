@@ -189,20 +189,178 @@ function isBrandColor(hex: string): boolean {
   return s > 0.25 && l > 0.12 && l < 0.88
 }
 
-function mostFrequentBrandColor(css: string): string | null {
-  const counts = new Map<string, number>()
-  for (const m of css.matchAll(/#[0-9a-f]{3,8}\b/gi)) {
-    const hex = normalizeHex(m[0])
-    if (!/^#[0-9a-f]{6}$/.test(hex)) continue
-    if (!isBrandColor(hex)) continue
-    counts.set(hex, (counts.get(hex) ?? 0) + 1)
+// ─── Brand-colour prominence (W2, 2026-09-21) ────────────────────────────────
+//
+// WHAT THIS REPLACED, AND WHY IT WAS WRONG
+// ────────────────────────────────────────
+// The previous version counted how many times each brand-ish hex appeared in the
+// stylesheet and returned the winner. Frequency is a bad proxy for prominence and
+// it is biased in a specific, predictable direction: the colours that appear most
+// often in a stylesheet are BORDERS, HOVER STATES and SHADOW rgba() — small,
+// repeated, low-signal declarations — while the colour a visitor would actually
+// name as "their brand colour" is typically declared two or three times, on the
+// logo, the header and the primary button.
+//
+// So this weighs each declaration by how much of the page it is likely to paint:
+//
+//   · WHAT property it sets      a background is a surface; a border is a line.
+//   · WHERE the selector points  header/logo/brand/button/hero are where a brand
+//                                lives; :hover and ::selection are not.
+//   · HOW MUCH of the DOM it hits  a class used by forty elements is present in a
+//                                way a class used once is not.
+//
+// It is still a heuristic and it is still browser-free — we cannot measure painted
+// area without layout. But it is a heuristic about the right quantity, where the
+// old one was a precise measurement of the wrong one.
+
+/** Properties that can carry a colour, and what a colour there is worth. */
+const COLOR_PROPS: [RegExp, number, string][] = [
+  [/^background(-color)?$/, 3.0, 'surface'],
+  [/^fill$/, 2.6, 'svg fill (logos live here)'],
+  [/^color$/, 2.0, 'text'],
+  [/^(border|outline)-?(top|right|bottom|left)?-color$/, 0.6, 'line'],
+  [/^border$/, 0.5, 'line'],
+  [/^stroke$/, 1.4, 'svg stroke'],
+  [/^box-shadow$/, 0.15, 'shadow'],
+  [/^text-decoration-color$/, 0.8, 'underline'],
+]
+
+/** Where in a page a selector points, and how brand-bearing that place is. */
+const SELECTOR_WEIGHTS: [RegExp, number, string][] = [
+  [/::?(selection|placeholder|marker|backdrop)/, 0.15, 'pseudo-element'],
+  [/:(hover|focus|active|visited|focus-visible|focus-within)/, 0.3, 'interaction state'],
+  [/(^|[\s.#[>~+])(logo|brand|site-?title|masthead|wordmark)/, 4.0, 'the brand mark itself'],
+  [/(^|[\s.#[>~+])(btn|button|cta|call-to-action|submit|primary|action)/, 3.2, 'primary action'],
+  [/(^|[\s.#[>~+])(header|nav|navbar|topbar|menu)/, 2.8, 'header/nav'],
+  [/(^|[\s.#[>~+])(hero|banner|jumbotron|cover|splash)/, 2.4, 'hero'],
+  [/(^|[\s.#[>~+])(badge|tag|chip|pill|label|highlight)/, 1.4, 'accent chip'],
+  [/(^|[\s.#[>~+])(footer)/, 1.1, 'footer'],
+  [/(^|[\s.#[>~+])(icon|svg)/, 1.3, 'icon'],
+]
+
+type DomHistogram = { classes: Map<string, number>; ids: Set<string>; tags: Map<string, number> }
+
+/** One walk of the DOM, so selector presence is an O(1) lookup per rule. */
+function domHistogram(root: HTMLElement | null): DomHistogram {
+  const classes = new Map<string, number>()
+  const ids = new Set<string>()
+  const tags = new Map<string, number>()
+  if (!root) return { classes, ids, tags }
+  const walk = (el: HTMLElement) => {
+    const tag = (el.rawTagName ?? '').toLowerCase()
+    if (tag) tags.set(tag, (tags.get(tag) ?? 0) + 1)
+    const cls = el.getAttribute?.('class')
+    if (cls) for (const c of cls.split(/\s+/)) if (c) classes.set(c.toLowerCase(), (classes.get(c.toLowerCase()) ?? 0) + 1)
+    const id = el.getAttribute?.('id')
+    if (id) ids.add(id.toLowerCase())
+    for (const child of el.childNodes) {
+      // node-html-parser marks elements with nodeType 1.
+      if ((child as HTMLElement).nodeType === 1) walk(child as HTMLElement)
+    }
   }
-  let best: string | null = null
-  let bestN = 0
-  for (const [hex, n] of counts) {
-    if (n > bestN) { best = hex; bestN = n }
+  try { walk(root) } catch { /* a malformed tree still yields whatever it walked */ }
+  return { classes, ids, tags }
+}
+
+/**
+ * How present a selector is in this particular document.
+ *
+ * Logarithmic and capped: forty elements is meaningfully more present than one,
+ * four hundred is not meaningfully more present than forty, and a utility class
+ * sprayed across a page should not be able to out-vote the logo.
+ */
+function selectorPresence(selector: string, hist: DomHistogram): number {
+  let n = 0
+  for (const m of selector.matchAll(/\.([a-z0-9_-]+)/gi)) n = Math.max(n, hist.classes.get(m[1].toLowerCase()) ?? 0)
+  for (const m of selector.matchAll(/#([a-z0-9_-]+)/gi)) if (hist.ids.has(m[1].toLowerCase())) n = Math.max(n, 3)
+  for (const m of selector.matchAll(/(?:^|[\s,>~+])([a-z][a-z0-9]*)/gi)) {
+    const t = m[1].toLowerCase()
+    if (t === 'important') continue
+    n = Math.max(n, Math.min(hist.tags.get(t) ?? 0, 40))
   }
-  return best
+  if (n === 0) return 0.6   // selects nothing we can see — probably dead CSS
+  return 1 + Math.min(3, Math.log2(1 + n))
+}
+
+function selectorWeight(selector: string): { w: number; why: string } {
+  let w = 1
+  const whys: string[] = []
+  for (const [re, mult, why] of SELECTOR_WEIGHTS) {
+    if (re.test(selector)) { w *= mult; whys.push(why) }
+  }
+  return { w, why: whys.join(' + ') || 'body copy' }
+}
+
+export type BrandColorHit = { hex: string; weight: number; why: string }
+
+/**
+ * Every brand-like colour in the stylesheet, ranked by how much of the page it
+ * probably paints. Exported because `design/evidence.ts` needs the whole ranking
+ * and its reasons, not only the winner.
+ */
+export function rankBrandColors(opts: {
+  cssTexts: string[]
+  root?: HTMLElement | null
+  themeColor?: string | null
+}): BrandColorHit[] {
+  const css = stripComments(opts.cssTexts.join('\n'))
+  const vars = collectVars(css)
+  const hist = domHistogram(opts.root ?? null)
+  const acc = new Map<string, { w: number; whys: Map<string, number> }>()
+
+  const add = (raw: string, weight: number, why: string) => {
+    if (weight <= 0) return
+    const hex = normalizeHex(raw)
+    if (!/^#[0-9a-f]{6}$/.test(hex) || !isBrandColor(hex)) return
+    const e = acc.get(hex) ?? { w: 0, whys: new Map<string, number>() }
+    e.w += weight
+    e.whys.set(why, (e.whys.get(why) ?? 0) + weight)
+    acc.set(hex, e)
+  }
+
+  for (const rule of iterRules(css)) {
+    const sel = rule.selector
+    // `@media`/`@supports` preludes are captured as selectors by iterRules; they
+    // carry no element and would otherwise score as anonymous body copy.
+    if (sel.startsWith('@')) continue
+    const { w: selW, why: selWhy } = selectorWeight(sel)
+    const presence = selectorPresence(sel, hist)
+    if (selW * presence === 0) continue
+    for (const decl of rule.body.split(';')) {
+      const i = decl.indexOf(':')
+      if (i < 0) continue
+      const prop = decl.slice(0, i).trim().toLowerCase()
+      const value = resolveVar(decl.slice(i + 1).trim(), vars)
+      const propEntry = COLOR_PROPS.find(([re]) => re.test(prop))
+      if (!propEntry) continue
+      const [, propW, propWhy] = propEntry
+      for (const m of value.matchAll(/#[0-9a-f]{3,8}\b/gi)) {
+        add(m[0], propW * selW * presence, `${propWhy} · ${selWhy}`)
+      }
+    }
+  }
+
+  // A declared `--brand` / `--primary` custom property is the site telling us
+  // directly. Nothing inferred from a selector should outrank that.
+  for (const [name, value] of vars) {
+    if (!/(^|[-_])(brand|primary|accent|theme|main)([-_]|$)/.test(name)) continue
+    const resolved = resolveVar(value, vars)
+    for (const m of resolved.matchAll(/#[0-9a-f]{3,8}\b/gi)) add(m[0], 28, `declared as --${name}`)
+  }
+  // `<meta name="theme-color">` is the same kind of statement, made in the markup.
+  if (opts.themeColor) add(opts.themeColor, 24, 'declared as <meta theme-color>')
+
+  return [...acc.entries()]
+    .map(([hex, e]) => ({
+      hex,
+      weight: Math.round(e.w * 10) / 10,
+      why: [...e.whys.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '',
+    }))
+    .sort((a, b) => b.weight - a.weight)
+}
+
+function prominentBrandColor(cssTexts: string[], root: HTMLElement | null, themeColor: string | null): string | null {
+  return rankBrandColors({ cssTexts, root, themeColor })[0]?.hex ?? null
 }
 
 // ─── Font helpers ─────────────────────────────────────────────────────────
@@ -226,6 +384,17 @@ function cleanFontFamily(value: string): string | null {
 }
 
 // Family name from a Google/Bunny Fonts URL (?family=Open+Sans:wght@400)
+/**
+ * Icon fonts, which are loaded exactly like typefaces and are not typefaces.
+ *
+ * W2 found this on a real site: an architecture studio loaded Material Icons
+ * before its text face, so the first `family=` in the link list was "Material
+ * Icons" and the whole blog inherited a heading font made of pictograms. The
+ * failure is silent — the name looks like a font, the URL looks like a font, and
+ * the rendered result is a row of empty boxes.
+ */
+const ICON_FONTS = /^(material (icons|symbols)|font\s?awesome|fa[-\s]?(solid|regular|brands)|ionicons|glyphicons|dashicons|fontello|themify|elusive|typicons|feather|remixicon|bootstrap-?icons|icomoon|simple-line-icons|linearicons|eicons?)\b/i
+
 export function familiesFromFontLinks(fontLinks: string[]): string[] {
   const out: string[] = []
   for (const link of fontLinks) {
@@ -234,7 +403,7 @@ export function familiesFromFontLinks(fontLinks: string[]): string[] {
       const families = u.searchParams.getAll('family')
       for (const fam of families) {
         const name = fam.split(':')[0].replace(/\+/g, ' ').trim()
-        if (name) out.push(name)
+        if (name && !ICON_FONTS.test(name)) out.push(name)
       }
     } catch { /* ignore */ }
   }
@@ -292,7 +461,9 @@ export function extractTokens(opts: {
   const varBorder = findVar(vars, [/(^|[-_])(border|divider|line|outline|stroke)([-_]|$)/], isColor)
   const varMuted = findVar(vars, [/(^|[-_])(muted|subtle|secondary[-_]?text|gray|grey|neutral)([-_]|$)/], isColor)
 
-  const freqBrand = mostFrequentBrandColor(css)
+  // W2: prominence, not frequency. Still the LAST fallback in every pick below —
+  // an explicit `--brand` variable or a theme-color meta beats any inference.
+  const freqBrand = prominentBrandColor(cssTexts, root, themeColorMeta ?? null)
 
   const pickColor = (...candidates: (string | null | undefined)[]): string | null => {
     for (const c of candidates) {

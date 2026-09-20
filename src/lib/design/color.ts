@@ -116,6 +116,54 @@ export function ratio(a: string, b: string): number {
   return contrastRatio(ra, rb)
 }
 
+/**
+ * The same measurement, but `null` when either colour could not be read.
+ *
+ * `ratio()` returning 1 for an unparseable colour is right for the compiler, where
+ * every value is one we generated and a failure means "assume the worst and repair".
+ * It is exactly WRONG for judging someone else's site: `rgba( 0, 0, 0, 0.7 )` is
+ * perfectly legible body text that `parseColor` deliberately refuses (an alpha below
+ * 0.8 is not a valid GROUND, which is the question it was built to answer), and
+ * scoring that as 1:1 accuses a site of shipping invisible text.
+ *
+ * W2 found 18 of 99 corpus sites being marked catastrophic this way. Absence of
+ * evidence is not evidence of absence, and a scorer that cannot tell the two apart
+ * will confidently libel every site whose CSS it merely failed to parse.
+ */
+export function ratioOrNull(a: string, b: string): number | null {
+  const ra = parseColor(a), rb = parseColor(b)
+  if (!ra || !rb) return null
+  return contrastRatio(ra, rb)
+}
+
+/**
+ * Walk `fg` along its own lightness ramp until it clears `target` against `bg`.
+ *
+ * Direction is chosen from the ground, not from the colour: on a light ground we
+ * darken, on a dark ground we lighten. Hue and chroma are held so the result is
+ * still recognisably the brand's colour — that is the whole trick, and it is only
+ * possible in a perceptual space.
+ */
+export function enforceContrast(fg: string, bg: string, target: number): string {
+  if (ratio(fg, bg) >= target) return fg
+  const f = hexToOklch(fg), b = hexToOklch(bg)
+  if (!f || !b) return fg
+  const darken = b.l > 0.5
+  let best = fg
+  for (let i = 1; i <= 40; i++) {
+    const step = i * 0.025
+    const l = darken ? f.l - step : f.l + step
+    if (l <= 0 || l >= 1) break
+    // Very light and very dark colours hold less chroma before leaving the gamut;
+    // easing it down as we travel avoids a muddy, clipped end of the ramp.
+    const c = f.c * (1 - step * 0.35)
+    const cand = oklchToHex({ l, c: Math.max(0, c), h: f.h })
+    best = cand
+    if (ratio(cand, bg) >= target) return cand
+  }
+  return best
+}
+
 // ─── Palette derivation ──────────────────────────────────────────────────────
 
 const CHROMA: Record<Saturation, number> = { muted: 0.55, natural: 1, vivid: 1.35 }
