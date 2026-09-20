@@ -23,7 +23,8 @@
     "test:perf": "node --experimental-strip-types --import ./tests/register.mjs tests/perf.mjs",
     "test:vitals": "node --experimental-strip-types --import ./tests/register.mjs tests/vitals.mjs",
     "test:genome": "node --experimental-strip-types --import ./tests/register.mjs tests/genome.mjs",
-    "test:evidence": "node --experimental-strip-types --import ./tests/register.mjs tests/evidence.mjs"
+    "test:evidence": "node --experimental-strip-types --import ./tests/register.mjs tests/evidence.mjs",
+    "test:director": "node --experimental-strip-types --import ./tests/register.mjs tests/director.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

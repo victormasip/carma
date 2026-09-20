@@ -100,10 +100,24 @@ function fontsInCats(cats: readonly string[]): FontId[] {
   return FONT_IDS.filter(id => cats.includes(font(id).category))
 }
 
+/**
+ * A genome under construction: every axis optional, and every FIELD inside an axis
+ * optional too.
+ *
+ * The first version used `Partial<Omit<Genome, …>>`, which makes the axis objects
+ * optional but still demands them WHOLE — so a caller that had derived
+ * `space.density` from evidence but wanted `space.ratio` sampled had to invent a
+ * ratio, which is exactly the defaulting this module exists to prevent. W3 found it
+ * the moment a real caller tried to state some of an axis and leave the rest open.
+ */
+type PartialAxes = {
+  [K in keyof Omit<Genome, 'v' | 'register' | 'origin'>]?: Partial<NonNullable<Genome[K]>>
+}
+
 export type PartialGenome = {
   register: Register
   seed: number
-} & Partial<Omit<Genome, 'register' | 'origin'>> & { origin?: Partial<Genome['origin']> }
+} & PartialAxes & { origin?: Partial<Genome['origin']> }
 
 /**
  * Fill every unspecified axis by SAMPLING, never by defaulting.
@@ -199,13 +213,20 @@ export function completeGenome(input: PartialGenome, recent: RecentUse = {}): Ge
       treatment: input.imagery?.treatment ?? pickAvoiding(rng, A.treatment, R('imagery.treatment')),
       fit: input.imagery?.fit ?? 'cover',
     },
-    chrome: input.chrome ?? {
-      policy: 'harmonise',
-      header: pickAvoiding(rng, ['masthead', 'split', 'stack', 'rail', 'minimal'] as const, R('chrome.header')),
-      footer: pickAvoiding(rng, ['columns', 'bar', 'statement'] as const, R('chrome.footer')),
-      sticky: rng() < 0.7,
+    chrome: {
+      // `harmonise` is the only defensible fallback rung: `keep` would bolt our blog
+      // under markup nobody has judged, and `rebuild` would discard a header we have
+      // no reason to distrust. The director overrides this from the verdict.
+      policy: input.chrome?.policy ?? 'harmonise',
+      header: input.chrome?.header ?? pickAvoiding(rng, ['masthead', 'split', 'stack', 'rail', 'minimal'] as const, R('chrome.header')),
+      footer: input.chrome?.footer ?? pickAvoiding(rng, ['columns', 'bar', 'statement'] as const, R('chrome.footer')),
+      sticky: input.chrome?.sticky ?? rng() < 0.7,
     },
-    budget: input.budget ?? { faces: 4, cssKb: 14, js: 0 },
+    budget: {
+      faces: input.budget?.faces ?? 4,
+      cssKb: input.budget?.cssKb ?? 14,
+      js: 0,
+    },
     ...(input.button ? { button: input.button } : {}),
     ...(input.prose ? { prose: input.prose } : {}),
   }

@@ -1,9 +1,9 @@
 # EL TALLER — a design engine, not a template gallery
 
-**Status:** **W0 + W1 + W2 SHIPPED** (2026-09-20 → 21) · course-corrected on five founder critiques · W3–W8 open
+**Status:** **W0 + W1 + W2 + W3 SHIPPED** (2026-09-20 → 21) · course-corrected on five founder critiques · W4–W8 open
 **Predecessors:** `2026-09-16-super-mvp-master-plan.md`, `2026-09-16-landing-and-community-vision.md`, `2026-09-18-performance-every-page.md`
 **Gates this plan must never break:** `npm run test:render` · `test:fidelity` · `test:brand` · `test:landing` · `test:perf` · `test:vitals`
-**Gates this plan SHIPPED:** `npm run test:genome` (the engine) · `npm run test:evidence` (the Eye, over the cached Barcelona-100) · `test:perf` §6 (the published blog — the first budget this product has ever had on the page it actually sells)
+**Gates this plan SHIPPED:** `npm run test:genome` (the engine) · `npm run test:evidence` (the Eye) · `npm run test:director` (the deterministic art director, over the cached Barcelona-100) · `test:perf` §6 (the published blog — the first budget this product has ever had on the page it actually sells)
 **Gate still to ship:** `npm run design:eval` — a scored, reviewable measure of whether a generated design is any *good*
 **Migration it adds:** `039_design_genome.sql` (not yet written — the queue already has **037** and **038** outstanding; confirm those first)
 
@@ -17,6 +17,11 @@
 > failures are fixed in their own commit (`fb509c6`). The Eye is built: the grabber
 > now produces judgements, not values, and every site in the corpus comes back with a
 > score, a verdict and a chrome rung.
+>
+> **Revision 4, 2026-09-21.** W3 shipped. Rung 3 of the ladder is real: evidence →
+> three genomes with no model anywhere, 297 of 297 valid, **0.623 distinctiveness**
+> against the founder's 0.60 floor, at a **p99 of 0.91ms**. W4's model now has
+> something to beat.
 
 ---
 
@@ -620,11 +625,13 @@ refusal, a timeout or a malformed payload all degrade to `null`").
 2. **Validated** — `validateGenome()` rejects anything out of range, unknown enum, unknown
    `FontId`, or a pairing the catalogue forbids. A rejected genome is *logged with its
    violations* (that is training data for the prompt) and we fall to rung 3.
-3. **Derived** — the **deterministic art director**: rules over evidence, no model at all.
-   Brand hue → OKLCH seed. Detected serif/sans → a catalogue pairing with a known-good
-   partner. Measured density → `space.density`. Sector → a rhythm prior. This must be
-   genuinely good, not a stub, because it is what runs when the API is down, when the key
-   is missing, when the customer is on the free tier, and in every test.
+3. **Derived** — the **deterministic art director**. **SHIPPED**, `src/lib/design/director.ts`,
+   gated by `npm run test:director`. Rules over evidence, no model at all: brand hue →
+   OKLCH seed, the classified face → its nearest catalogue sibling, the measured heading
+   ramp → the nearest scale step, structural spacing → density, their own card grid →
+   a feed rhythm. It is genuinely good rather than a stub, because it is what runs when
+   the API is down, when the key is missing, on the free tier, and in every test. §15.8
+   has the numbers.
 4. **Preset** — sector-keyed genome from a small table. The floor. Never ugly.
 
 Then: **compile fails → last-known-good genome → `DEFAULT_TOKENS`.** The render path never
@@ -1010,7 +1017,7 @@ Each wave is shippable, each has a gate, and the product is never broken in betw
 | **W0** ✅ | `Genome` schema, `validateGenome()`, `compileGenome()`, the cohesion engine, the anti-mean sampler, **all 8 templates re-expressed as genomes**. | **`test:genome` 101/101** · `test:render` 291/291 · `test:fidelity` 100% | No — internal |
 | **W1** ✅ | The published blog measured for the first time; budgets set from the measurement; `test:perf` §6 added, covering the eight looks **and 60 generated designs**. | **`test:perf` 0 failures** | No |
 | **W2** ✅ | `evidence.ts` — the grabber becomes an eye. Prominence-weighted colour, a typeface classifier, type-scale sanity, palette coherence, age signals, density rhythm, `sourceQuality` + verdict + chrome rung, and the register prior with its variant ladder. | **`test:evidence` 54/54** · `grabber:eval` unchanged at avg 98, 0 regressions | No |
-| **W3** | **Rung 3: the deterministic art director.** Evidence → genome, no model. | `design:eval` first run; distinctiveness baseline | **Yes** — behind `DESIGN_GENOME=1`, replacing template application |
+| **W3** ✅ | **Rung 3: the deterministic art director.** Evidence → three genomes, no model. The three variants are one derivation at three amplitudes. | **`test:director` 68/68** · 297/297 valid · distinctiveness **0.623** · p99 **0.91ms** | Not yet wired — the engine is done, the surface is W5 |
 | **W4** | **Rung 1: the LLM art director**, three variants, strict schema. A/B against W3 on the eval. | `design:eval` beats W3 on human review; fail-open verified | Yes, flagged |
 | **W5** | **Door A**: the reveal ships three live designs; pitches become the demo feed. Cascade-layer cleanup in `theme.ts`, measured. | `test:landing` budgets hold; conversion measured | Yes |
 | **W6** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
@@ -1188,6 +1195,72 @@ reaching the customer is the **variant ladder** (`registerVariants`), which spre
 prior across three distinct registers for the three reveal tabs: the corpus reaches all six
 registers once variants are applied, and the most common register across everything
 actually offered drops from 71% to **32%**.
+
+### 15.8 W3 — the deterministic director, and what it cost to make it good
+
+**The bar was never "adequate until the model arrives".** This is the rung everything
+above it degrades to, so it runs when the key is missing, when the provider is down,
+on the free tier, and in every test. A fallback nobody would ship on its own is not a
+fallback, it is a crash with better manners.
+
+| | Result |
+|---|---|
+| Genomes derived | **297** (99 sites × 3 variants) |
+| Valid, in-register, inside the energy cap | **297/297**, with **zero** cohesion repairs |
+| Distinctiveness across everything offered | **0.623** (floor 0.60) |
+| Distinctiveness across Fidel alone | 0.468 |
+| Derivation speed, all three variants | median **0.40ms** · p95 0.53ms · **p99 0.91ms** |
+| Hostile inputs (including `null`) | 8/8 produced three valid genomes, nothing thrown |
+| Budget | worst 1.79KB of 14KB extra CSS · 4 of 4 faces |
+| Derivation steps recorded | 5,021 — every one naming its evidence and its rule |
+
+**The three variants are one derivation at three amplitudes.** That is what makes them
+guaranteed distinct rather than hoped to be — they are forced apart on register,
+heading face, article lanes, chrome rung and motion, by construction:
+
+| | Colour | Type | Composition | Chrome |
+|---|---|---|---|---|
+| **Fidel** | their whole palette pinned | their face, or its nearest sibling | their density, their feed, one column | `keep` |
+| **Elevat** | their brand hue; every neutral regenerated | same category, a different face | our composition, a wide lane | `harmonise` |
+| **Reimaginat** | nothing pinned — the hue is only a seed | a different register's face | sampled, full-bleed lane | `rebuild` |
+
+**The verdict floors the rung.** Fidel would like to keep the customer's header; when
+`sourceQuality` says otherwise it cannot. Across the corpus that fired on **37 of 99
+sites** — Fidel got `keep` 62 times, was floored to `harmonise` 34 times and to
+`rebuild` 3 times. No `start-fresh` site is offered its own header verbatim, which is
+the founder's grotesque-seam critique enforced as an invariant rather than a promise.
+
+**Five bugs the corpus caught, and one a trace caught.**
+
+1. **14 genomes failed validation on unreadable pins.** Fidel pinned the extracted
+   palette verbatim, including values `parseColor` declines. We cannot claim to
+   reproduce a colour we never resolved, so those roles are derived instead.
+2. **Inter was the heading face of 29% of all designs.** `nearestFace` took `[0]` from
+   the matching set — deterministic, defensible, and the house face this entire plan
+   exists to avoid. It draws from the set now, seeded by the site.
+3. **41% of feeds came back `minimal`.** `sample.ts` ships anti-repetition and nobody
+   was feeding it. A mechanism with no input does nothing. The window is now threaded
+   through, and — separately — the director's own face picks were bypassing it
+   entirely, on the one axis a reader notices first.
+4. **Elevat was inheriting composition.** Density and feed rhythm are art direction,
+   not brand, so only Fidel copies them. Before the fix the two tabs were 0.338 apart
+   at the closest.
+5. **The determinism check was wrong, not the director.** It re-ran each site against
+   the recency window as it stood after all 99. The window is an INPUT; determinism
+   means same evidence + same seed + same window.
+6. **`accent: #ffffff`, found by reading a trace.** `extractTokens` had resolved a
+   white CSS variable while `rankBrandColors` correctly identified the olive that
+   paints the client's logo and booking button. The seed used the good answer and the
+   pin used the bad one, so W2's entire colour improvement stopped at the edge of the
+   genome. **A gate can only catch what it was told to look for; this one needed a
+   human reading one page of output.**
+
+**Two ceilings worth naming.** `serif/high` is a one-face cell in the catalogue, so a
+site classified there gets a forced choice no amount of recency can vary — the
+catalogue needs depth per (category, contrast) cell before the director can. And
+`palette.ground` sits at 87% `paper`, because two of the three variants derive it from
+the customer's own background; that is honest, and it is also the axis with the least
+room left in it.
 
 ---
 
