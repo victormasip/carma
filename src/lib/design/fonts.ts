@@ -120,6 +120,28 @@ export const FONTS = {
     family: 'Libre Baskerville', stack: "'Libre Baskerville', Georgia, serif",
     category: 'serif', weights: [400, 700], oldstyle: true, contrast: 'high', energy: 1,
   },
+  // W4 PREP — `serif/high` was the catalogue's only ONE-FACE cell, which meant every
+  // classic brand classified there got a forced choice no amount of anti-repetition
+  // could vary. It is a genuinely thin category on the open web (high stroke contrast
+  // is a DISPLAY property — at text sizes the thin strokes disappear, which is the
+  // same fact the `display-serif-needs-air` cohesion rule already encodes), so it is
+  // deepened deliberately rather than padded.
+  eczar: {
+    family: 'Eczar', stack: "'Eczar', Georgia, serif",
+    category: 'serif', weights: [400, 500, 600, 700, 800], oldstyle: true, contrast: 'high', energy: 1,
+  },
+  lusitana: {
+    family: 'Lusitana', stack: "'Lusitana', Georgia, serif",
+    category: 'serif', weights: [400, 700], oldstyle: true, contrast: 'high', energy: 1,
+  },
+  ebGaramond: {
+    family: 'EB Garamond', stack: "'EB Garamond', Garamond, Georgia, serif",
+    category: 'serif', weights: [400, 500, 600, 700, 800], oldstyle: true, contrast: 'medium', energy: 1,
+  },
+  literata: {
+    family: 'Literata', stack: "'Literata', Georgia, serif",
+    category: 'serif', weights: [400, 500, 600, 700], oldstyle: true, contrast: 'medium', energy: 1,
+  },
 
   // ── Display serif ──────────────────────────────────────────────────────────
   fraunces: {
@@ -140,6 +162,11 @@ export const FONTS = {
   instrumentSerif: {
     family: 'Instrument Serif', stack: "'Instrument Serif', Georgia, serif",
     category: 'display-serif', weights: [400], contrast: 'high', energy: 2,
+  },
+  bodoniModa: {
+    family: 'Bodoni Moda', stack: "'Bodoni Moda', Didot, Georgia, serif",
+    category: 'display-serif', weights: [400, 500, 600, 700, 800, 900],
+    oldstyle: true, contrast: 'high', energy: 2,
   },
 
   // ── Mono ───────────────────────────────────────────────────────────────────

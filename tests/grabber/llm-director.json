@@ -1,0 +1,1340 @@
+{
+  "model": "claude-opus-5",
+  "at": "2026-09-20T23:05:08.856Z",
+  "distinctiveness": {
+    "w3": 0.622,
+    "w4": 0.611
+  },
+  "tokens": {
+    "input": 33437,
+    "output": 17268
+  },
+  "sites": [
+    {
+      "id": "dental-cdb",
+      "name": "Clínica Dental Barcelona",
+      "url": "https://www.clinicadentalbarcelona.com/",
+      "source": "directed",
+      "ms": 42195,
+      "violations": [],
+      "rationale": {
+        "faithful": "A clinic's blog is a reassurance tool — patients arrive mid-worry looking for 'is this implant painful', so the page keeps the clean clinical surface their own site already presents and simply makes the answer easy to find.",
+        "elevated": "Dentistry is the one appointment people postpone out of fear, so the clinic's voice is worth more than its equipment list: a humanist serif and warm paper make treatment explanations read like a consultation rather than a consent form.",
+        "reimagined": "Barcelona's private clinics compete on aesthetics as much as medicine — veneers, smile design, implant work sold to patients who also shop Passeig de Gràcia — so the blog inverts to the brand's clinical navy and carries itself like an aesthetic-medicine journal."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Archivo",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Sora",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Archivo",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Newsreader",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Bodoni Moda",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.heading",
+          "maths": "Space Grotesk",
+          "model": "Archivo"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.414",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Archivo",
+          "model": "Newsreader"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "Work Sans"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Sora",
+          "model": "Bodoni Moda"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "Manrope"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "gridxl",
+          "model": "overlay"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        }
+      ]
+    },
+    {
+      "id": "resto-verne",
+      "name": "Verne Barcelona",
+      "url": "https://www.vernebarcelona.com/",
+      "source": "directed",
+      "ms": 35089,
+      "violations": [],
+      "rationale": {
+        "faithful": "A Barcelona studio that presents itself through abstract wide-crop visuals and a single clean blue wants to look current and uncluttered, so I keep their geometric-sans face and card grid and simply give the headings a real hierarchy to climb.",
+        "elevated": "The name invokes Jules Verne — expeditions, illustrated journals, chapters — so the blog is dressed as a warm reading object with a literary serif and a drop cap, which is what a studio named after a novelist should feel like to open.",
+        "reimagined": "Invert the light template into Nautilus dark and let that default cyan finally do something — an instrument-panel blog of numbered entries, fitting a studio whose imagery is abstract and machine-like rather than human."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Fraunces",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Space Grotesk",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "DM Sans"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Inter"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Fraunces"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Inter",
+          "model": "Work Sans"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Jost",
+          "model": "Space Grotesk"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Figtree",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        }
+      ]
+    },
+    {
+      "id": "gym-colom",
+      "name": "CEM Colom",
+      "url": "https://www.cemcolom.com/",
+      "source": "directed",
+      "ms": 32215,
+      "violations": [],
+      "rationale": {
+        "faithful": "Their site already works the way a busy practice works — three cards a row, short spacings, get to the point — so the blog should feel like the same office, not a different building.",
+        "elevated": "A firm whose whole case is made by photographs of people deserves a page with a temperature — a serif that sounds like a person talking, and air around the faces instead of a grid squeezing them.",
+        "reimagined": "That #f5333f is the only truly decisive thing on the whole site; dropped onto ink it stops being a button colour and becomes the firm's voice — a practice confident enough to let one red word carry a page."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Manrope",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Literata",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.body",
+          "maths": "Plus Jakarta Sans",
+          "model": "Inter"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "faithful",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Inter Tight",
+          "model": "Literata"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.414"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Manrope",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        }
+      ]
+    },
+    {
+      "id": "legal-granvia",
+      "name": "Gran Via Advocats",
+      "url": "https://granviaadvocats.com/",
+      "source": "directed",
+      "ms": 43115,
+      "violations": [],
+      "rationale": {
+        "faithful": "A working practice's own site: the firm's blue, its geometric lettering and its three-up case-note grid kept intact, because clients recognise this firm by that blue header and nothing about a law office should change overnight.",
+        "elevated": "Legal advice is argued in documents, so the firm's commentary earns the conventions of the printed brief — a serif with real hierarchy, hairline rules, oldstyle dates in a note on a 2024 reform — while the Gran Via blue survives only as the link and the mark.",
+        "reimagined": "If this firm were braver it would stop apologising with stock abstracts and publish numbered dispatches on ink — the posture of a litigator who states the position once, in order, and does not decorate it."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "DM Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Newsreader",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.body",
+          "maths": "Manrope",
+          "model": "Inter"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "classic"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "Newsreader"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "title"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.dropCap",
+          "maths": "raised",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        }
+      ]
+    },
+    {
+      "id": "beauty-hipolita",
+      "name": "Hipolita",
+      "url": "https://www.hipolita.cat/",
+      "source": "directed",
+      "ms": 36824,
+      "violations": [],
+      "rationale": {
+        "faithful": "Their own site is clean white with a neutral sans and lets sixteen photographs of the place do the talking, so the blog keeps that gallery-first posture and simply gives the pictures better captions.",
+        "elevated": "A Catalan house that carries a woman's name is hospitality before it is a brand — so the paper gets a temperature and the headings get a Garamond you would happily read a wine list or a seasonal note in.",
+        "reimagined": "Hipòlita is an Amazon queen, and a room full of photographs deserves to be hung on a dark wall — inverting the white default to ink turns the same sixteen images into a lit gallery and gives the name the nerve it implies."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Work Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "magazine"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "EB Garamond",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Instrument Serif",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "editorial",
+          "model": "magazine"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Work Sans",
+          "model": "EB Garamond"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Plus Jakarta Sans",
+          "model": "Instrument Serif"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.5"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "overlay"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "4",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.dropCap",
+          "maths": "raised",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        }
+      ]
+    },
+    {
+      "id": "estate-westside",
+      "name": "West Side",
+      "url": "https://westside.cat/",
+      "source": "directed",
+      "ms": 41167,
+      "violations": [],
+      "rationale": {
+        "faithful": "They sell places through photographs in four aspect ratios, so I kept their geometric-sans, three-up listing rhythm and simply gave the captions and body copy room to be read by someone comparing two houses on a phone.",
+        "elevated": "Buying or renting a home in a Catalan town is an emotional, slow decision, so the blog reads like a well-printed regional property journal — warm paper, a serif with local gravity, and one big lead photograph per story instead of a grid of thumbnails.",
+        "reimagined": "With 256 place photographs including 21:9 panoramas, the braver move is to stop competing with them: an ink gallery where the green survives only as a marker and each property or neighbourhood is a numbered plate in an architectural index."
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Lora",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "DM Sans"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Lora"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.lanes",
+          "maths": "content-wide",
+          "model": "content-wide-full"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Jost",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "overlay",
+          "model": "standard"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "4",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "square"
+        }
+      ]
+    },
+    {
+      "id": "edu-idiomarum",
+      "name": "Idiomarum",
+      "url": "https://idiomarum.com/",
+      "source": "derived",
+      "ms": 36731,
+      "violations": [
+        "model call failed: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfFXZc6C7LAVyLP8LpcPn\"}"
+      ],
+      "rationale": {},
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Figtree",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": null,
+      "disagreements": []
+    },
+    {
+      "id": "physio-fclinics",
+      "name": "FisioClinics BCN",
+      "url": "https://barcelona.fisio-clinics.com/",
+      "source": "derived",
+      "ms": 356,
+      "violations": [
+        "model call failed: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfFXcK84EHp2HSzwjumjG\"}"
+      ],
+      "rationale": {},
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Work Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": null,
+      "disagreements": []
+    },
+    {
+      "id": "florist-herbs",
+      "name": "Herbs",
+      "url": "https://www.herbs.es/",
+      "source": "derived",
+      "ms": 233,
+      "violations": [
+        "model call failed: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfFXcLbcKR2h9LbYCBWSs\"}"
+      ],
+      "rationale": {},
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Instrument Serif",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": null,
+      "disagreements": []
+    },
+    {
+      "id": "auto-xaus",
+      "name": "Xaus Taller Mecànic",
+      "url": "https://www.xaustm.es/",
+      "source": "derived",
+      "ms": 251,
+      "violations": [
+        "model call failed: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfFXcMe7rEpNEpHgvhr1n\"}"
+      ],
+      "rationale": {},
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Bodoni Moda",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "compact"
+        }
+      ],
+      "w4": null,
+      "disagreements": []
+    }
+  ]
+}

@@ -86,6 +86,47 @@ function safeColor(v: unknown): string | undefined {
   return parseColor(s) ? s : undefined
 }
 
+/**
+ * An optional enum field that REPORTS when it is present and wrong.
+ *
+ * The first version just dropped an unrecognised value and let the sampler fill the
+ * gap. That is the right RUNTIME behaviour — a design missing one axis is still a
+ * design — but it is the wrong AUDIT behaviour, and W4 is where the difference bit:
+ * a model naming a font we do not host, or a register that does not exist, produced
+ * a perfectly valid genome and an empty `violations` array. We learned nothing, and
+ * the fail-open never fired because nothing reported a failure.
+ *
+ * So a field that is absent stays silent, and a field that is present and invalid
+ * is named. `violations` is the cheapest training signal this system will ever get;
+ * swallowing it to keep the happy path tidy is a bad trade.
+ */
+function optEnum<K extends string, T extends string | number>(
+  v: unknown, allowed: readonly T[], key: K, path: string, report: (m: string) => void,
+): { [P in K]?: T } {
+  if (v === undefined) return {} as { [P in K]?: T }
+  const m = oneOf(v, allowed)
+  if (m === undefined) {
+    const shown = allowed.slice(0, 8).join(' | ') + (allowed.length > 8 ? ' | …' : '')
+    report(`${path} ${JSON.stringify(v)} is not one of ${shown}`)
+    return {} as { [P in K]?: T }
+  }
+  return { [key]: m } as { [P in K]?: T }
+}
+
+/** Same contract as `optEnum`, but for a field that has a fallback rather than
+ *  being omitted. Present-and-wrong is still reported. */
+function enumOr<T extends string | number>(
+  v: unknown, allowed: readonly T[], fallback: T, path: string, report: (m: string) => void,
+): T {
+  if (v === undefined) return fallback
+  const m = oneOf(v, allowed)
+  if (m === undefined) {
+    report(`${path} ${JSON.stringify(v)} is not one of ${allowed.slice(0, 8).join(' | ')}`)
+    return fallback
+  }
+  return m
+}
+
 const PALETTE_ROLES: PaletteRole[] = ['primary', 'accent', 'bg', 'surface', 'text', 'muted', 'border', 'link']
 
 /**
@@ -161,16 +202,15 @@ export function validateGenome(input: unknown, opts: { recent?: RecentUse; fallb
       source: oneOf(rawOrigin.source, ['derived', 'directed', 'preset', 'edited', 'nudged'] as const) ?? 'directed',
       seed,
       ...(typeof rawOrigin.parent === 'string' ? { parent: rawOrigin.parent.slice(0, 64) } : {}),
-      ...(oneOf(rawOrigin.variant, ['faithful', 'elevated', 'reimagined'] as const)
-        ? { variant: rawOrigin.variant as Genome['origin']['variant'] } : {}),
+      ...optEnum(rawOrigin.variant, ['faithful', 'elevated', 'reimagined'] as const, 'variant', 'origin.variant', bad),
       ...(typeof rawOrigin.presetId === 'string' ? { presetId: rawOrigin.presetId.slice(0, 64) } : {}),
     },
     palette: {
       ...(paletteSeed ? { seed: paletteSeed } : {}),
-      ...(oneOf(rawPalette.scheme, SCHEMES) ? { scheme: rawPalette.scheme as Genome['palette']['scheme'] } : {}),
-      ...(oneOf(rawPalette.ground, GROUNDS) ? { ground: rawPalette.ground as Genome['palette']['ground'] } : {}),
-      ...(oneOf(rawPalette.saturation, SATURATIONS) ? { saturation: rawPalette.saturation as Genome['palette']['saturation'] } : {}),
-      ...(oneOf(rawPalette.contrast, CONTRAST_FLOORS) ? { contrast: rawPalette.contrast as Genome['palette']['contrast'] } : {}),
+      ...optEnum(rawPalette.scheme, SCHEMES, 'scheme', 'palette.scheme', bad),
+      ...optEnum(rawPalette.ground, GROUNDS, 'ground', 'palette.ground', bad),
+      ...optEnum(rawPalette.saturation, SATURATIONS, 'saturation', 'palette.saturation', bad),
+      ...optEnum(rawPalette.contrast, CONTRAST_FLOORS, 'contrast', 'palette.contrast', bad),
       ...(num(rawPalette.counterHue, 0, 360) !== undefined ? { counterHue: num(rawPalette.counterHue, 0, 360) } : {}),
       ...(Object.keys(pins).length ? { pins } : {}),
     } as PartialGenome['palette'],
@@ -178,12 +218,12 @@ export function validateGenome(input: unknown, opts: { recent?: RecentUse; fallb
       ...(heading ? { heading } : {}),
       ...(body ? { body } : {}),
       ...(accentFace ? { accentFace } : {}),
-      ...(oneOf(rawType.scale, SCALES) ? { scale: rawType.scale as Genome['type']['scale'] } : {}),
+      ...optEnum(rawType.scale, SCALES, 'scale', 'type.scale', bad),
       ...(num(rawType.measure, 40, 120) !== undefined ? { measure: num(rawType.measure, 40, 120) } : {}),
-      ...(oneOf(rawType.leading, LEADINGS) ? { leading: rawType.leading as Genome['type']['leading'] } : {}),
-      ...(oneOf(rawType.headingCase, HEADING_CASES) ? { headingCase: rawType.headingCase as Genome['type']['headingCase'] } : {}),
-      ...(oneOf(rawType.headingTracking, TRACKINGS) ? { headingTracking: rawType.headingTracking as Genome['type']['headingTracking'] } : {}),
-      ...(oneOf(rawType.figures, FIGURES) ? { figures: rawType.figures as Genome['type']['figures'] } : {}),
+      ...optEnum(rawType.leading, LEADINGS, 'leading', 'type.leading', bad),
+      ...optEnum(rawType.headingCase, HEADING_CASES, 'headingCase', 'type.headingCase', bad),
+      ...optEnum(rawType.headingTracking, TRACKINGS, 'headingTracking', 'type.headingTracking', bad),
+      ...optEnum(rawType.figures, FIGURES, 'figures', 'type.figures', bad),
       ...(typeof rawType.opticalSizing === 'boolean' ? { opticalSizing: rawType.opticalSizing } : {}),
       ...(weights(rawType.headingWeights) ? { headingWeights: weights(rawType.headingWeights) } : {}),
       ...(weights(rawType.bodyWeights) ? { bodyWeights: weights(rawType.bodyWeights) } : {}),
@@ -191,51 +231,49 @@ export function validateGenome(input: unknown, opts: { recent?: RecentUse; fallb
       ...(intIn(rawType.headingWeight, 100, 900) !== undefined ? { headingWeight: intIn(rawType.headingWeight, 100, 900) } : {}),
       ...(intIn(rawType.sectionTitleWeight, 100, 900) !== undefined ? { sectionTitleWeight: intIn(rawType.sectionTitleWeight, 100, 900) } : {}),
       ...(num(rawType.sectionTitleSizeRem, 1, 8) !== undefined ? { sectionTitleSizeRem: num(rawType.sectionTitleSizeRem, 1, 8) } : {}),
-      ...(oneOf(rawType.sectionTitleAlign, ['left', 'center', 'right'] as const)
-        ? { sectionTitleAlign: rawType.sectionTitleAlign as 'left' | 'center' | 'right' } : {}),
+      ...optEnum(rawType.sectionTitleAlign, ['left', 'center', 'right'] as const, 'sectionTitleAlign', 'type.sectionTitleAlign', bad),
       ...(safeColor(rawType.sectionTitleColor) ? { sectionTitleColor: safeColor(rawType.sectionTitleColor) } : {}),
     } as PartialGenome['type'],
     space: {
-      ...(oneOf(rawSpace.ratio, RATIOS) ? { ratio: rawSpace.ratio as Genome['space']['ratio'] } : {}),
-      ...(oneOf(rawSpace.density, ['compact', 'comfortable', 'generous', 'vast'] as const)
-        ? { density: rawSpace.density as Genome['space']['density'] } : {}),
-      ...(oneOf(rawSpace.lanes, LANES) ? { lanes: rawSpace.lanes as Genome['space']['lanes'] } : {}),
-      ...(oneOf(rawSpace.rule, RULES) ? { rule: rawSpace.rule as Genome['space']['rule'] } : {}),
+      ...optEnum(rawSpace.ratio, RATIOS, 'ratio', 'space.ratio', bad),
+      ...optEnum(rawSpace.density, ['compact', 'comfortable', 'generous', 'vast'] as const, 'density', 'space.density', bad),
+      ...optEnum(rawSpace.lanes, LANES, 'lanes', 'space.lanes', bad),
+      ...optEnum(rawSpace.rule, RULES, 'rule', 'space.rule', bad),
       ...(intIn(rawSpace.maxWidthPx, 640, 1920) !== undefined ? { maxWidthPx: intIn(rawSpace.maxWidthPx, 640, 1920) } : {}),
     } as PartialGenome['space'],
     feed: {
-      ...(oneOf(rawFeed.rhythm, RHYTHMS) ? { rhythm: rawFeed.rhythm as Genome['feed']['rhythm'] } : {}),
-      ...(oneOf(rawFeed.mode, FEED_MODES) ? { mode: rawFeed.mode as Genome['feed']['mode'] } : {}),
-      ...(oneOf(rawFeed.columns, COLUMNS) ? { columns: rawFeed.columns as Genome['feed']['columns'] } : {}),
-      ...(oneOf(rawFeed.lead, LEADS) ? { lead: rawFeed.lead as Genome['feed']['lead'] } : {}),
+      ...optEnum(rawFeed.rhythm, RHYTHMS, 'rhythm', 'feed.rhythm', bad),
+      ...optEnum(rawFeed.mode, FEED_MODES, 'mode', 'feed.mode', bad),
+      ...optEnum(rawFeed.columns, COLUMNS, 'columns', 'feed.columns', bad),
+      ...optEnum(rawFeed.lead, LEADS, 'lead', 'feed.lead', bad),
       ...(typeof rawFeed.numbering === 'boolean' ? { numbering: rawFeed.numbering } : {}),
     } as PartialGenome['feed'],
     ornament: {
-      ...(oneOf(rawOrn.dropCap, DROP_CAPS) ? { dropCap: rawOrn.dropCap as Genome['ornament']['dropCap'] } : {}),
-      ...(oneOf(rawOrn.quoteMark, QUOTE_MARKS) ? { quoteMark: rawOrn.quoteMark as Genome['ornament']['quoteMark'] } : {}),
-      ...(oneOf(rawOrn.grain, [0, 1, 2] as const) ? { grain: rawOrn.grain as 0 | 1 | 2 } : {}),
-      ...(oneOf(rawOrn.divider, DIVIDERS) ? { divider: rawOrn.divider as Genome['ornament']['divider'] } : {}),
-      ...(oneOf(rawOrn.corner, CORNERS) ? { corner: rawOrn.corner as Genome['ornament']['corner'] } : {}),
-      ...(oneOf(rawOrn.underline, UNDERLINES) ? { underline: rawOrn.underline as Genome['ornament']['underline'] } : {}),
+      ...optEnum(rawOrn.dropCap, DROP_CAPS, 'dropCap', 'ornament.dropCap', bad),
+      ...optEnum(rawOrn.quoteMark, QUOTE_MARKS, 'quoteMark', 'ornament.quoteMark', bad),
+      ...optEnum(rawOrn.grain, [0, 1, 2] as const, 'grain', 'ornament.grain', bad),
+      ...optEnum(rawOrn.divider, DIVIDERS, 'divider', 'ornament.divider', bad),
+      ...optEnum(rawOrn.corner, CORNERS, 'corner', 'ornament.corner', bad),
+      ...optEnum(rawOrn.underline, UNDERLINES, 'underline', 'ornament.underline', bad),
       ...(intIn(rawOrn.radiusPx, 0, 64) !== undefined ? { radiusPx: intIn(rawOrn.radiusPx, 0, 64) } : {}),
       ...(intIn(rawOrn.radiusLgPx, 0, 96) !== undefined ? { radiusLgPx: intIn(rawOrn.radiusLgPx, 0, 96) } : {}),
     } as PartialGenome['ornament'],
     motion: {
-      ...(oneOf(rawMotion.entrance, ENTRANCES) ? { entrance: rawMotion.entrance as Genome['motion']['entrance'] } : {}),
-      ...(oneOf(rawMotion.hover, HOVERS) ? { hover: rawMotion.hover as Genome['motion']['hover'] } : {}),
-      ...(oneOf(rawMotion.transition, TRANSITIONS) ? { transition: rawMotion.transition as Genome['motion']['transition'] } : {}),
-      ...(oneOf(rawMotion.intensity, [0, 1, 2] as const) ? { intensity: rawMotion.intensity as 0 | 1 | 2 } : {}),
+      ...optEnum(rawMotion.entrance, ENTRANCES, 'entrance', 'motion.entrance', bad),
+      ...optEnum(rawMotion.hover, HOVERS, 'hover', 'motion.hover', bad),
+      ...optEnum(rawMotion.transition, TRANSITIONS, 'transition', 'motion.transition', bad),
+      ...optEnum(rawMotion.intensity, [0, 1, 2] as const, 'intensity', 'motion.intensity', bad),
     } as PartialGenome['motion'],
     imagery: {
-      ...(oneOf(rawImg.treatment, TREATMENTS) ? { treatment: rawImg.treatment as Genome['imagery']['treatment'] } : {}),
-      ...(oneOf(rawImg.fit, ['cover', 'contain'] as const) ? { fit: rawImg.fit as 'cover' | 'contain' } : {}),
+      ...optEnum(rawImg.treatment, TREATMENTS, 'treatment', 'imagery.treatment', bad),
+      ...optEnum(rawImg.fit, ['cover', 'contain'] as const, 'fit', 'imagery.fit', bad),
     } as PartialGenome['imagery'],
     ...(Object.keys(rawChrome).length
       ? {
         chrome: {
-          policy: oneOf(rawChrome.policy, CHROME_POLICIES) ?? 'harmonise',
-          header: oneOf(rawChrome.header, HEADER_ARCHETYPES) ?? 'masthead',
-          footer: oneOf(rawChrome.footer, FOOTER_ARCHETYPES) ?? 'columns',
+          policy: enumOr(rawChrome.policy, CHROME_POLICIES, 'harmonise', 'chrome.policy', bad),
+          header: enumOr(rawChrome.header, HEADER_ARCHETYPES, 'masthead', 'chrome.header', bad),
+          footer: enumOr(rawChrome.footer, FOOTER_ARCHETYPES, 'columns', 'chrome.footer', bad),
           sticky: rawChrome.sticky !== false,
         },
       }
@@ -253,8 +291,10 @@ export function validateGenome(input: unknown, opts: { recent?: RecentUse; fallb
   if (safeColor(rawButton.text)) button.text = safeColor(rawButton.text)
   if (intIn(rawButton.radiusPx, 0, 999) !== undefined) button.radiusPx = intIn(rawButton.radiusPx, 0, 999)
   if (intIn(rawButton.weight, 100, 900) !== undefined) button.weight = intIn(rawButton.weight, 100, 900)
-  if (oneOf(rawButton.textTransform, ['uppercase', 'none', 'capitalize', 'lowercase'] as const)) {
-    button.textTransform = rawButton.textTransform as NonNullable<Genome['button']>['textTransform']
+  if (rawButton.textTransform !== undefined) {
+    const tt = oneOf(rawButton.textTransform, ['uppercase', 'none', 'capitalize', 'lowercase'] as const)
+    if (tt) button.textTransform = tt
+    else bad(`button.textTransform ${JSON.stringify(rawButton.textTransform)} is not a text-transform`)
   }
   if (safeCssValue(rawButton.paddingY, 24)) button.paddingY = safeCssValue(rawButton.paddingY, 24)
   if (safeCssValue(rawButton.paddingX, 24)) button.paddingX = safeCssValue(rawButton.paddingX, 24)
@@ -265,8 +305,10 @@ export function validateGenome(input: unknown, opts: { recent?: RecentUse; fallb
   const prose: NonNullable<Genome['prose']> = {}
   if (num(rawProse.bodyLineHeight, 1.2, 2.2) !== undefined) prose.bodyLineHeight = num(rawProse.bodyLineHeight, 1.2, 2.2)
   if (num(rawProse.paragraphSpacingRem, 0.4, 3) !== undefined) prose.paragraphSpacingRem = num(rawProse.paragraphSpacingRem, 0.4, 3)
-  if (oneOf(rawProse.blockquoteStyle, ['italic', 'normal'] as const)) {
-    prose.blockquoteStyle = rawProse.blockquoteStyle as 'italic' | 'normal'
+  if (rawProse.blockquoteStyle !== undefined) {
+    const bs = oneOf(rawProse.blockquoteStyle, ['italic', 'normal'] as const)
+    if (bs) prose.blockquoteStyle = bs
+    else bad(`prose.blockquoteStyle ${JSON.stringify(rawProse.blockquoteStyle)} is not italic | normal`)
   }
   if (safeColor(rawProse.blockquoteBorderColor)) prose.blockquoteBorderColor = safeColor(rawProse.blockquoteBorderColor)
   if (num(rawProse.headingLineHeight, 0.9, 1.8) !== undefined) prose.headingLineHeight = num(rawProse.headingLineHeight, 0.9, 1.8)

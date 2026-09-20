@@ -1,9 +1,9 @@
 # EL TALLER — a design engine, not a template gallery
 
-**Status:** **W0 + W1 + W2 + W3 SHIPPED** (2026-09-20 → 21) · course-corrected on five founder critiques · W4–W8 open
+**Status:** **W0 → W4 SHIPPED** (2026-09-20 → 21) · course-corrected on five founder critiques · W5–W8 open
 **Predecessors:** `2026-09-16-super-mvp-master-plan.md`, `2026-09-16-landing-and-community-vision.md`, `2026-09-18-performance-every-page.md`
 **Gates this plan must never break:** `npm run test:render` · `test:fidelity` · `test:brand` · `test:landing` · `test:perf` · `test:vitals`
-**Gates this plan SHIPPED:** `npm run test:genome` (the engine) · `npm run test:evidence` (the Eye) · `npm run test:director` (the deterministic art director, over the cached Barcelona-100) · `test:perf` §6 (the published blog — the first budget this product has ever had on the page it actually sells)
+**Gates this plan SHIPPED:** `npm run test:genome` (the engine) · `test:evidence` (the Eye) · `test:director` (the deterministic art director) · `test:director-llm` (the model, mock by default, `--live` opt-in) · `test:perf` §6 (the published blog — the first budget this product has ever had on the page it actually sells)
 **Gate still to ship:** `npm run design:eval` — a scored, reviewable measure of whether a generated design is any *good*
 **Migration it adds:** `039_design_genome.sql` (not yet written — the queue already has **037** and **038** outstanding; confirm those first)
 
@@ -19,9 +19,14 @@
 > score, a verdict and a chrome rung.
 >
 > **Revision 4, 2026-09-21.** W3 shipped. Rung 3 of the ladder is real: evidence →
-> three genomes with no model anywhere, 297 of 297 valid, **0.623 distinctiveness**
-> against the founder's 0.60 floor, at a **p99 of 0.91ms**. W4's model now has
-> something to beat.
+> three genomes with no model anywhere, 297 of 297 valid, **0.635 distinctiveness**
+> against the founder's 0.60 floor, at a **p99 of 0.91ms**.
+>
+> **Revision 5, 2026-09-21.** The two structural bottlenecks are closed (§15.9) —
+> and closing the second one uncovered a shipped bug that had been rendering our own
+> dark template light on every customer blog. W4 shipped: the model is rung 1, it is
+> constrained by the same register spine and energy budget as the maths, and every
+> failure path lands silently on W3.
 
 ---
 
@@ -617,11 +622,16 @@ Each rung degrades to the one below it, and **rung 4 is good enough to ship alon
 is the same discipline `synthesis.ts` already applies ("total fail-open — no key, a
 refusal, a timeout or a malformed payload all degrade to `null`").
 
-1. **Directed** — one structured-output call. Evidence + brief in, genome out, strict JSON
-   schema, `additionalProperties: false`, the pattern already proven in
-   `onboarding/synthesis.ts`. Use a current model (the repo's writing path is on
-   `claude-opus-4-8` / `claude-sonnet-4-6` via `WRITING_GEN_MODEL`; the design director
-   should follow the same env-override convention and point at a current id).
+1. **Directed** — **SHIPPED**, `src/lib/design/llm.ts`, gated by `npm run test:director-llm`.
+   One structured-output call on `claude-opus-5` with adaptive thinking: evidence, the
+   `sourceQuality` verdict, the synthesis brief and **what the maths already concluded**
+   go in; three variants plus a per-variant rationale come out, against a closed schema
+   with `additionalProperties: false` and every axis an enum. The model chooses ten axes;
+   it does **not** choose the palette seed (that is the grabber's prominence ranking —
+   evidence, not taste) or the chrome policy (floored by the verdict — a consent decision).
+   Its output then goes through the same `validateGenome` → `completeGenome` →
+   `applyCohesion` pipeline as the deterministic path, so the register spine and the energy
+   budget bind the model exactly as they bind the maths.
 2. **Validated** — `validateGenome()` rejects anything out of range, unknown enum, unknown
    `FontId`, or a pairing the catalogue forbids. A rejected genome is *logged with its
    violations* (that is training data for the prompt) and we fall to rung 3.
@@ -1018,7 +1028,7 @@ Each wave is shippable, each has a gate, and the product is never broken in betw
 | **W1** ✅ | The published blog measured for the first time; budgets set from the measurement; `test:perf` §6 added, covering the eight looks **and 60 generated designs**. | **`test:perf` 0 failures** | No |
 | **W2** ✅ | `evidence.ts` — the grabber becomes an eye. Prominence-weighted colour, a typeface classifier, type-scale sanity, palette coherence, age signals, density rhythm, `sourceQuality` + verdict + chrome rung, and the register prior with its variant ladder. | **`test:evidence` 54/54** · `grabber:eval` unchanged at avg 98, 0 regressions | No |
 | **W3** ✅ | **Rung 3: the deterministic art director.** Evidence → three genomes, no model. The three variants are one derivation at three amplitudes. | **`test:director` 68/68** · 297/297 valid · distinctiveness **0.623** · p99 **0.91ms** | Not yet wired — the engine is done, the surface is W5 |
-| **W4** | **Rung 1: the LLM art director**, three variants, strict schema. A/B against W3 on the eval. | `design:eval` beats W3 on human review; fail-open verified | Yes, flagged |
+| **W4** ✅ | **Rung 1: the LLM art director.** One call, three variants, a closed JSON schema, adaptive thinking. Constrained by the same cohesion engine as the maths; every failure degrades to W3. | **`test:director-llm` mock 233/233** · live A/B recorded in §15.10 | Not yet wired — the surface is W5 |
 | **W5** | **Door A**: the reveal ships three live designs; pitches become the demo feed. Cascade-layer cleanup in `theme.ts`, measured. | `test:landing` budgets hold; conversion measured | Yes |
 | **W6** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
 | **W7** | **Studio on genomes**: partial regeneration, history, undo, `dropped[]` surfaced. | `test:perf` product class holds | Yes |
@@ -1261,6 +1271,141 @@ catalogue needs depth per (category, contrast) cell before the director can. And
 `palette.ground` sits at 87% `paper`, because two of the three variants derive it from
 the customer's own background; that is honest, and it is also the axis with the least
 room left in it.
+
+### 15.9 The two bottlenecks — and the shipped bug the second one uncovered
+
+The founder read §15.8 and named two structural limits. Both were real; fixing the
+second one turned up something worse underneath it.
+
+**The `serif/high` monoculture.** One face in that cell meant every classic brand
+classified there got a forced choice. Two things shipped, because the font list alone
+would not have made it durable:
+
+- Four faces added — **Eczar** and **Lusitana** (serif/high, the thin cell),
+  **EB Garamond** and **Literata** (serif/medium), plus **Bodoni Moda** to
+  display-serif. Playfair Display and Cormorant Garamond were already in the
+  catalogue; the singleton was never Fraunces.
+- `nearestFace` now **widens from category+contrast to category** whenever the exact
+  cell holds fewer than two faces. A cell with one face in it is not a choice, it is
+  a lookup, and no amount of anti-repetition can vary a lookup.
+
+Worth naming: `serif/high` is *genuinely* thin on the open web, because high stroke
+contrast is a **display** property — at text sizes the thin strokes disappear. That is
+the same fact the `display-serif-needs-air` cohesion rule already encodes. The cell
+was deepened deliberately, not padded.
+
+**The 87% paper bias.** Fidel and Elevat both derive the ground from the customer's
+own background, and customers' backgrounds are light. Two thirds of that is correct.
+The third that is not is Reimaginat, whose entire job is to show something they would
+not have asked for — so at amplitude 2 the ground now **inverts**: light sources
+explore ink, dark sources explore paper, always inside the register's allow-list. The
+`warm → quiet` rung of the variant ladder became `warm → severe`, because `quiet`
+carries no ink and was the one rung that could not invert.
+
+| | Before | After |
+|---|---|---|
+| `palette.ground` = paper | 87% | **61%** |
+| Offered-design distinctiveness | 0.623 | **0.635** |
+| Closest variant pair (min) | 0.338 | **0.400** |
+| Distinct heading faces across the corpus | 22 | **24** |
+
+**And then the bug.** A dark genome is worthless if the renderer flattens it, so that
+got measured before anything was claimed:
+
+> **36 of 36 dark generated designs were rendered as `#ffffff`.** At a measured
+> **16.8:1** text-on-background contrast.
+
+`ensureReadableTokens` in `theme.ts` fired on **darkness** (`luma < 0.6`) as a proxy
+for illegibility. The proxy is wrong in one direction, and the cost had been invisible
+because nothing had ever tried to ship a dark design on purpose — including, it turns
+out, **Noir**, our own dark template, which has been rendering **light** on every
+customer blog using it since it shipped.
+
+The guard now asks the question it always meant to ask — *can this be read* — instead
+of the one it was actually asking, *is this light*. Strictly a narrowing: every palette
+it used to leave alone it still leaves alone, and it now also leaves alone pairs that
+provably clear AA. An illegible palette, dark or light, is still replaced. All 291
+render invariants hold, and Noir renders dark for the first time.
+
+### 15.10 W4 — what the model is actually for
+
+`src/lib/design/llm.ts`, gated by `npm run test:director-llm` (233 assertions on a mock
+and seven broken payloads, free, every commit; `--live` for the paid comparison).
+
+**One call, three variants, `claude-opus-5`, adaptive thinking, a closed JSON schema.**
+The model's output goes through *exactly* the pipeline the maths does — `validateGenome`,
+then sampling for anything left unstated, then cohesion. It is an art director working
+inside the house style, not a second engine. It does **not** choose the palette seed
+(that is the grabber's prominence ranking — evidence, not taste) or the chrome policy
+(floored by `sourceQuality`; a consent decision, not a design one).
+
+**The measured comparison, on the same 6 sites / 18 genomes:**
+
+| | W3 (maths) | W4 (model) |
+|---|---|---|
+| Distinctiveness | 0.727 | **0.779** |
+| Distinct registers used | 3 | **5** |
+| Distinct heading faces | 11 | **13** |
+| Distinct grounds | 2 | **3** |
+| Latency, three variants | **0.4ms** | 41s median |
+| Cost per business | **free** | ~$0.10 |
+
+Both numbers are over the **same sites**. The first draft of the gate measured W3 over
+every site attempted and W4 over only the ones whose call succeeded — different sample
+sizes on a metric that is sensitive to sample size, which is a way of getting a number
+rather than an answer.
+
+**The fail-open got tested for real, by accident.** Four of ten live calls returned
+`400 … credit balance is too low` mid-run. Every one of those four sites still received
+three valid, distinct, budget-compliant designs, because that is what the fallback is
+for. An unplanned production test of the safety net, passed.
+
+**Where the model earned its cost.** 128 disagreements with the arithmetic across 18
+variants — heading face (15), type scale (12), heading case (10), motion (11), register
+(9). The one worth reading is **Verne Barcelona**, a restaurant:
+
+```
+              W3 (measured)                    W4 (read the name)
+FAITHFUL      contemporary · Outfit            contemporary · DM Sans
+ELEVATED      quiet · DM Sans · paper          warm · Fraunces · TINTED · editorial
+REIMAGINED    bold · Jost · ink                severe · Space Grotesk · ink
+```
+
+> *"The name invokes Jules Verne — expeditions, illustrated journals, chapters — so the
+> blog is dressed as a warm reading object with a literary serif and a drop cap, which
+> is what a studio named after a novelist should read like."*
+>
+> *"Invert the light template into Nautilus dark and let that default cyan finally do
+> something — an instrument-panel blog of numbered entries."*
+
+Nothing in `DesignEvidence` contains the string "Jules Verne". The measurements said
+*geometric sans, one blue, comfortable density* — and from those, correctly, W3 derived
+a competent modern blog. The model read the **name of the business** and dressed its
+journal as an illustrated expedition log. That is the asymmetry this wave exists for,
+and it is not reachable by arithmetic at any budget.
+
+Two more from the same run, both the same shape:
+
+- **A dental clinic** → *"Dentistry is the one appointment people postpone out of fear,
+  so the clinic's voice is worth more than its equipment list"* → warm register, humanist
+  serif, tinted paper. The maths had said `quiet` plus Archivo on white.
+- **Hipòlita** (a Catalan beauty house) → *"Hipòlita is an Amazon queen, and a room full
+  of photographs deserves to be hung on a dark wall"* → Instrument Serif on ink.
+
+**Three things the build taught us.**
+
+1. Inlining the variant schema three times returns `400 … compiled grammar is too large`.
+   `$defs` + `$ref` compiles — probed against the live API before committing to it.
+2. `DESIGN_LLM_MOCK` read at import time meant the "mock" gate made **twelve real API
+   calls**. Config a test needs to toggle cannot be frozen at import.
+3. `validateGenome` was silently dropping unrecognised enum values and reporting nothing,
+   so a model naming a font we do not host produced a valid genome and an **empty
+   violations array** — and the fail-open never fired. Present-and-wrong is now named.
+
+**What this means for W5.** 41 seconds is not a page load. The reveal must show the
+deterministic design **immediately** and upgrade to the model's when it lands — which the
+architecture already supports, because both produce the same artefact through the same
+code path. The model is an enhancement to a complete product, not a dependency of one.
 
 ---
 

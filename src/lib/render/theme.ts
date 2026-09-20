@@ -34,6 +34,7 @@ import {
 import type { SiteModules } from '@/lib/modules/registry'
 import type { BlogSignature, CardStyle } from '@/lib/scrape/blogDetect'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
+import { contrastRatio, parseColor } from '@/lib/scrape/chromeContrast'
 import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
 import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
@@ -456,11 +457,35 @@ function colorLightness(input: string | undefined): number | null {
 // accent/primary + fonts + radius + layout so it still feels on-brand. Combined
 // with `color-scheme:light` on the blog host, this also neutralises any inherited
 // system / client dark mode.
+//
+// ── 2026-09-21: A DARK THEME IS NOT AN UNREADABLE ONE ────────────────────────
+// The original guard fired on DARKNESS (`bg < 0.6`) as a proxy for illegibility.
+// That proxy was wrong in one direction and the cost was invisible until something
+// tried to ship a dark design on purpose:
+//
+//   · NOIR, our own shipped dark template, has been rendering LIGHT on every
+//     customer blog using it. Its pair is #eef2f6 on #08090c — 16.8:1, roughly four
+//     times the AA floor — and the guard replaced it with white anyway.
+//   · Measured on the design engine's own output: 36 of 36 dark generated designs
+//     were flattened to #ffffff at a measured 16.8:1.
+//
+// So the guard now asks the question it always meant to ask — CAN THIS BE READ —
+// instead of the question it was actually asking, which was "is this light". This
+// is a strict NARROWING: every palette it used to leave alone it still leaves
+// alone, and it now also leaves alone pairs that provably clear AA. An illegible
+// palette, dark or light, is still replaced.
 function ensureReadableTokens(t: DesignTokens): DesignTokens {
   const bg = colorLightness(t.colorBg)
   const text = colorLightness(t.colorText)
   const darkSurface = bg !== null && bg < 0.6
   const lowContrast = bg !== null && text !== null && Math.abs(bg - text) < 0.4
+
+  // Measured, not estimated: Rec. 601 luma (above) is a cheap ordering heuristic,
+  // but whether text can be READ is a WCAG relative-luminance question and nothing
+  // else. When the real ratio clears the body floor, there is nothing to repair.
+  const fg = parseColor(t.colorText), ground = parseColor(t.colorBg)
+  if (fg && ground && contrastRatio(fg, ground) >= 4.5) return t
+
   if (!darkSurface && !lowContrast) return t
   return {
     ...t,

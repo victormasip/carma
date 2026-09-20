@@ -116,8 +116,12 @@ function nearestFace(
   // `sample.ts` had anti-repetition, `completeGenome` used it, and the director
   // quietly bypassed it for the one axis a reader notices first.
   const pick = (xs: FontId[]) => pickAvoiding(rng, xs, opts.recent ?? [])
+  // A cell with one face in it is not a choice, it is a lookup — and no amount of
+  // anti-repetition can vary a lookup. So an exact category+contrast match is only
+  // honoured when there is something to choose BETWEEN; below that the search widens
+  // to the whole category, which is a smaller compromise than a monoculture.
   const sameBoth = pool.filter(id => font(id).category === read.category && font(id).contrast === read.contrast)
-  if (sameBoth.length) {
+  if (sameBoth.length >= 2) {
     const id = pick(sameBoth)
     return { id, why: `${font(id).family} is the same ${read.category} at the same stroke contrast as ${read.family}` }
   }
@@ -240,6 +244,57 @@ function pinsFor(ev: DesignEvidence, amp: 0 | 1 | 2): {
   return { pins: undefined, why: 'nothing pinned — the hue survives as a seed, the system supplies the rest' }
 }
 
+/**
+ * REIMAGINAT INVERTS THE GROUND. Founder call, and the measurement behind it is
+ * blunt: Fidel and Elevat both derive the ground from the customer's own
+ * background, and customers' backgrounds are light, so 87% of everything the engine
+ * produced was paper. Two thirds of that is correct — a faithful variant of a light
+ * site should be light. The third that is not is Reimaginat, whose entire job is to
+ * show them something they would not have asked for.
+ *
+ * So at amplitude 2 the ground flips: light sources explore ink, dark sources
+ * explore paper. It is still constrained by the register's allow-list — a
+ * reimagining cohesion has to repair is not a reimagining, it is a mistake — and
+ * where a register carries no ink at all, a brand-tinted ground is the furthest it
+ * can travel from plain paper.
+ */
+function chooseGround(
+  allowed: readonly Genome['palette']['ground'][],
+  ctx: { sourceIsDark: boolean; bgC: number; amp: 0 | 1 | 2 },
+): { ground: Genome['palette']['ground']; why: string; rule: string } {
+  const has = (g: Genome['palette']['ground']) => allowed.includes(g)
+
+  if (ctx.amp === 2) {
+    const want: Genome['palette']['ground'] = ctx.sourceIsDark ? 'paper' : 'ink'
+    if (has(want)) {
+      return {
+        ground: want,
+        why: `inverted from their ${ctx.sourceIsDark ? 'dark' : 'light'} ground`,
+        rule: 'reimagined inverts the ground',
+      }
+    }
+    if (!ctx.sourceIsDark && has('tinted')) {
+      return {
+        ground: 'tinted',
+        why: 'this register carries no ink, so a brand-tinted ground is the furthest it travels from plain paper',
+        rule: 'reimagined inverts the ground (register has no ink)',
+      }
+    }
+  }
+
+  const derived: Genome['palette']['ground'] = ctx.sourceIsDark ? 'ink' : ctx.bgC > 0.012 ? 'tinted' : 'paper'
+  if (has(derived)) {
+    return { ground: derived, why: 'inherited from their own ground', rule: 'background lightness → ground' }
+  }
+  // The register wins over the inheritance. Never emit a ground cohesion would have
+  // to repair — a repaired derivation is one that was not thought through.
+  return {
+    ground: allowed[0],
+    why: `their ${derived} ground is not in this register`,
+    rule: 'nearest in-register ground',
+  }
+}
+
 // ─── The chrome rung ─────────────────────────────────────────────────────────
 
 const RUNG_ORDER: ChromePolicy[] = ['keep', 'harmonise', 'rebuild', 'replace']
@@ -292,8 +347,9 @@ function deriveOne(
 
   const bgL = hexToOklch(ev.tokens.colorBg)?.l ?? 1
   const bgC = hexToOklch(ev.tokens.colorBg)?.c ?? 0
-  const ground: Genome['palette']['ground'] = bgL < 0.45 ? 'ink' : bgC > 0.012 ? 'tinted' : 'paper'
-  step('palette.ground', ground, `their background ${ev.tokens.colorBg} sits at L ${bgL.toFixed(2)} C ${bgC.toFixed(3)}`, 'background lightness → ground')
+  const sourceIsDark = bgL < 0.45
+  const { ground, why: groundWhy, rule: groundRule } = chooseGround(A.ground, { sourceIsDark, bgC, amp })
+  step('palette.ground', ground, `their background ${ev.tokens.colorBg} sits at L ${bgL.toFixed(2)} C ${bgC.toFixed(3)} — ${groundWhy}`, groundRule)
 
   const saturation: Genome['palette']['saturation'] = paletteSeed.c < 0.08 ? 'muted' : paletteSeed.c < 0.17 ? 'natural' : 'vivid'
   step('palette.saturation', saturation, `the brand colour carries ${paletteSeed.c.toFixed(3)} chroma`, 'seed chroma → saturation')

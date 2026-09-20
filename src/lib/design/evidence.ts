@@ -683,7 +683,10 @@ const VARIANT_LADDER: Record<Register, [Register, Register]> = {
   classic: ['warm', 'bold'],
   contemporary: ['quiet', 'bold'],
   bold: ['contemporary', 'severe'],
-  warm: ['classic', 'quiet'],
+  // `warm -> quiet` was the one rung on this ladder that could not invert the
+  // ground, because `quiet` allows no ink. That made Reimaginat a light design for
+  // every warm brand, which is the 87%-paper bias arriving through a side door.
+  warm: ['classic', 'severe'],
   severe: ['contemporary', 'bold'],
 }
 
