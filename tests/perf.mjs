@@ -49,6 +49,17 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import path from 'node:path'
+// §6 measures the PUBLISHED BLOG, which is a server-built document rather than a
+// Next route, so it is measured by building one rather than by reading `.next`.
+// That also means §6 runs without a build — useful, because it is the section most
+// likely to be run while iterating on the design engine.
+import { buildListingPage, buildArticlePage } from '@/lib/render/theme.ts'
+import { buildSamplePosts, buildSampleArticle } from '@/lib/render/samplePosts.ts'
+import { PRESET_GENOMES } from '@/lib/design/presets.ts'
+import { compileGenome } from '@/lib/design/compile.ts'
+import { completeGenome, seedFrom } from '@/lib/design/sample.ts'
+import { applyCohesion } from '@/lib/design/cohesion.ts'
+import { REGISTERS } from '@/lib/design/genome.ts'
 
 const ROOT = process.cwd()
 const APP = path.join(ROOT, '.next', 'server', 'app')
@@ -84,6 +95,41 @@ const CLASSES = [
   { name: 'admin',     test: r => r.startsWith('/admin'),               js: [32, 42],  css: [28, 31] },
   { name: 'system',    test: r => r.startsWith('/_'),                   js: [18, 28],  css: [28, 31] },
 ]
+
+/* ── The published blog (W1, 2026-09-20) ───────────────────────────────────
+   THE HOLE THIS CLOSES. Every class above is a Next ROUTE, measured out of
+   `.next/server/app`. The thing customers actually publish — the blog at
+   `/render/<site>` — is a route HANDLER that returns a complete HTML document with
+   its stylesheet inline. It matches no class, lives in no manifest, and until this
+   section existed NOTHING measured it. The most-visited page this company serves
+   was the only one with no number on it.
+
+   Measured 2026-09-20 across all eight shipped looks, listing + article, with the
+   sample post set. Same house rule as the classes above: every figure is
+   ACHIEVED + HEADROOM, never an aspiration, because a gate that warns forever
+   about a number nobody intends to reach is a gate people learn to scroll past.
+
+     listing document   9.05KB gzip   article document  8.67KB gzip
+     blog stylesheet   29.1KB raw / 5.99KB gzip
+     inline JS          2.04KB raw listing · 3.62KB raw article
+     font requests      up to 3 · up to 8 faces
+
+   The face count is the interesting one and it is a finding, not a pass: our own
+   hand-drawn templates ask the browser for up to EIGHT faces. `2026-09-18`
+   established that this product's LCP is font-bound, so that is the number a
+   generated design has to beat — and the genome budget sets it at 4. */
+const BLOG = {
+  listingGz: [10, 12],      // KB gzip, target / hard
+  articleGz: [10, 12],
+  cssRaw: [32, 36],         // KB, the whole blog stylesheet
+  cssGz: [7, 8],
+  listingJsRaw: [2.5, 3.5],
+  articleJsRaw: [4.5, 5.5],
+  fontRequests: [2, 3],     // stylesheet requests; a generated genome targets 2
+  faces: [6, 8],            // a GENERATED genome is held to 4 — see genome.budget
+  generatedFaces: 4,
+  generatedExtraCssKb: 14,  // the genome's own extra layer, before the base sheet
+}
 
 /* ── Node-only dependencies, and how to recognise one in a browser chunk ────
    The fingerprint must be SPECIFIC. An early draft used the bare word "sharp",
@@ -540,6 +586,107 @@ function imagesOptimised() {
 }
 
 
+/* ══ 6. THE PUBLISHED BLOG ═════════════════════════════════════════════════ */
+
+const styleText = h => [...h.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(m => m[1]).join('\n')
+const scriptText = h => [...h.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n')
+const gzOf = s => gzipSync(Buffer.from(s, 'utf8'), { level: 9 }).length
+
+function measureBlog(compiled, sectionTitle, posts, article) {
+  const theme = {
+    design_tokens: compiled.tokens,
+    font_links: compiled.fonts.map(f => f.href),
+    section_title: sectionTitle,
+  }
+  const listing = buildListingPage(theme, 'Demo', 'measure-site', posts, 'ca')
+  const art = buildArticlePage(theme, 'Demo', 'measure-site', article, 'ca')
+  return {
+    listingGz: gzOf(listing),
+    articleGz: gzOf(art),
+    cssRaw: styleText(listing).length,
+    cssGz: gzOf(styleText(listing)),
+    listingJsRaw: scriptText(listing).length,
+    articleJsRaw: scriptText(art).length,
+    fontRequests: (listing.match(/fonts\.googleapis\.com/g) ?? []).length,
+    faces: compiled.bytes.faces,
+  }
+}
+
+function publishedBlog() {
+  head('6. THE PUBLISHED BLOG')
+
+  const posts = buildSamplePosts('ca')
+  const article = buildSampleArticle('ca')
+
+  // ── The eight shipped looks, compiled from their genomes ──────────────────
+  const worst = {}
+  const worstOf = {}
+  for (const g of PRESET_GENOMES) {
+    const m = measureBlog(compileGenome(g), 'Blog', posts, article)
+    for (const [k, v] of Object.entries(m)) {
+      if (worst[k] === undefined || v > worst[k]) { worst[k] = v; worstOf[k] = g.id }
+    }
+  }
+
+  const check = (key, value, unit) => {
+    const [t, h] = BLOG[key]
+    const shown = unit === 'KB' ? kb(value) : `${(value / 1024).toFixed(2)}KB`
+    const n = value / 1024
+    if (n > h) bad(`blog ${key} over HARD budget`, `${shown} > ${h}KB (worst: ${worstOf[key]})`)
+    else if (n > t) warn(`blog ${key} over target`, `${shown} > ${t}KB (worst: ${worstOf[key]})`)
+    else ok(`blog ${key}`, `${shown} ≤ ${t}KB (worst: ${worstOf[key]})`)
+  }
+  check('listingGz', worst.listingGz)
+  check('articleGz', worst.articleGz)
+  check('cssRaw', worst.cssRaw)
+  check('cssGz', worst.cssGz)
+  check('listingJsRaw', worst.listingJsRaw)
+  check('articleJsRaw', worst.articleJsRaw)
+
+  const [ft, fh] = BLOG.fontRequests
+  if (worst.fontRequests > fh) bad('blog font requests over HARD budget', `${worst.fontRequests} > ${fh} (worst: ${worstOf.fontRequests})`)
+  else if (worst.fontRequests > ft) warn('blog font requests over target', `${worst.fontRequests} > ${ft} — LCP on this product is font-bound`)
+  else ok('blog font requests', `${worst.fontRequests} ≤ ${ft}`)
+
+  const [wt, wh] = BLOG.faces
+  if (worst.faces > wh) bad('blog font faces over HARD budget', `${worst.faces} > ${wh} (worst: ${worstOf.faces})`)
+  else if (worst.faces > wt) warn('blog font faces over target', `${worst.faces} > ${wt} (worst: ${worstOf.faces}) — the hand-drawn looks are the heavy ones`)
+  else ok('blog font faces', `${worst.faces} ≤ ${wt}`)
+
+  // ── GENERATED designs, held to the tighter genome budget ──────────────────
+  //
+  // This is the half that matters going forward. A budget that only ever sees
+  // eight fixtures is a budget that will be true forever and useful never; the
+  // product ships generated genomes, so the gate measures generated genomes.
+  let gWorstCss = 0, gWorstFaces = 0, gWorstDoc = 0, gOver = 0, gDropped = 0
+  const N = 60
+  for (let i = 0; i < N; i++) {
+    const register = REGISTERS[i % REGISTERS.length]
+    const g = applyCohesion(completeGenome({ register, seed: seedFrom('perf', i) })).genome
+    const c = compileGenome({ ...g, budget: { faces: BLOG.generatedFaces, cssKb: BLOG.generatedExtraCssKb, js: 0 } })
+    if (c.dropped.length) gDropped++
+    const m = measureBlog(c, 'Blog', posts, article)
+    gWorstCss = Math.max(gWorstCss, m.cssGz)
+    gWorstFaces = Math.max(gWorstFaces, m.faces)
+    gWorstDoc = Math.max(gWorstDoc, m.listingGz)
+    if (m.cssGz / 1024 > BLOG.cssGz[1] || m.faces > BLOG.generatedFaces || m.listingGz / 1024 > BLOG.listingGz[1]) gOver++
+  }
+  if (gOver) bad(`${gOver}/${N} generated designs broke the blog budget`, `worst: ${kb(gWorstDoc)} doc, ${kb(gWorstCss)} css gzip, ${gWorstFaces} faces`)
+  else ok(`${N} generated designs inside the budget`, `worst ${kb(gWorstDoc)} doc · ${kb(gWorstCss)} css gzip · ${gWorstFaces} faces · ${gDropped} needed the compiler to shed something`)
+
+  // The one number that must never move.
+  const jsDelta = (() => {
+    const bare = compileGenome(PRESET_GENOMES[0])
+    const loud = applyCohesion(completeGenome({ register: 'bold', seed: 99 })).genome
+    const rich = compileGenome(loud)
+    const a = measureBlog(bare, 'Blog', posts, article).listingJsRaw
+    const b = measureBlog(rich, 'Blog', posts, article).listingJsRaw
+    return b - a
+  })()
+  if (jsDelta !== 0) bad('a generated design added JavaScript to the blog', `${jsDelta} bytes — every genome axis must compile to CSS`)
+  else ok('generated designs add 0 bytes of JavaScript', 'motion is scroll-driven CSS, as budgeted')
+}
+
 /* ══ run ═══════════════════════════════════════════════════════════════════ */
 
 console.log('PERF GATE — every route')
@@ -553,6 +700,7 @@ serverOnlyLeaks()
 splitsHold()
 needlessClient()
 imagesOptimised()
+publishedBlog()
 
 console.log(`\n${failures ? '✗ FAIL' : '✓ PASS'}  ${failures} failure(s), ${warnings} warning(s)`)
 process.exit(failures ? 1 : 0)
