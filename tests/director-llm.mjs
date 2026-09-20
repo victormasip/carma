@@ -30,7 +30,7 @@ import { directWithModel, disagreements, DESIGN_LLM_MODEL } from '@/lib/design/l
 import { validateGenome } from '@/lib/design/validate'
 import { applyCohesion, energyOf, REGISTER_RULES } from '@/lib/design/cohesion'
 import { compileGenome } from '@/lib/design/compile'
-import { distinctiveness, genomeDistance } from '@/lib/design/sample'
+import { distinctiveness } from '@/lib/design/sample'
 import { font } from '@/lib/design/fonts'
 
 const ROOT = process.cwd()
