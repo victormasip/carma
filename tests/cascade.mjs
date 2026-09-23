@@ -606,6 +606,32 @@ await withBrowser(async (b) => {
   // THE OLD-BROWSER PATH, in a browser that has @layer: swap the shadow sheet for
   // its flattened twin and compare the shipped looks. Equal means an old browser
   // gets the same blog a new one does.
+  // SMART MODULES READ THE BRAND. Key Takeaways, Pull Quote and Read Next were written
+  // against `--accent`/`--border`/`--font-heading`, which do not exist in the render,
+  // so they painted Carma's own gold on every blog. Proven on NOIR, whose accent is
+  // not that gold — on the Carma look the bug is invisible, which is how it survived.
+  {
+    const noir = presetTokens('noir')
+    const long = i => `<p>Aquesta és una frase prou llarga per convertir-se en una cita destacada dins de l'article, la número ${i}.</p>`
+    const body = { ...richArticle, id: 'mods', slug: 'moduls', content: { html: `<h2 id="a">Primera part</h2>${[1, 2, 3, 4].map(long).join('')}<h2 id="b">Segona part</h2>${[5, 6, 7, 8].map(long).join('')}` } }
+    const sibling = { ...richArticle, id: 'next', slug: 'seguent', title: 'L’article següent', created_at: '2026-03-01T10:00:00.000Z' }
+    const mods = { keyTakeaways: { enabled: true }, pullQuote: { enabled: true }, readNext: { enabled: true } }
+    const html = buildArticlePage({ design_tokens: noir, modules: mods }, 'Demo', 'fx', body, 'ca', { siblings: [sibling, body] })
+    const page = await b.open(html, 1280)
+    const got = await page.evaluate(() => {
+      const sr = document.querySelector('.carma-embed-host').shadowRoot
+      const cs = (s, p) => { const el = sr.querySelector(s); return el ? getComputedStyle(el).getPropertyValue(p) : null }
+      return {
+        tak: cs('.carma-mod-tak-head', 'color'), rn: cs('.carma-mod-rn-go', 'color'),
+        pq: cs('.carma-mod-pq blockquote', 'font-family'), heading: cs('.carma-article-title', 'font-family'),
+        probe: (() => { const d = document.createElement('div'); d.style.color = getComputedStyle(document.querySelector('.carma-embed-host')).getPropertyValue('--ct-accent'); document.body.appendChild(d); const c = getComputedStyle(d).color; d.remove(); return c })(),
+      }
+    })
+    await page.close()
+    ok(got.tak === got.probe && got.rn === got.probe, 'Key Takeaways and Read Next paint the brand’s accent, not Carma’s gold', `accent ${got.probe} · takeaways ${got.tak} · read next ${got.rn}`)
+    ok(got.pq !== null && got.pq === got.heading, 'the Pull Quote is set in the brand’s heading face', got.pq ?? 'no pull quote rendered')
+  }
+
   if (typeof theme.unlayerCss !== 'function') skip('no flattener exported yet')
   else {
     let diffs = 0, n = 0

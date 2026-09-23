@@ -1292,17 +1292,24 @@ function whatsappShareHtml(variant: string, o: Record<string, unknown>, h: Modul
 }
 
 const TAKEAWAYS_CSS = [
-  '.carma-mod-tak{margin:0 0 2rem;padding:1.15rem 1.35rem;border-radius:var(--radius-lg,16px);background:color-mix(in oklab,var(--accent,#f5bc00) 7%,transparent);border-left:3px solid var(--accent,#f5bc00)}',
+  '.carma-mod-tak{margin:0 0 2rem;padding:1.15rem 1.35rem;border-radius:var(--ct-radius-lg);background:color-mix(in oklab,var(--ct-accent) 7%,transparent);border-left:3px solid var(--ct-accent)}',
   '.carma-mod-tak-minimal{background:none;border-left:none;padding:0 0 0 .2rem}',
-  '.carma-mod-tak-card{background:var(--surface,#fff);border-left:none;box-shadow:0 10px 30px -18px rgba(0,0,0,.35);border:1px solid var(--border,#e5e5e5)}',
-  '.carma-mod-tak-head{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
+  '.carma-mod-tak-card{background:var(--ct-surface);border-left:none;box-shadow:0 10px 30px -18px rgba(0,0,0,.35);border:1px solid var(--ct-border)}',
+  '.carma-mod-tak-head{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--ct-accent)}',
   '.carma-mod-tak-list{margin:0;padding:0;list-style:none;display:grid;gap:.45rem}',
   '.carma-mod-tak-list li{position:relative;padding-left:1.35rem;font-size:1rem;line-height:1.5}',
-  '.carma-mod-tak-list li::before{content:"";position:absolute;left:.25rem;top:.6em;width:6px;height:6px;border-radius:999px;background:var(--accent,#f5bc00)}',
+  '.carma-mod-tak-list li::before{content:"";position:absolute;left:.25rem;top:.6em;width:6px;height:6px;border-radius:999px;background:var(--ct-accent)}',
   '.carma-mod-tak-list a{color:inherit;text-decoration:none;border-bottom:1px solid transparent}',
-  '.carma-mod-tak-list a:hover{border-bottom-color:var(--accent,#f5bc00)}',
+  '.carma-mod-tak-list a:hover{border-bottom-color:var(--ct-accent)}',
 ].join('\n')
 
+// W6: these three modules (Key Takeaways, Pull Quote, Read Next) were written
+// against `--accent` / `--surface` / `--border` / `--font-heading` — names that do
+// not exist in the render, where every token is `--ct-*`. So they always painted
+// their hard-coded fallbacks (Carma's own gold, #fff, #e5e5e5) on EVERY customer
+// blog, and inside a WordPress embed they inherited whatever `--accent` the
+// customer's theme happened to define. They now read the brand's tokens.
+//
 // W5 (the cascade surgery): the declarations these rules no longer carry had
 // NEVER rendered. The pull quote is injected inside `.carma-article-content`, where
 // the base blockquote rule (then `!important`) always beat them; the same held for
@@ -1313,25 +1320,25 @@ const TAKEAWAYS_CSS = [
 // module was designed to be is now a deliberate change away, not an accident away.
 const PULLQUOTE_CSS = [
   '.carma-mod-pq{margin-block:2.2rem;padding:0}',
-  '.carma-mod-pq blockquote{font-family:var(--font-heading,inherit);font-weight:700;letter-spacing:-.02em}',
+  '.carma-mod-pq blockquote{font-family:var(--ct-font-heading);font-weight:700;letter-spacing:-.02em}',
   '.carma-mod-pq-center{text-align:center;padding:0 clamp(0px,4vw,3rem)}',
-  '.carma-mod-pq-center blockquote::before{content:"";display:block;width:44px;height:3px;border-radius:3px;background:var(--accent,#f5bc00);margin:0 auto 1rem}',
-  '.carma-mod-pq-rule{border-top:1px solid var(--border,#e5e5e5);border-bottom:1px solid var(--border,#e5e5e5);padding:1.4rem 0}',
+  '.carma-mod-pq-center blockquote::before{content:"";display:block;width:44px;height:3px;border-radius:3px;background:var(--ct-accent);margin:0 auto 1rem}',
+  '.carma-mod-pq-rule{border-top:1px solid var(--ct-border);border-bottom:1px solid var(--ct-border);padding:1.4rem 0}',
   '.carma-mod-pq-side blockquote{text-align:left}',
   '@media (min-width:1100px){.carma-mod-pq-side{float:right;width:min(42%,22rem);margin-block:.4rem 1.4rem}}',
 ].join('\n')
 
 const READNEXT_CSS = [
-  '.carma-mod-rn{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit;border:1px solid var(--border,#e5e5e5);background:var(--surface,#fff);border-radius:var(--radius-lg,16px);padding:.7rem .9rem;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}',
-  '.carma-mod-rn:hover{border-color:var(--accent,#f5bc00);transform:translateY(-2px);box-shadow:0 14px 34px -22px rgba(0,0,0,.45)}',
+  '.carma-mod-rn{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit;border:1px solid var(--ct-border);background:var(--ct-surface);border-radius:var(--ct-radius-lg);padding:.7rem .9rem;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}',
+  '.carma-mod-rn:hover{border-color:var(--ct-accent);transform:translateY(-2px);box-shadow:0 14px 34px -22px rgba(0,0,0,.45)}',
   '.carma-mod-rn-bar{position:sticky;bottom:12px;z-index:30;margin:2.5rem 0 0;box-shadow:0 18px 40px -26px rgba(0,0,0,.55)}',
   '.carma-mod-rn-card{margin:2.5rem 0 0;padding:1rem}',
-  '.carma-mod-rn-thumb{flex:0 0 auto;width:66px;height:46px;border-radius:10px;overflow:hidden;background:var(--muted-bg,#f3f3f3)}',
+  '.carma-mod-rn-thumb{flex:0 0 auto;width:66px;height:46px;border-radius:10px;overflow:hidden;background:var(--ct-border)}',
   '.carma-mod-rn-thumb img{width:100%;height:100%;object-fit:cover;display:block}',
   '.carma-mod-rn-text{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:.15rem}',
-  '.carma-mod-rn-label{font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
+  '.carma-mod-rn-label{font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--ct-accent)}',
   '.carma-mod-rn-title{font-weight:700;font-size:1rem;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}',
-  '.carma-mod-rn-go{flex:0 0 auto;font-size:1.15rem;color:var(--accent,#f5bc00)}',
+  '.carma-mod-rn-go{flex:0 0 auto;font-size:1.15rem;color:var(--ct-accent)}',
 ].join('\n')
 
 const WASHARE_CSS = [
