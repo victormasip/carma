@@ -179,7 +179,17 @@ async function fetchPage(url: string): Promise<{ html: string; root: HTMLElement
  * A completely unreachable home page returns an empty result and the caller falls
  * back to whatever the owner typed or said.
  */
-export async function scrapeBrandSite(rawUrl: string): Promise<BrandScrapeResult> {
+export async function scrapeBrandSite(
+  rawUrl: string,
+  opts: {
+    /**
+     * Called the moment the home page arrives, before the deep pages are read.
+     * The Door's design reveal (W5) reads the site's stylesheets from it, in
+     * parallel with everything that follows, instead of fetching the page twice.
+     */
+    onHome?: (home: { url: string; html: string }) => void
+  } = {},
+): Promise<BrandScrapeResult> {
   const empty: BrandScrapeResult = {
     pages: [], sources: [], visual: emptyBrandVisual(), detectedLocale: null, siteName: null,
   }
@@ -189,6 +199,7 @@ export async function scrapeBrandSite(rawUrl: string): Promise<BrandScrapeResult
 
   const home = await fetchPage(base.toString())
   if (!home) return empty
+  try { opts.onHome?.({ url: base.toString(), html: home.html }) } catch { /* a listener never breaks the scrape */ }
 
   const title = decodeEntities(home.root.querySelector('title')?.text?.trim() ?? '') || null
   const siteName = metaContent(home.root, ['og:site_name', 'application-name']) ?? title

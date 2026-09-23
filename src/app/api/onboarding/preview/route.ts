@@ -9,6 +9,7 @@ import { absolutiseCssUrls, extractFontFaceCss, proxyFontsInCss, proxyUseHref } 
 import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { isLocale, type Locale } from '@/lib/i18n/config'
+import { guardPreview } from '@/lib/render/previewGuard'
 
 export const maxDuration = 45
 
@@ -33,11 +34,6 @@ function proxyUses(html: string, base: URL): string {
   return html.replace(/(<use\b[^>]*?\b(?:xlink:href|href)=)(["'])([^"']+)\2/gi,
     (_m, pre: string, q: string, href: string) => `${pre}${q}${proxyUseHref(href, base)}${q}`)
 }
-
-// All links in the preview are inert (no navigating to /render/preview/* 404s, no
-// leaving to the client's real site). A capture-phase listener cancels every click.
-const CLICK_BLOCKER =
-  `<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a');if(a){e.preventDefault();e.stopPropagation();}},true);document.addEventListener('submit',function(e){e.preventDefault();},true);</script>`
 
 // PUBLIC, unauthenticated full-page blog PREVIEW for the landing funnel.
 //
@@ -187,7 +183,7 @@ export async function GET(request: NextRequest) {
   // Smart card detection (task 4): `root` is the blog index when we found one, so
   // we detect the repeating article-card pattern directly on it. The feed then
   // mirrors THEIR cards (columns, radius, shadow, image aspect, title) via
-  // buildNativeCardCss instead of a generic grid.
+  // the captured-card rules in blogCss.ts instead of a generic grid.
   const blogSignature = detectBlogSignature({ root, cssTexts, base, blogUrlOverride: null })
 
   const theme = {
@@ -218,9 +214,7 @@ export async function GET(request: NextRequest) {
 
   // Make every link/form inert so the visitor can't navigate inside the preview
   // (to a 404 article) or off to the client's real site.
-  const guarded = page.includes('</body>')
-    ? page.replace('</body>', `${CLICK_BLOCKER}</body>`)
-    : page + CLICK_BLOCKER
+  const guarded = guardPreview(page)
 
   return new NextResponse(guarded, {
     status: 200,

@@ -1,6 +1,6 @@
 # EL TALLER — a design engine, not a template gallery
 
-**Status:** **W0 → W4 SHIPPED** (2026-09-20 → 21) · course-corrected on five founder critiques · W5–W8 open
+**Status:** **W0 → W5 SHIPPED** (2026-09-20 → 23) · course-corrected on five founder critiques · W6–W8 open
 **Predecessors:** `2026-09-16-super-mvp-master-plan.md`, `2026-09-16-landing-and-community-vision.md`, `2026-09-18-performance-every-page.md`
 **Gates this plan must never break:** `npm run test:render` · `test:fidelity` · `test:brand` · `test:landing` · `test:perf` · `test:vitals`
 **Gates this plan SHIPPED:** `npm run test:genome` (the engine) · `test:evidence` (the Eye) · `test:director` (the deterministic art director) · `test:director-llm` (the model, mock by default, `--live` opt-in) · `test:perf` §6 (the published blog — the first budget this product has ever had on the page it actually sells)
@@ -1029,7 +1029,7 @@ Each wave is shippable, each has a gate, and the product is never broken in betw
 | **W2** ✅ | `evidence.ts` — the grabber becomes an eye. Prominence-weighted colour, a typeface classifier, type-scale sanity, palette coherence, age signals, density rhythm, `sourceQuality` + verdict + chrome rung, and the register prior with its variant ladder. | **`test:evidence` 54/54** · `grabber:eval` unchanged at avg 98, 0 regressions | No |
 | **W3** ✅ | **Rung 3: the deterministic art director.** Evidence → three genomes, no model. The three variants are one derivation at three amplitudes. | **`test:director` 68/68** · 297/297 valid · distinctiveness **0.623** · p99 **0.91ms** | Not yet wired — the engine is done, the surface is W5 |
 | **W4** ✅ | **Rung 1: the LLM art director.** One call, three variants, a closed JSON schema, adaptive thinking. Constrained by the same cohesion engine as the maths; every failure degrades to W3. | **`test:director-llm` mock 233/233** · live A/B recorded in §15.10 | Not yet wired — the surface is W5 |
-| **W5** | **Door A**: the reveal ships three live designs; pitches become the demo feed. Cascade-layer cleanup in `theme.ts`, measured. | `test:landing` budgets hold; conversion measured | Yes |
+| **W5** ✅ | **Door A**: W3 paints three live designs at once, W4 upgrades them in the background and crossfades in place; pitches are the feed; the choice crosses signup in sessionStorage. **Cascade layers** in the blog stylesheet, proven equivalent in Chrome. | **`test:reveal` 56/56** · **`test:cascade` 17/17** (30,408 computed-style comparisons) · `test:landing`/`test:perf` hold | Yes — conversion not yet measured |
 | **W6** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
 | **W7** | **Studio on genomes**: partial regeneration, history, undo, `dropped[]` surfaced. | `test:perf` product class holds | Yes |
 | **W8** | The taste loop: log choices and nudges, feed back as priors. Showcase gallery (`038_showcase_optin` already exists) of real generated blogs — which doubles as the Awwwards submission pipeline. | distinctiveness and human-review scores trending up | Yes |
@@ -1406,6 +1406,61 @@ Two more from the same run, both the same shape:
 deterministic design **immediately** and upgrade to the model's when it lands — which the
 architecture already supports, because both produce the same artefact through the same
 code path. The model is an enhancement to a complete product, not a dependency of one.
+
+
+### 15.11 W5 — the progressive reveal, and the stylesheet under it
+
+**The reveal paints before the model thinks.** The glimpse reads the site's design
+evidence the moment the home page arrives (in parallel with the prose scrape and the
+synthesis), the deterministic director turns it into three variants in **p50 1.3ms /
+p99 5.6ms** over the corpus (director + three compiles + three preview URLs), and they
+ship inside the glimpse result. In real Chrome, against the production build, the first
+live blog painted **~330ms after the reveal**; the art director's request left in the
+same instant, from the submit handler — never an effect, so Strict Mode cannot spend it
+twice. When W4 lands, each frame loads its replacement *under* the page on screen, hands
+over the reader's scroll position, and fades in; the open tab survives the swap. Any
+failure — no key, refusal, timeout, a spent budget — says nothing and keeps W3.
+
+**The upgrade accepts only what the glimpse signed.** A ~$0.10 model call on an
+unauthenticated endpoint cannot take its prompt from a browser, so the evidence and
+brief travel as an HMAC-signed token (1h TTL for the upgrade); a forged or edited token
+is a 403. The same token is the "evidence" that crosses signup, verifiable server-side.
+
+**The cascade surgery.** `theme.ts` 1,673 → 1,344 lines; the blog's stylesheet moved to
+`blogCss.ts` as seven layers (`reset → tokens → structure → type → ornament → motion →
+overrides`) with **zero `!important` inside the shadow root** (608 → 0 per page; only
+the light-DOM host guard keeps them). Emitted sheet: **28.3KB → 21.2KB raw (−25%),
+6.0KB → 5.1KB gzip (−14%)**. `test:render` and `test:fidelity` cannot see a cascade, so
+`test:cascade` compares every computed property of every shadow element (and its
+pseudo-elements) at three viewports, at rest and with every interaction state forced:
+**30,408/30,408 identical**, bar one named change (keyboard focus no longer squares off
+a Smart Module card's corners — a specificity accident).
+
+**What it found.**
+- **8 of 16 genome effects were dead on arrival.** Written as ordinary declarations
+  against an all-`!important` base, heading case, tracking, the lead card, image fit,
+  the lanes measure, the oversize quote and the link offset would all have been
+  silently ignored the day the genome reached a render. Layers are what made the
+  compiler's output mean anything.
+- **19 declarations had never rendered** — the reset (0,1,1) out-specified them (0,1,0).
+  Layering would have brought them all to life on every published blog at once, so they
+  were deleted and listed: the lede's bottom margin, the back pill's background, eight
+  module margins, the module cards' background, the Pull Quote's overrides.
+- **Pull Quote and Key Takeaways reference `--accent` / `--text` / `--surface`**, which do
+  not exist in the render (ours are `--ct-*`). They paint Carma gold on every customer
+  blog, or inherit a WordPress theme's own `--accent` when embedded. Not fixed here — a
+  fix is a visible change on live blogs; filed.
+- **Title case is English.** The first live preview put *"La Cocina De Mercado Al Estilo
+  Del Nautilus"* on a Spanish blog. `headingCase: 'title'` now compiles under `:lang(en)`
+  only (Chrome confirms `:lang` inherits into the shadow tree).
+- **Old browsers.** A browser without `@layer` drops layered blocks whole. Every such
+  browser already runs the DSD polyfill, which now flattens the layers first (~170 bytes;
+  the blog's inline JS is 2.35KB of its 2.5KB budget).
+
+**Still open for W5's promise.** The chosen genome reaches `/registre` but nothing after
+signup reads it yet (no migration 039; the site is still themed by the clone), and the
+chrome ladder (keep / harmonise / rebuild) is carried in each genome but not rendered —
+the preview shows the blog body the genome controls, with the brand as its masthead.
 
 ---
 

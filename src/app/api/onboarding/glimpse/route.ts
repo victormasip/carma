@@ -5,6 +5,8 @@ import { scrapeBrandSite, candidateSentences } from '@/lib/brand/scrape'
 import { parseDocuments, isAcceptedDocument } from '@/lib/brand/documents'
 import { transcribeAudio } from '@/lib/whatsapp/transcribe'
 import { synthesiseBrand } from '@/lib/onboarding/synthesis'
+import { doorDesign, previewPitches, readSiteEvidence } from '@/lib/design/reveal'
+import type { DesignEvidence } from '@/lib/design/evidence'
 import {
   glimpseFloor, glimpseWeight, pickQuotes, CARRY_PROSE_CAP,
   type GlimpseEvent, type GlimpseResult, type GlimpseStep,
@@ -117,8 +119,12 @@ export async function POST(request: NextRequest) {
 
       const result: GlimpseResult = {
         siteName: null, pages: 0, quotes: [], palette: [], fonts: [], locale: null,
-        docs: [], heard: null, synthesis: null, prose: '',
+        docs: [], heard: null, synthesis: null, prose: '', design: null,
       }
+      // W5 — the design half. Started the moment their home page arrives and run
+      // in parallel with the deep pages and the synthesis; no model, no extra page
+      // fetch (it reads the HTML the scrape already has), at most eight stylesheets.
+      let evidence: Promise<DesignEvidence | null> = Promise.resolve(null)
       // Everything readable, kept for the synthesis pass at the end.
       let corpus = ''
 
@@ -126,7 +132,9 @@ export async function POST(request: NextRequest) {
         // ── Their website ────────────────────────────────────────────────────
         if (url) {
           progress('read', 'running')
-          const scraped = await scrapeBrandSite(url)
+          const scraped = await scrapeBrandSite(url, {
+            onHome: home => { evidence = readSiteEvidence(home.url, home.html) },
+          })
           if (scraped.pages.length > 0) {
             result.pages = scraped.pages.length
             result.siteName = scraped.siteName
@@ -218,6 +226,21 @@ export async function POST(request: NextRequest) {
 
         // Hand the corpus back so onboarding never has to fetch it again.
         result.prose = corpus.slice(0, CARRY_PROSE_CAP)
+
+        // THE BLOG, BUILT (W5). Three designs from the deterministic director — the
+        // Door paints them the instant this result lands — and the signed token it
+        // spends on the art director's upgrade in the background. The pitches go
+        // into every preview as the feed's headlines: their articles, on their
+        // blog, in their colours.
+        const ev = await evidence
+        if (ev) {
+          const s = result.synthesis
+          result.design = doorDesign(
+            ev,
+            { siteName: result.siteName, locale: result.locale, pitches: previewPitches(s?.pitches) },
+            s ? { understanding: s.understanding, sector: s.sector, audience: s.audience, edge: s.edge, locale: result.locale } : { locale: result.locale },
+          )
+        }
 
         progress('listen', 'running')
         // Nothing found anywhere is a real outcome, not an exception: the Door

@@ -108,6 +108,26 @@ export type LandingCopy = {
     pitchKeyword: string
     revealCta: string
     revealBack: string
+    /**
+     * W5 — THE BLOG, BUILT. Three live designs beside what she understood, and a
+     * choice. Plain strings with {n}/{name} placeholders, like everything here.
+     */
+    designTitle: string
+    designLead: string
+    designTabs: string
+    variants: Record<'faithful' | 'elevated' | 'reimagined', { name: string; line: string }>
+    registers: Record<'quiet' | 'classic' | 'contemporary' | 'bold' | 'warm' | 'severe', string>
+    /** While the art director works in the background, and after. */
+    polishing: string
+    polished: string
+    directorSays: string
+    /** Why Elevat opened first — a measured number, never an opinion. */
+    adviceBody: string
+    adviceLink: string
+    decimalMark: string
+    previewLabel: string
+    previewTitle: string
+    designCta: string
     /** Failure, stated plainly and never as a dead end. */
     failTitle: string
     failBody: string
@@ -414,6 +434,24 @@ const ca: LandingCopy = {
     pitchKeyword: 'Paraula clau',
     revealCta: 'Vull el meu blog',
     revealBack: 'Provar amb una altra web',
+    designTitle: 'I el teu blog, ja fet',
+    designLead: 'Tres versions de la teva marca, de la més fidel a la més atrevida. Els titulars són les tres idees que t’he proposat.',
+    designTabs: 'Tria un disseny',
+    variants: {
+      faithful: { name: 'Fidel', line: 'Els teus colors, la teva tipografia i el teu ritme: el blog que hauria fet el teu dissenyador.' },
+      elevated: { name: 'Elevat', line: 'El teu color de marca, amb una tipografia i una composició més cuidades.' },
+      reimagined: { name: 'Reimaginat', line: 'El teu color com a punt de partida. Tota la resta, repensada.' },
+    },
+    registers: { quiet: 'Serè', classic: 'Clàssic', contemporary: 'Contemporani', bold: 'Atrevit', warm: 'Càlid', severe: 'Sobri' },
+    polishing: 'L’Art Director està revisant els tres dissenys…',
+    polished: 'Revisats per l’Art Director',
+    directorSays: 'L’Art Director',
+    adviceBody: 'T’he obert Elevat: el text de la teva web es llegeix a {n}:1 sobre el fons, i el mínim de llegibilitat és 4,5:1.',
+    adviceLink: 'T’he obert Elevat: els enllaços de la teva web es llegeixen a {n}:1 sobre el fons, i el mínim de llegibilitat és 4,5:1.',
+    decimalMark: ',',
+    previewLabel: 'En viu',
+    previewTitle: 'Vista prèvia del disseny {name}',
+    designCta: 'Aquest. Comencem.',
     failTitle: 'Aquesta no me la deixa llegir',
     failBody: 'Passa: hi ha webs blindades, o simplement caigudes. No és cap problema — m’ho pots explicar tu mateix quan entrem.',
     failCta: 'Continua igualment',
@@ -765,6 +803,24 @@ const es: LandingCopy = {
     pitchKeyword: 'Palabra clave',
     revealCta: 'Quiero mi blog',
     revealBack: 'Probar con otra web',
+    designTitle: 'Y tu blog, ya hecho',
+    designLead: 'Tres versiones de tu marca, de la más fiel a la más atrevida. Los titulares son las tres ideas que te he propuesto.',
+    designTabs: 'Elige un diseño',
+    variants: {
+      faithful: { name: 'Fiel', line: 'Tus colores, tu tipografía y tu ritmo: el blog que habría hecho tu diseñador.' },
+      elevated: { name: 'Elevado', line: 'Tu color de marca, con una tipografía y una composición más cuidadas.' },
+      reimagined: { name: 'Reimaginado', line: 'Tu color como punto de partida. Todo lo demás, repensado.' },
+    },
+    registers: { quiet: 'Sereno', classic: 'Clásico', contemporary: 'Contemporáneo', bold: 'Atrevido', warm: 'Cálido', severe: 'Sobrio' },
+    polishing: 'El Director de Arte está revisando los tres diseños…',
+    polished: 'Revisados por el Director de Arte',
+    directorSays: 'El Director de Arte',
+    adviceBody: 'Te he abierto Elevado: el texto de tu web se lee a {n}:1 sobre el fondo, y el mínimo de legibilidad es 4,5:1.',
+    adviceLink: 'Te he abierto Elevado: los enlaces de tu web se leen a {n}:1 sobre el fondo, y el mínimo de legibilidad es 4,5:1.',
+    decimalMark: ',',
+    previewLabel: 'En vivo',
+    previewTitle: 'Vista previa del diseño {name}',
+    designCta: 'Este. Empecemos.',
     failTitle: 'Esta no me deja leerla',
     failBody: 'Pasa: hay webs blindadas, o simplemente caídas. No es ningún problema — me lo puedes contar tú cuando entremos.',
     failCta: 'Sigue igualmente',
@@ -1116,6 +1172,24 @@ const en: LandingCopy = {
     pitchKeyword: 'Keyword',
     revealCta: 'I want my blog',
     revealBack: 'Try another site',
+    designTitle: 'And your blog, already built',
+    designLead: 'Three versions of your brand, from the most faithful to the boldest. The headlines are the three ideas I just proposed.',
+    designTabs: 'Choose a design',
+    variants: {
+      faithful: { name: 'Faithful', line: 'Your colours, your type and your rhythm: the blog your own designer would have made.' },
+      elevated: { name: 'Elevated', line: 'Your brand colour, with more considered type and composition.' },
+      reimagined: { name: 'Reimagined', line: 'Your colour as the starting point. Everything else, rethought.' },
+    },
+    registers: { quiet: 'Quiet', classic: 'Classic', contemporary: 'Contemporary', bold: 'Bold', warm: 'Warm', severe: 'Severe' },
+    polishing: 'The Art Director is reviewing all three designs…',
+    polished: 'Reviewed by the Art Director',
+    directorSays: 'The Art Director',
+    adviceBody: 'I opened Elevated first: the text on your site reads at {n}:1 against its background, and the legibility floor is 4.5:1.',
+    adviceLink: 'I opened Elevated first: the links on your site read at {n}:1 against their background, and the legibility floor is 4.5:1.',
+    decimalMark: '.',
+    previewLabel: 'Live',
+    previewTitle: 'Preview of the {name} design',
+    designCta: 'This one. Let’s begin.',
     failTitle: 'This one won’t let me read it',
     failBody: 'It happens: some sites are locked down, some are simply down. No problem — you can tell me yourself once we’re inside.',
     failCta: 'Carry on anyway',

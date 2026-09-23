@@ -32,6 +32,7 @@
 // no table, no TTL and no migration.
 
 import type { BrandSynthesis } from './synthesis'
+import type { RevealDesign, RevealVariantName } from '@/lib/design/revealTypes'
 
 /** One brand sentence we found, verbatim, in the visitor's own material. */
 export type GlimpseQuote = { text: string; from: string }
@@ -72,6 +73,14 @@ export type GlimpseResult = {
    * needed a model.
    */
   synthesis: BrandSynthesis | null
+  /**
+   * W5 — THE BLOG, BUILT. Three live designs from the deterministic director,
+   * ready to paint the instant the result lands, plus the signed token the Door
+   * spends on the art director's upgrade in the background. Null when there was no
+   * website to read a design from (text, documents or voice only) or when reading
+   * it failed — the reveal is then exactly what it was before W5.
+   */
+  design: RevealDesign | null
 }
 
 export type GlimpseStep = 'read' | 'documents' | 'voice' | 'think' | 'listen'
@@ -109,7 +118,35 @@ export type DoorCarry = {
    * the visit, which is exactly the lifetime of an unfinished signup.
    */
   glimpse: GlimpseResult | null
+  /**
+   * W5 — the design they chose on the Door ("Aquest. Comencem."), carried into
+   * signup. Browser storage only: NO database row is written for an anonymous
+   * visitor. Absent when they entered without a design reveal.
+   */
+  design?: DoorDesignChoice | null
   at: number
+}
+
+/**
+ * The chosen design, as it crosses signup.
+ *
+ * The genome travels WHOLE, not just its id: there is no genome table yet
+ * (migration 039 is planned, not written), and a model-directed genome cannot be
+ * re-derived from evidence the way a deterministic one can. Whoever reads this
+ * must run it through `validateGenome` — it spent time in a browser.
+ */
+export type DoorDesignChoice = {
+  /** Content hash (`g_…`) — the id a `site_design_genomes` row will be keyed on. */
+  genomeId: string
+  variant: RevealVariantName
+  source: 'derived' | 'directed'
+  genome: unknown
+  /**
+   * The evidence and brief it was made from, signed by the server: verifiable
+   * with `verifyDesignToken`, so the post-signup side can trust it without
+   * re-scraping. Null only when the server had no key to sign with.
+   */
+  evidence: string | null
 }
 
 /** Corpus cap for the carry. Beyond this the marginal paragraph adds nothing. */

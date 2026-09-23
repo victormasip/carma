@@ -784,6 +784,38 @@
 /* ════════════════════════════════════════════════════════════════════════════
  * THE DOOR — the only real ask on the page.
  * ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── W5 · THE BLOG, BUILT ──────────────────────────────────────────────────────
+   While the Door shows three live designs it carries `data-door-wide`, and the
+   page makes the room with :has() — so LandingPage stays a Server Component with
+   no state to share. In the hero, the phone scene steps aside and the grid
+   collapses to one column; at the close, the reading column widens. */
+.hero-grid:has([data-door-wide]) { grid-template-columns: minmax(0, 1fr); }
+.hero-grid:has([data-door-wide]) > .hero-phone { display: none; }
+.close-col:has([data-door-wide]) { max-width: 72rem; }
+
+/* The three variants share one stage; only the open tab's slot is visible, so a
+   tab switch after the first load is instant. Inside a slot, pages stack: the art
+   director's version loads UNDER the one on screen and fades in over it. */
+.design-stage { background: var(--color-surface-subtle); }
+.design-slot { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+.design-slot[data-active] { visibility: visible; pointer-events: auto; }
+.design-frame {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  border: 0;
+  transition: opacity 480ms var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+}
+/* Only a REPLACEMENT ever waits invisible: the art director's page, loading over
+   the one on screen. The page beneath stays visible the whole time and is only
+   dropped after the replacement has painted — so if the new one never loads, the
+   visitor simply keeps reading the old one. A first page is never hidden at all. */
+.design-frame[data-pending] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  /* A crossfade has no travel. It is the only sign that the design on screen just
+     changed under the visitor's eyes, so it stays — the Door's ring's exemption. */
+  .design-frame { transition: opacity 480ms linear !important; }
+}
 .door {
   position: relative;
   border-radius: 24px;

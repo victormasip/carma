@@ -294,6 +294,10 @@ function motion() {
     // Decorative overlays are allowed to start invisible; they carry no text.
     const selector = landing.slice(0, i).split('}').pop()?.split('{')[0]?.trim() ?? ''
     if (/(veil|spark|::before|::after|__lit|glimpse|door-chip|door-ring|knot-flare)/.test(selector)) continue
+    // W5: a REPLACEMENT frame in the design reveal waits invisible while the page it
+    // replaces stays visible beneath it (dropped only after the new one paints), so
+    // nothing the visitor can read is ever hidden. The first frame never waits.
+    if (selector === '.design-frame[data-pending]') continue
     bareHides.push(selector.replace(/\s+/g, ' ').slice(0, 70))
   }
   if (bareHides.length) bad('content hidden outside an @supports guard', bareHides.join(' | '))

@@ -27,6 +27,7 @@ import {
   writeDoorCarry, type GlimpseEvent, type GlimpseResult, type GlimpseStep,
 } from '@/lib/onboarding/glimpse'
 import type { LandingCopy } from './copy'
+import { useProgressiveDesign } from './useProgressiveDesign'
 import { cn } from '@/lib/cn'
 
 // Only downloaded when the visitor actually decides to talk.
@@ -38,6 +39,10 @@ import { cn } from '@/lib/cn'
 // idle button on the server costs nothing and keeps the page whole without
 // JavaScript. The code-splitting (the actual point) is unaffected.
 const VoiceRecorder = dynamic(() => import('@/components/onboarding/VoiceRecorder'))
+
+// W5 — the design half of the reveal: three live blogs and the art director's
+// upgrade. Only a visitor whose glimpse produced a design ever downloads it.
+const DesignReveal = dynamic(() => import('./DesignReveal'))
 
 const MAX_FILES = 3
 
@@ -122,6 +127,14 @@ export default function Door({
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // W5 — PAINT NOW, POLISH IN THE BACKGROUND. The deterministic director's three
+  // designs arrive inside the glimpse result and are drawn at once; the art
+  // director's are asked for right after, from the same handler, and swapped in
+  // if and when they land. See useProgressiveDesign for the state machine.
+  const pd = useProgressiveDesign()
+  const { paint: paintDesign, reset: resetDesign } = pd
+  const wide = phase === 'reveal' && !!pd.state.design
 
   const isUrl = looksLikeUrl(value)
   const hasInput = Boolean(value.trim() || files.length || audio)
@@ -256,13 +269,19 @@ export default function Door({
         }
       }
 
-      if (got) { setResult(got); setPct(100); setPhase('reveal'); pulse(); land() }
+      if (got) {
+        setResult(got); setPct(100); setPhase('reveal'); pulse(); land()
+        // From the handler, never an effect: Strict Mode runs effects twice, and
+        // here that would be two model calls.
+        if (got.design) paintDesign(got.design)
+        else resetDesign()
+      }
       else { setPhase('fail'); land() }
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return
       setPhase('fail'); land()
     }
-  }, [hasInput, phase, isUrl, value, files, audio, c.tooFast, pulse, land])
+  }, [hasInput, phase, isUrl, value, files, audio, c.tooFast, pulse, land, paintDesign, resetDesign])
 
   /* ── Into the product ──────────────────────────────────────────────────────
      THE WHOLE GLIMPSE crosses the boundary, not just the URL.
@@ -273,24 +292,36 @@ export default function Door({
      the palette, the quotes and the synthesis means onboarding has nothing left
      to fetch: it remembers what it knows, writes it down, and spends its time
      going deeper instead of going back. */
+  //
+  // W5 — "AQUEST. COMENCEM." The chosen design crosses with it: its content-hash
+  // id, the genome itself (there is no genome table to look an id up in yet) and
+  // the SIGNED evidence it was made from. sessionStorage only — an anonymous
+  // visitor gets no database row. Whichever design is on screen is the one they
+  // chose: the art director's if it has landed, the arithmetic's if not.
   const enter = useCallback(() => {
     const url = isUrl ? normalizeUrl(value) : ''
     const parts = [
       !isUrl && value.trim() ? value.trim() : '',
       result?.heard ?? '',
     ].filter(Boolean)
+    const d = pd.state.design
+    const chosen = d?.variants.find(v => v.variant === pd.state.active)
     writeDoorCarry({
       url,
       text: parts.join('\n\n'),
       siteName: result?.siteName ?? null,
       locale: result?.locale ?? null,
       glimpse: result,
+      design: d && chosen
+        ? { genomeId: chosen.id, variant: chosen.variant, source: d.source, genome: chosen.genome, evidence: d.token }
+        : null,
     })
     router.push(url ? `/registre?url=${encodeURIComponent(url)}` : '/registre')
-  }, [isUrl, value, result, router])
+  }, [isUrl, value, result, router, pd.state.design, pd.state.active])
 
   const reset = () => {
     abortRef.current?.abort()
+    pd.reset()
     setPhase('idle'); setResult(null); setPct(0); setDetail(null)
     inputRef.current?.focus()
   }
@@ -298,7 +329,10 @@ export default function Door({
   /* ════════════════════════════════════════════════════════════════════════ */
 
   return (
-    <div id={id} className="relative mx-auto w-full max-w-2xl">
+    // `data-door-wide`: while three live blogs are on screen the Door needs the
+    // room of three blogs. landing.css hands it the full width with :has(), so the
+    // Server-Component page around it needs no state and no JS to make space.
+    <div id={id} data-door-wide={wide || undefined} className={cn('relative mx-auto w-full', wide ? 'max-w-6xl' : 'max-w-2xl')}>
       {variant === 'hero' && (
         <div className={cn('door-veil', dropping && 'door-veil--on')} aria-hidden>
           <div className="flex h-full items-center justify-center">
@@ -485,106 +519,121 @@ export default function Door({
         {/* ── REVEAL ───────────────────────────────────────────────────────── */}
         {phase === 'reveal' && result && (
           <div className="text-left">
-            <ul className="flex flex-wrap gap-2">
-              {result.pages > 0 && (
-                <li className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
-                  {count(c.revealPagesOne, c.revealPagesMany, result.pages)}
-                </li>
-              )}
-              {result.siteName && (
-                <li className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
-                  {result.siteName}
-                </li>
-              )}
-              {result.docs.map(d => (
-                <li key={d.name} className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
-                  {d.name} · {d.words}
-                </li>
-              ))}
-            </ul>
-
-            {result.palette.length > 0 && (
-              <div className="mt-3 flex gap-1.5" aria-hidden>
-                {result.palette.map(col => (
-                  <span key={col} className="glimpse-line h-7 flex-1 rounded-lg border border-black/10" style={{ background: col }} />
-                ))}
-              </div>
-            )}
-
-            {/* ── BRAND BRAIN 2.0 — what she UNDERSTOOD ────────────────────
-                This is the half that separates "it read my site" from "it gets
-                my business". Everything below is synthesised, never quoted. */}
-            {result.synthesis?.understanding && (
-              <div className="glimpse-line mt-5 rounded-2xl border border-accent/25 bg-accent-soft/40 p-4">
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">{c.understoodTitle}</p>
-                <p className="mt-2 font-display text-lg leading-snug text-text">{result.synthesis.understanding}</p>
-
-                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {([
-                    [c.sectorLabel, result.synthesis.sector],
-                    [c.audienceLabel, result.synthesis.audience],
-                  ] as const).filter(([, v]) => v).map(([label, value]) => (
-                    // role="presentation": the only <div> a <dl> is allowed to
-                    // contain is one wrapping a single term/definition group.
-                    <div key={label} role="presentation">
-                      <dt className="text-[0.68rem] font-extrabold uppercase tracking-wider text-subtle">{label}</dt>
-                      <dd className="text-sm font-medium leading-snug text-text">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-
-                {result.synthesis.edge && (
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    <span className="font-bold text-text">{c.edgeLabel}: </span>
-                    {result.synthesis.edge}
-                  </p>
-                )}
-
-                {result.synthesis.gaps.length > 0 && (
-                  <p className="mt-2 text-sm leading-relaxed text-muted">
-                    <span className="font-bold text-text">{c.gapsLabel}: </span>
-                    {result.synthesis.gaps.join(' · ')}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* ── The three pitches. The moment the visitor decides. ───────── */}
-            {result.synthesis && result.synthesis.pitches.length > 0 && (
-              <div className="mt-5">
-                <p className="font-display text-xl leading-tight text-text">{c.pitchesTitle}</p>
-                <p className="mt-1 text-sm text-muted">{c.pitchesLead}</p>
-                <ol className="mt-3 space-y-2.5">
-                  {result.synthesis.pitches.map((pitch, i) => (
-                    <li
-                      key={pitch.title}
-                      className="pitch-card rounded-2xl border border-border bg-surface p-4"
-                      style={{ animationDelay: `${i * 110}ms` }}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-on-accent">
-                          {i + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="font-display text-lg font-semibold leading-snug text-text">{pitch.title}</p>
-                          <p className="mt-1 text-sm leading-relaxed text-muted">{pitch.angle}</p>
-                          {pitch.why && (
-                            <p className="mt-1.5 text-sm leading-relaxed text-subtle">
-                              <span className="font-bold">{c.pitchWhy}: </span>{pitch.why}
-                            </p>
-                          )}
-                          {pitch.keyword && (
-                            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-bg-elevated px-2.5 py-1 text-[0.7rem] font-semibold text-muted">
-                              {c.pitchKeyword}: <span className="font-extrabold text-text">{pitch.keyword}</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
+            <div className={cn(wide && 'grid gap-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8')}>
+              {/* WHAT WE UNDERSTOOD — the reveal as it was before W5, unchanged. */}
+              <div className="min-w-0">
+                <ul className="flex flex-wrap gap-2">
+                  {result.pages > 0 && (
+                    <li className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
+                      {count(c.revealPagesOne, c.revealPagesMany, result.pages)}
+                    </li>
+                  )}
+                  {result.siteName && (
+                    <li className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
+                      {result.siteName}
+                    </li>
+                  )}
+                  {result.docs.map(d => (
+                    <li key={d.name} className="glimpse-line rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text">
+                      {d.name} · {d.words}
                     </li>
                   ))}
-                </ol>
+                </ul>
+
+                {result.palette.length > 0 && (
+                  <div className="mt-3 flex gap-1.5" aria-hidden>
+                    {result.palette.map(col => (
+                      <span key={col} className="glimpse-line h-7 flex-1 rounded-lg border border-black/10" style={{ background: col }} />
+                    ))}
+                  </div>
+                )}
+
+                {/* ── BRAND BRAIN 2.0 — what she UNDERSTOOD ────────────────────
+                    This is the half that separates "it read my site" from "it gets
+                    my business". Everything below is synthesised, never quoted. */}
+                {result.synthesis?.understanding && (
+                  <div className="glimpse-line mt-5 rounded-2xl border border-accent/25 bg-accent-soft/40 p-4">
+                    <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">{c.understoodTitle}</p>
+                    <p className="mt-2 font-display text-lg leading-snug text-text">{result.synthesis.understanding}</p>
+
+                    <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {([
+                        [c.sectorLabel, result.synthesis.sector],
+                        [c.audienceLabel, result.synthesis.audience],
+                      ] as const).filter(([, v]) => v).map(([label, value]) => (
+                        // role="presentation": the only <div> a <dl> is allowed to
+                        // contain is one wrapping a single term/definition group.
+                        <div key={label} role="presentation">
+                          <dt className="text-[0.68rem] font-extrabold uppercase tracking-wider text-subtle">{label}</dt>
+                          <dd className="text-sm font-medium leading-snug text-text">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+
+                    {result.synthesis.edge && (
+                      <p className="mt-3 text-sm leading-relaxed text-muted">
+                        <span className="font-bold text-text">{c.edgeLabel}: </span>
+                        {result.synthesis.edge}
+                      </p>
+                    )}
+
+                    {result.synthesis.gaps.length > 0 && (
+                      <p className="mt-2 text-sm leading-relaxed text-muted">
+                        <span className="font-bold text-text">{c.gapsLabel}: </span>
+                        {result.synthesis.gaps.join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* ── The three pitches. The moment the visitor decides. ───────── */}
+                {result.synthesis && result.synthesis.pitches.length > 0 && (
+                  <div className="mt-5">
+                    <p className="font-display text-xl leading-tight text-text">{c.pitchesTitle}</p>
+                    <p className="mt-1 text-sm text-muted">{c.pitchesLead}</p>
+                    <ol className="mt-3 space-y-2.5">
+                      {result.synthesis.pitches.map((pitch, i) => (
+                        <li
+                          key={pitch.title}
+                          className="pitch-card rounded-2xl border border-border bg-surface p-4"
+                          style={{ animationDelay: `${i * 110}ms` }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-on-accent">
+                              {i + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-display text-lg font-semibold leading-snug text-text">{pitch.title}</p>
+                              <p className="mt-1 text-sm leading-relaxed text-muted">{pitch.angle}</p>
+                              {pitch.why && (
+                                <p className="mt-1.5 text-sm leading-relaxed text-subtle">
+                                  <span className="font-bold">{c.pitchWhy}: </span>{pitch.why}
+                                </p>
+                              )}
+                              {pitch.keyword && (
+                                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-bg-elevated px-2.5 py-1 text-[0.7rem] font-semibold text-muted">
+                                  {c.pitchKeyword}: <span className="font-extrabold text-text">{pitch.keyword}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
               </div>
-            )}
+
+              {/* AND WHAT WE'D BUILD — three live blogs (W5). Its own Suspense
+                  boundary, so the lazy chunk can never suspend the page around it
+                  and throw away the visitor's scroll position. */}
+              {wide && (
+                <Suspense fallback={<div className="min-h-[640px] rounded-2xl bg-surface-subtle" aria-hidden />}>
+                  <DesignReveal c={c} pd={pd} />
+                </Suspense>
+              )}
+            </div>
 
             {/* THE QUOTE BLOCK IS GONE (founder, 2026-09-17).
                 It printed two real sentences from the visitor's site under "and
@@ -606,7 +655,7 @@ export default function Door({
                 onClick={enter}
                 className="btn-gold gold-trace [--gold-trace-w:1.5px] inline-flex h-13 items-center justify-center rounded-2xl px-6 py-3.5 text-base font-extrabold"
               >
-                <span className="relative z-[1] inline-flex items-center gap-2">{c.revealCta} <ArrowRight className="h-4 w-4" /></span>
+                <span className="relative z-[1] inline-flex items-center gap-2">{wide ? c.designCta : c.revealCta} <ArrowRight className="h-4 w-4" /></span>
               </button>
               <button type="button" onClick={reset} className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-accent">
                 <RotateCcw className="h-3.5 w-3.5" /> {c.revealBack}

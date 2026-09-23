@@ -32,5 +32,9 @@ export async function resolve(specifier, context, next) {
     const resolved = withExt(abs)
     if (resolved) return next(pathToFileURL(resolved).href, context)
   }
+  // `next/server` is a CommonJS file with no `exports` map, so Node's ESM resolver
+  // cannot find it by its bare name. Route handlers import it; test:reveal imports
+  // route handlers.
+  if (specifier === 'next/server') return next('next/server.js', context)
   return next(specifier, context)
 }

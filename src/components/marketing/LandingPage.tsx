@@ -170,7 +170,7 @@ function Entrada({ c }: { c: LandingCopy }) {
         <EndlessKnot size={560} sheen={false} />
       </span>
 
-      <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-10">
+      <div className="hero-grid relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-10">
         <div className="text-center lg:text-left">
           {/* LCP DISCIPLINE: line one is static and paints on the first frame.
               Only the payoff line is allowed to arrive. */}
@@ -199,7 +199,7 @@ function Entrada({ c }: { c: LandingCopy }) {
             drops below the Door instead of beside it — a picture of a phone on a
             phone still earns its place when it is the thing demonstrating the
             product. */}
-        <div className="relative mx-auto w-full max-w-[330px] lg:mx-0 lg:max-w-none" aria-hidden>
+        <div className="hero-phone relative mx-auto w-full max-w-[330px] lg:mx-0 lg:max-w-none" aria-hidden>
           <div className="lg:pointer-events-none lg:absolute lg:-right-16 lg:top-1/2 lg:w-[340px] lg:-translate-y-1/2 lg:rotate-[5deg]">
             <PhoneScene p={c.conversa.phone} mode="live" />
           </div>
@@ -736,7 +736,7 @@ function Faq({ c }: { c: LandingCopy }) {
 function Tancament({ c }: { c: LandingCopy }) {
   return (
     <section className="relative px-4 pb-28 pt-8">
-      <div className="mx-auto max-w-3xl text-center">
+      <div className="close-col mx-auto max-w-3xl text-center">
         <div className="flex justify-center">
           <KnotTie />
         </div>

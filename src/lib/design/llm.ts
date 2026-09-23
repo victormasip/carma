@@ -304,17 +304,38 @@ export type BrandBrief = {
   sector?: string | null
   audience?: string | null
   edge?: string | null
+  /**
+   * The site's language (W5). The rationale is no longer a log line — the Door
+   * shows it to the owner beside their blog — so it is written in their language,
+   * the same one the synthesis wrote their pitches in.
+   */
+  locale?: string | null
+}
+
+const LANGUAGE_NAME: Record<string, string> = {
+  ca: 'Catalan', es: 'Spanish', en: 'English', fr: 'French', de: 'German',
+  it: 'Italian', pt: 'Portuguese', gl: 'Galician', eu: 'Basque', nl: 'Dutch',
 }
 
 function briefDigest(b: BrandBrief | null | undefined): string {
+  const l: string[] = []
   if (!b || !(b.understanding || b.sector || b.audience || b.edge)) {
-    return '\nWHAT THE BUSINESS IS\n  Nothing beyond the site itself. Read it from the evidence above.'
+    l.push('\nWHAT THE BUSINESS IS\n  Nothing beyond the site itself. Read it from the evidence above.')
+  } else {
+    l.push('\nWHAT THE BUSINESS IS')
+    if (b.understanding) l.push(`  ${b.understanding}`)
+    if (b.sector) l.push(`  sector    ${b.sector}`)
+    if (b.audience) l.push(`  audience  ${b.audience}`)
+    if (b.edge) l.push(`  edge      ${b.edge}`)
   }
-  const l = ['\nWHAT THE BUSINESS IS']
-  if (b.understanding) l.push(`  ${b.understanding}`)
-  if (b.sector) l.push(`  sector    ${b.sector}`)
-  if (b.audience) l.push(`  audience  ${b.audience}`)
-  if (b.edge) l.push(`  edge      ${b.edge}`)
+  // The owner reads each rationale beside their blog. Their language, and only
+  // what the evidence or the brief actually says: this product never invents a
+  // fact about a business (the founder's no-invented-proof directive).
+  const lang = b?.locale ? LANGUAGE_NAME[b.locale.slice(0, 2).toLowerCase()] : undefined
+  l.push('\nTHE RATIONALES ARE SHOWN TO THE OWNER')
+  if (lang) l.push(`  Write every rationale in ${lang}.`)
+  l.push('  Name only what the evidence or the brief says. Never invent a fact — no year,')
+  l.push('  award, number or claim that is not written above.')
   return l.join('\n')
 }
 
