@@ -924,6 +924,21 @@ export function modulesRuntimeScript(
 
 // ─── CSS blocks (token-driven, scoped under .carma-mod-*) ──────────────────────
 
+// W5 — THE CASCADE SURGERY, AND WHAT IT FOUND HERE
+// ─────────────────────────────────────────────────
+// This CSS now lands in the blog's `carma.overrides` cascade layer (blogCss.ts), so
+// it beats the template by ORDER. It keeps its `!important`s — scoped to
+// `.carma-mod-*`, they are inert inside the layer.
+//
+// Sixteen declarations here (and the inline half of two margins) had NEVER rendered
+// and were deleted to keep every
+// published page identical: they sat on <p>/<ol>/<a> elements inside `.carma-root`,
+// where the isolation reset (`.carma-root p{margin:0}` etc., specificity 0,1,1,
+// `!important`) always beat them (0,1,0). The layer order would have brought all of
+// them to life at once. Gone: the newsletter's title/desc/status margins, the TOC
+// and takeaways heads' margins, the comments list/empty/status margins, the related
+// and hero cards' `background`, and the pull quote's blockquote overrides (see
+// PULLQUOTE_CSS). Each is now a deliberate design change away, not an accident away.
 const BASE_OVERLAY_CSS = `
 /* Module elements live both inside and outside .carma-root; ensure border-box
    everywhere so paddings never blow out a width (the .carma-root reset only
@@ -932,7 +947,7 @@ const BASE_OVERLAY_CSS = `
 /* Dark-mode token overrides — flips the NEUTRALS only, keeping the brand accent
    + fonts (never overwrites the brand). Applied on the shadow host. */
 :host([data-carma-theme="dark"]){--ct-bg:#0f1115!important;--ct-surface:#181b20!important;--ct-text:#e9eaec!important;--ct-muted:#9aa3ad!important;--ct-border:#2b2f37!important}
-.carma-mod-card{display:flex!important;flex-direction:column!important;text-decoration:none!important;color:inherit!important;background:var(--ct-surface)!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;transition:transform .2s ease,box-shadow .2s ease!important}
+.carma-mod-card{display:flex!important;flex-direction:column!important;text-decoration:none!important;color:inherit!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;transition:transform .2s ease,box-shadow .2s ease!important}
 .carma-mod-card:hover{transform:translateY(-3px)!important;box-shadow:0 16px 36px -20px rgba(0,0,0,.34)!important}
 .carma-mod-card-media{aspect-ratio:16/9!important;background:var(--ct-border)!important;overflow:hidden!important}
 .carma-mod-card-media img,.carma-mod-card-media picture{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
@@ -979,7 +994,7 @@ const ANNOUNCE_CSS = `
 
 const HERO_CSS = `
 .carma-mod-hero{margin:0 0 2.5rem!important}
-.carma-mod-hero-feature{display:flex!important;flex-direction:column!important;text-decoration:none!important;color:inherit!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;background:var(--ct-surface)!important;border:1px solid var(--ct-border)!important}
+.carma-mod-hero-feature{display:flex!important;flex-direction:column!important;text-decoration:none!important;color:inherit!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;border:1px solid var(--ct-border)!important}
 .carma-mod-hero-media{aspect-ratio:21/9!important;background:var(--ct-border)!important;overflow:hidden!important}
 .carma-mod-hero-media img,.carma-mod-hero-media picture{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;transition:transform .4s ease!important}
 .carma-mod-hero-feature:hover .carma-mod-hero-media img{transform:scale(1.04)!important}
@@ -1026,8 +1041,8 @@ const NEWS_CSS = `
 .carma-mod-news{margin:2.25rem 0!important;padding:1.9rem!important;border-radius:var(--ct-radius-lg)!important;border:1px solid var(--ct-border)!important;background:var(--ct-surface)!important}
 .carma-mod-news-banner{background:linear-gradient(120deg,color-mix(in srgb,var(--ct-accent) 12%,var(--ct-surface)),var(--ct-surface))!important;border-color:color-mix(in srgb,var(--ct-accent) 30%,var(--ct-border))!important}
 .carma-mod-news-footer{background:transparent!important;border:0!important;border-top:1px solid var(--ct-border)!important;border-radius:0!important;text-align:center!important}
-.carma-mod-news-title{font-family:var(--ct-font-heading)!important;font-size:1.3rem!important;font-weight:800!important;color:var(--ct-text)!important;margin:0 0 .4rem!important}
-.carma-mod-news-desc{font-size:.95rem!important;line-height:1.55!important;color:var(--ct-muted)!important;margin:0 0 1.1rem!important}
+.carma-mod-news-title{font-family:var(--ct-font-heading)!important;font-size:1.3rem!important;font-weight:800!important;color:var(--ct-text)!important}
+.carma-mod-news-desc{font-size:.95rem!important;line-height:1.55!important;color:var(--ct-muted)!important}
 .carma-mod-news-form{display:flex!important;gap:.6rem!important;flex-wrap:wrap!important}
 .carma-mod-news-footer .carma-mod-news-form{justify-content:center!important}
 .carma-mod-news-input{flex:1 1 240px!important;min-width:0!important;height:48px!important;padding:0 1.1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius)!important;background:var(--ct-bg)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.95rem!important;outline:none!important}
@@ -1035,7 +1050,7 @@ const NEWS_CSS = `
 .carma-mod-news-btn{height:48px!important;padding:0 1.5rem!important;border:0!important;border-radius:var(--ct-radius)!important;background:var(--ct-accent)!important;color:#fff!important;font-family:var(--ct-font-body)!important;font-weight:800!important;font-size:.95rem!important;cursor:pointer!important;transition:opacity .2s ease!important;white-space:nowrap!important}
 .carma-mod-news-btn:hover{opacity:.9!important}
 .carma-mod-news-btn:disabled{opacity:.6!important;cursor:default!important}
-.carma-mod-news-status{margin:.7rem 0 0!important;font-size:.85rem!important;font-weight:700!important;min-height:1em!important}
+.carma-mod-news-status{font-size:.85rem!important;font-weight:700!important;min-height:1em!important}
 .carma-mod-news-status.is-ok{color:var(--ct-accent)!important}
 .carma-mod-news-status.is-err{color:#dc2626!important}`.trim()
 
@@ -1101,7 +1116,7 @@ const PREVNEXT_CSS = `
 @media(max-width:560px){.carma-mod-pn{grid-template-columns:1fr!important}}`.trim()
 
 const TOC_CSS = `
-.carma-mod-toc-head{font-size:.74rem!important;font-weight:800!important;text-transform:uppercase!important;letter-spacing:.07em!important;color:var(--ct-muted)!important;margin:0 0 .6rem!important}
+.carma-mod-toc-head{font-size:.74rem!important;font-weight:800!important;text-transform:uppercase!important;letter-spacing:.07em!important;color:var(--ct-muted)!important}
 .carma-mod-toc-list{list-style:none!important;margin:0!important;padding:0!important;display:flex!important;flex-direction:column!important;gap:.35rem!important}
 .carma-mod-toc-list a{color:var(--ct-muted)!important;text-decoration:none!important;font-size:.9rem!important;line-height:1.4!important;transition:color .15s ease!important}
 .carma-mod-toc-list a:hover{color:var(--ct-accent)!important}
@@ -1280,7 +1295,7 @@ const TAKEAWAYS_CSS = [
   '.carma-mod-tak{margin:0 0 2rem;padding:1.15rem 1.35rem;border-radius:var(--radius-lg,16px);background:color-mix(in oklab,var(--accent,#f5bc00) 7%,transparent);border-left:3px solid var(--accent,#f5bc00)}',
   '.carma-mod-tak-minimal{background:none;border-left:none;padding:0 0 0 .2rem}',
   '.carma-mod-tak-card{background:var(--surface,#fff);border-left:none;box-shadow:0 10px 30px -18px rgba(0,0,0,.35);border:1px solid var(--border,#e5e5e5)}',
-  '.carma-mod-tak-head{margin:0 0 .6rem;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
+  '.carma-mod-tak-head{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--accent,#a87f00)}',
   '.carma-mod-tak-list{margin:0;padding:0;list-style:none;display:grid;gap:.45rem}',
   '.carma-mod-tak-list li{position:relative;padding-left:1.35rem;font-size:1rem;line-height:1.5}',
   '.carma-mod-tak-list li::before{content:"";position:absolute;left:.25rem;top:.6em;width:6px;height:6px;border-radius:999px;background:var(--accent,#f5bc00)}',
@@ -1288,14 +1303,22 @@ const TAKEAWAYS_CSS = [
   '.carma-mod-tak-list a:hover{border-bottom-color:var(--accent,#f5bc00)}',
 ].join('\n')
 
+// W5 (the cascade surgery): the declarations these rules no longer carry had
+// NEVER rendered. The pull quote is injected inside `.carma-article-content`, where
+// the base blockquote rule (then `!important`) always beat them; the same held for
+// the side variant's border/padding and every inline margin. Layered, they would
+// have come alive on every blog with this module at once — with token names that do
+// not exist here (`--text` is not `--ct-text`), so `#111` text on dark themes.
+// Deleting them is what keeps the page identical. The big heading-font quote this
+// module was designed to be is now a deliberate change away, not an accident away.
 const PULLQUOTE_CSS = [
-  '.carma-mod-pq{margin:2.2rem 0;padding:0}',
-  '.carma-mod-pq blockquote{margin:0;font-family:var(--font-heading,inherit);font-size:clamp(1.3rem,1.05rem + 1vw,1.9rem);line-height:1.25;font-weight:700;letter-spacing:-.02em;color:var(--text,#111)}',
+  '.carma-mod-pq{margin-block:2.2rem;padding:0}',
+  '.carma-mod-pq blockquote{font-family:var(--font-heading,inherit);font-weight:700;letter-spacing:-.02em}',
   '.carma-mod-pq-center{text-align:center;padding:0 clamp(0px,4vw,3rem)}',
   '.carma-mod-pq-center blockquote::before{content:"";display:block;width:44px;height:3px;border-radius:3px;background:var(--accent,#f5bc00);margin:0 auto 1rem}',
   '.carma-mod-pq-rule{border-top:1px solid var(--border,#e5e5e5);border-bottom:1px solid var(--border,#e5e5e5);padding:1.4rem 0}',
-  '.carma-mod-pq-side blockquote{border-left:3px solid var(--accent,#f5bc00);padding-left:1.1rem;text-align:left}',
-  '@media (min-width:1100px){.carma-mod-pq-side{float:right;width:min(42%,22rem);margin:.4rem -8% 1.4rem 2rem}}',
+  '.carma-mod-pq-side blockquote{text-align:left}',
+  '@media (min-width:1100px){.carma-mod-pq-side{float:right;width:min(42%,22rem);margin-block:.4rem 1.4rem}}',
 ].join('\n')
 
 const READNEXT_CSS = [
@@ -1393,7 +1416,7 @@ const COMMENTS_CSS = `
 .carma-mod-comments{margin:3rem auto 0!important;max-inline-size:46rem!important;padding-top:2rem!important;border-top:1px solid var(--ct-border)!important}
 .carma-mod-comments-title{font-family:var(--ct-font-heading)!important;font-size:1.35rem!important;font-weight:800!important;color:var(--ct-text)!important;margin:0 0 1.25rem!important;display:flex!important;align-items:baseline!important;gap:.5rem!important}
 .carma-mod-comments-n{font-size:.95rem!important;font-weight:700!important;color:var(--ct-muted)!important;font-variant-numeric:tabular-nums!important}
-.carma-mod-comments-list{list-style:none!important;margin:0 0 1.5rem!important;padding:0!important;display:flex!important;flex-direction:column!important;gap:1rem!important}
+.carma-mod-comments-list{list-style:none!important;padding:0!important;display:flex!important;flex-direction:column!important;gap:1rem!important}
 .carma-mod-comment{display:flex!important;gap:.85rem!important;padding:1rem 1.1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;background:var(--ct-surface)!important}
 .carma-mod-comments-compact .carma-mod-comment{border:0!important;border-radius:0!important;background:transparent!important;padding:.6rem 0!important;border-bottom:1px solid var(--ct-border)!important}
 .carma-mod-comment-av{flex:0 0 auto!important;width:38px!important;height:38px!important;border-radius:9999px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;background:color-mix(in srgb,var(--ct-accent) 14%,var(--ct-surface))!important;color:var(--ct-accent)!important;font-weight:800!important;font-size:.8rem!important;text-transform:uppercase!important}
@@ -1403,7 +1426,7 @@ const COMMENTS_CSS = `
 .carma-mod-comment-who{font-weight:800!important;font-size:.9rem!important;color:var(--ct-text)!important}
 .carma-mod-comment-when{font-size:.78rem!important;color:var(--ct-muted)!important}
 .carma-mod-comment-body{margin:0!important;font-size:.95rem!important;line-height:1.6!important;color:var(--ct-text)!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important}
-.carma-mod-comments-empty{margin:0 0 1.5rem!important;font-size:.92rem!important;color:var(--ct-muted)!important}
+.carma-mod-comments-empty{font-size:.92rem!important;color:var(--ct-muted)!important}
 .carma-mod-comments-form{display:flex!important;flex-direction:column!important;gap:.65rem!important}
 .carma-mod-comments-row{display:flex!important;gap:.65rem!important;flex-wrap:wrap!important}
 .carma-mod-comments-input{flex:1 1 200px!important;min-width:0!important;height:46px!important;padding:0 1rem!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius)!important;background:var(--ct-bg)!important;color:var(--ct-text)!important;font-family:var(--ct-font-body)!important;font-size:.93rem!important;outline:none!important}
@@ -1415,6 +1438,6 @@ const COMMENTS_CSS = `
 .carma-mod-comments-btn{height:46px!important;padding:0 1.5rem!important;border:0!important;border-radius:var(--ct-radius)!important;background:var(--ct-accent)!important;color:#fff!important;font-family:var(--ct-font-body)!important;font-weight:800!important;font-size:.93rem!important;cursor:pointer!important;transition:opacity .2s ease!important}
 .carma-mod-comments-btn:hover{opacity:.9!important}
 .carma-mod-comments-btn:disabled{opacity:.6!important;cursor:default!important}
-.carma-mod-comments-status{margin:.7rem 0 0!important;font-size:.85rem!important;font-weight:700!important;min-height:1em!important}
+.carma-mod-comments-status{font-size:.85rem!important;font-weight:700!important;min-height:1em!important}
 .carma-mod-comments-status.is-ok{color:var(--ct-accent)!important}
 .carma-mod-comments-status.is-err{color:#dc2626!important}`.trim()

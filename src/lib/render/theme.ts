@@ -33,6 +33,7 @@ import {
 } from '@/lib/render/modules'
 import type { SiteModules } from '@/lib/modules/registry'
 import type { BlogSignature, CardStyle } from '@/lib/scrape/blogDetect'
+import { buildBlogCss, UNLAYER_JS } from '@/lib/render/blogCss'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
 import { contrastRatio, parseColor } from '@/lib/scrape/chromeContrast'
 import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
@@ -42,6 +43,8 @@ import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } 
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
 import { normalizeFragment } from '@/lib/scrape/headerFooter'
 import { FEED_PATH, type FeedPost } from '@/lib/render/feed'
+
+export { unlayerCss, UNLAYER_SHIM_MARK } from '@/lib/render/blogCss'
 
 type ChromeI18nEntry = { header?: string | null; footer?: string | null; section_title?: string | null }
 
@@ -61,6 +64,13 @@ type Theme = {
   // ── Chrome Compiler (migration 032) ──
   compiled_chrome_css?: string | null    // critical CSS for the chrome; null ⇒ raw-injection fallback
   chrome_scripts_enabled?: boolean | null // opt back in to the source's scripts (deferred)
+  // ── Design genome (W5) ──
+  // The compiler's EXTRA stylesheet — only what tokens cannot carry (lanes, drop
+  // caps, motion…). It rides in the `overrides` layer after the feed layout, so a
+  // genome refines its own rhythm. Not persisted yet (no migration): today only the
+  // Door's live preview sets it. Compiled by our own pure compiler from a validated
+  // genome, never from free text.
+  genome_css?: string | null
 } | null
 
 // A resolved chrome region. `raw` = inject `html` verbatim into the light DOM
@@ -501,363 +511,6 @@ function tokensOf(theme: Theme): DesignTokens {
   return ensureReadableTokens({ ...DEFAULT_TOKENS, ...(theme?.design_tokens ?? {}) })
 }
 
-// ─── Token-driven CSS ───────────────────────────────────────────────────────
-
-function buildLayoutCss(t: DesignTokens): string {
-  const cols = t.columns === '2' ? 2 : t.columns === '4' ? 4 : 3
-  if (t.layout === 'list') {
-    // Stacked, horizontal media-left cards; collapse to vertical on mobile.
-    return `
-.carma-grid{display:flex!important;flex-direction:column!important;gap:1.25rem!important;width:100%!important}
-.carma-card-link{flex-direction:row!important;align-items:stretch!important}
-.carma-card-media{aspect-ratio:auto!important;width:38%!important;max-width:360px!important;min-height:200px!important}
-.carma-card-body{justify-content:center!important}
-@media (max-width:680px){
-  .carma-card-link{flex-direction:column!important}
-  .carma-card-media{width:100%!important;aspect-ratio:16/9!important;max-width:none!important;min-height:0!important}
-}`.trim()
-  }
-  return `
-.carma-grid{display:grid!important;grid-template-columns:1fr!important;gap:1.75rem!important;width:100%!important}
-@media (min-width:640px){.carma-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
-@media (min-width:1024px){.carma-grid{grid-template-columns:repeat(${cols},minmax(0,1fr))!important}}`.trim()
-}
-
-// ─── Readability guards ──────────────────────────────────────────────────────
-// Scraped typographic tokens flow straight into the generated CSS, so a site
-// that ships 13px body text or a 1.3 line-height would reproduce that cramped
-// reading experience on the blog. Brand IDENTITY tokens (colors, fonts, radii)
-// pass through untouched; READABILITY tokens get clamped to a humane range.
-
-/** Clamp the scraped base font size to 15–19px (accepts px/rem/em/%). */
-function clampBaseFontSize(raw: string): string {
-  const m = /^([\d.]+)(px|rem|em|%)$/.exec((raw ?? '').trim())
-  if (!m) return '16px'
-  const n = parseFloat(m[1])
-  if (!Number.isFinite(n) || n <= 0) return '16px'
-  const px = m[2] === 'px' ? n : m[2] === '%' ? (n / 100) * 16 : n * 16
-  return `${Math.min(19, Math.max(15, Math.round(px * 100) / 100))}px`
-}
-
-/** Clamp a unitless line-height token to [min,max]; non-numeric → fallback. */
-function clampLineHeight(raw: string | undefined, fallback: number, min: number, max: number): string {
-  const n = parseFloat(String(raw ?? ''))
-  if (!Number.isFinite(n)) return String(fallback)
-  return String(Math.min(max, Math.max(min, n)))
-}
-
-// Strip anything that could break out of a CSS declaration/rule. Scraped token
-// values flow into a <style> block, so every interpolated value passes through
-// this first (the values are also regex-validated at extraction time).
-function cssValueSafe(v: string | undefined | null, fallback: string): string {
-  const s = (v ?? '').trim()
-  if (!s) return fallback
-  return /[{}<>;]/.test(s) ? fallback : s
-}
-
-// The brand's primary-button styling (detected in tokens.ts) applied to the
-// article CTA, so a "read more" / call-to-action on the blog looks like the
-// buttons on the source site. Falls back to the on-brand accent pill.
-function buildButtonCss(t: DesignTokens): string {
-  const bg = cssValueSafe(t.buttonBg, 'var(--ct-accent)')
-  const color = cssValueSafe(t.buttonText, '#fff')
-  const weight = cssValueSafe(t.buttonWeight, '700')
-  const py = cssValueSafe(t.buttonPaddingY, '.7rem')
-  const px = cssValueSafe(t.buttonPaddingX, '1.5rem')
-  const radius = cssValueSafe(t.buttonRadius, 'var(--ct-radius)')
-  const border = t.buttonBorder ? `border:${cssValueSafe(t.buttonBorder, 'none')}!important;` : ''
-  const shadow = t.buttonShadow ? `box-shadow:${cssValueSafe(t.buttonShadow, 'none')}!important;` : ''
-  const transform = t.buttonTextTransform ? `text-transform:${cssValueSafe(t.buttonTextTransform, 'none')}!important;` : ''
-  return `.carma-article-content a.carma-button{display:inline-block!important;background:${bg}!important;color:${color}!important;font-weight:${weight}!important;padding:${py} ${px}!important;border-radius:${radius}!important;${border}${shadow}${transform}text-decoration:none!important;transition:opacity .2s ease,transform .2s ease!important}
-.carma-article-content a.carma-button:hover{opacity:.9!important;transform:translateY(-1px)!important}`
-}
-
-function buildTemplateCss(t: DesignTokens): string {
-  return `
-:root{
-  --ct-primary:${t.colorPrimary};
-  --ct-accent:${t.colorAccent};
-  --ct-bg:${t.colorBg};
-  --ct-surface:${t.colorSurface};
-  --ct-text:${t.colorText};
-  --ct-muted:${t.colorMuted};
-  --ct-border:${t.colorBorder};
-  --ct-font-heading:${t.fontHeading};
-  --ct-font-body:${t.fontBody};
-  --ct-size:${clampBaseFontSize(t.baseFontSize)};
-  --ct-radius:${t.radius};
-  --ct-radius-lg:${t.radiusLg};
-  --ct-max:${t.maxWidth};
-}
-
-/* Render-document base — this standalone page only. Never reaches the chrome
-   shadow roots (encapsulated) nor the dashboard (separate document). */
-html,body{margin:0;padding:0;background:var(--ct-bg)}
-
-/* ── Isolation reset ──
-   The render document ships ZERO of the client's CSS (the chrome carries its own
-   namespaced styles), so nothing can cascade in. These !important resets + an
-   own stacking/containment context make the blog structurally immune to any
-   inherited or future page styles — our layout is fully self-governed. */
-.carma-root,.carma-root *,.carma-root *::before,.carma-root *::after{box-sizing:border-box!important}
-.carma-root{
-  display:block!important;
-  width:100%!important;
-  isolation:isolate!important;
-  color-scheme:light!important;
-  background:var(--ct-bg)!important;
-  color:var(--ct-text)!important;
-  font-family:var(--ct-font-body)!important;
-  font-size:var(--ct-size)!important;
-  line-height:1.65!important;
-  -webkit-font-smoothing:antialiased;
-}
-/* Heading reset via :where() — specificity (0,1,0) instead of (0,1,1). The
-   !important still shields against the host page, but OUR later class rules
-   (.carma-card-title, feed presets, Theme Studio + native-card overrides) can
-   now win as designed. Previously .carma-root h2 silently beat every
-   .carma-card-title customisation — line-height/color tweaks were dead code. */
-.carma-root :where(h1,h2,h3,h4,h5,h6){
-  font-family:var(--ct-font-heading)!important;
-  color:var(--ct-text)!important;
-  font-style:normal!important;
-  text-transform:none!important;
-  letter-spacing:normal!important;
-  line-height:1.2!important;
-  margin:0!important;
-}
-.carma-root a{color:inherit!important;text-decoration:none!important;background:none!important}
-.carma-root a:focus-visible{outline:2px solid var(--ct-accent)!important;outline-offset:3px!important;border-radius:2px!important}
-.carma-root img{display:block!important;max-width:100%!important;border:none!important;outline:none!important}
-.carma-root p{margin:0!important}
-.carma-root ul,.carma-root ol{list-style:none!important;margin:0!important;padding:0!important}
-/* Brand-tinted text selection — the blog feels art-directed down to the drag. */
-.carma-root ::selection{background:color-mix(in srgb,var(--ct-accent) 24%,transparent)}
-
-/* ── Layout ──
-   The feed/article container MIRRORS the cloned site's own content width
-   (--ct-max, extracted from the source container) so the blog lines up with the
-   cloned header + footer instead of bleeding past them. clamp() is a safety net:
-   it floors a too-narrow mis-extraction (so a multi-column grid never cramps) and
-   caps a runaway one, while respecting the real width across the common range.
-   Side padding is kept tight so the feed content sits at the same x as the chrome
-   content, not indented from it. */
-.carma-main{width:100%!important;max-width:clamp(720px,var(--ct-max),1600px)!important;margin:0 auto!important;padding:3rem clamp(1rem,3vw,2rem)!important}
-
-/* Language switcher */
-.carma-langbar{display:flex!important;gap:.4rem!important;flex-wrap:wrap!important;margin:0 0 1.1rem!important}
-.carma-langbar .carma-lang{display:inline-flex!important;align-items:center!important;gap:.3rem!important;padding:.4rem .75rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;font-size:.78rem!important;font-weight:700!important;color:var(--ct-muted)!important;text-decoration:none!important;background:var(--ct-surface)!important;line-height:1!important;transition:color .15s ease,border-color .15s ease,background .15s ease!important}
-.carma-langbar .carma-lang:hover{color:var(--ct-text)!important;border-color:var(--ct-accent)!important}
-.carma-langbar .carma-lang.is-active{background:var(--ct-accent)!important;border-color:var(--ct-accent)!important;color:#fff!important}
-
-/* Section heading — fully styleable from the Theme Studio */
-.carma-section-head{margin:0 0 1.5rem!important}
-.carma-section-head.has-image{background-size:cover!important;background-position:center!important;border-radius:var(--ct-radius-lg)!important;padding:2.75rem 2rem!important;position:relative!important;overflow:hidden!important}
-.carma-section-head.has-image::before{content:''!important;position:absolute!important;inset:0!important;background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.5))!important}
-.carma-section-head.has-image .carma-breadcrumb,.carma-section-head.has-image .carma-section-title{position:relative!important;z-index:1!important}
-.carma-breadcrumb{display:flex!important;gap:.5rem!important;align-items:center!important;font-size:.85rem!important;color:var(--ct-muted)!important;margin:0 0 .6rem!important}
-.carma-breadcrumb a{color:var(--ct-accent)!important;text-decoration:none!important}
-.carma-section-head.has-image .carma-breadcrumb{color:rgba(255,255,255,.85)!important}
-.carma-section-head.has-image .carma-breadcrumb a{color:#fff!important}
-.carma-root .carma-section-head .carma-section-title{font-family:var(--ct-font-heading)!important;font-size:${t.sectionTitleSize ?? '1.6rem'}!important;font-weight:${t.sectionTitleWeight ?? '800'}!important;color:${t.sectionTitleColor ?? 'var(--ct-text)'}!important;text-align:${t.sectionTitleAlign ?? 'left'}!important;max-width:${t.sectionTitleWidth ?? '100%'}!important;${t.sectionTitleAlign === 'center' ? 'margin-left:auto!important;margin-right:auto!important;' : ''}${t.sectionTitleHeight ? `min-height:${t.sectionTitleHeight}!important;display:flex!important;align-items:center!important;` : ''}margin-top:0!important;margin-bottom:0!important;line-height:1.2!important}
-
-.carma-card{background:var(--ct-surface)!important;border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px -12px rgba(0,0,0,.12)!important;transition:transform .25s cubic-bezier(.2,.6,.3,1),box-shadow .25s cubic-bezier(.2,.6,.3,1)}
-.carma-card:hover{transform:translateY(-3px)!important;box-shadow:0 2px 4px rgba(0,0,0,.04),0 20px 44px -16px rgba(0,0,0,.18)!important}
-.carma-card-link{display:flex!important;flex-direction:column!important;flex:1!important;color:inherit!important;text-decoration:none!important}
-.carma-card-media{aspect-ratio:16/9!important;background:var(--ct-border)!important;overflow:hidden!important;flex-shrink:0!important}
-.carma-card-media img{width:100%!important;height:100%!important;object-fit:cover!important;transition:transform .45s cubic-bezier(.2,.6,.3,1)}
-.carma-card:hover .carma-card-media img{transform:scale(1.04)!important}
-.carma-card-body{padding:1.3rem 1.4rem 1.55rem!important;display:flex!important;flex-direction:column!important;gap:.65rem!important;flex:1!important}
-.carma-card-title{font-family:var(--ct-font-heading)!important;font-size:1.25rem!important;font-weight:700!important;color:var(--ct-text)!important;margin:0!important;line-height:1.3!important;letter-spacing:-0.01em!important;text-wrap:balance}
-.carma-card-excerpt{color:var(--ct-muted)!important;font-size:.9375rem!important;margin:0!important;line-height:1.6!important;display:-webkit-box!important;-webkit-line-clamp:3;-webkit-box-orient:vertical!important;overflow:hidden!important;flex:1!important}
-.carma-meta{font-size:.8125rem!important;color:var(--ct-muted)!important;font-weight:600!important;display:flex!important;gap:.5rem!important;align-items:center!important;flex-wrap:wrap!important;text-transform:uppercase!important;letter-spacing:.04em!important}
-.carma-meta .carma-cat{color:var(--ct-accent)!important}
-.carma-card-link:hover .carma-card-title{color:var(--ct-accent)!important}
-.carma-card{position:relative!important}
-.carma-card-demo{position:absolute!important;top:.7rem!important;left:.7rem!important;z-index:3!important;display:inline-flex!important;align-items:center!important;background:rgba(17,24,39,.9)!important;color:#fff!important;font-size:.62rem!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important;padding:.3rem .6rem!important;border-radius:999px!important;box-shadow:0 2px 10px rgba(0,0,0,.28)!important;pointer-events:none!important}
-/* Preview-only "these are sample articles" banner — elegant + on-brand (never a
-   warning box), shown ONLY when the whole feed is demo content, so a real,
-   empty blog never shows it and visitors never see it (demo posts are preview-only). */
-.carma-demo-banner{display:flex!important;align-items:center!important;gap:.85rem!important;margin:0 0 1.6rem!important;padding:.85rem 1.1rem!important;border:1px solid color-mix(in srgb,var(--ct-accent) 32%,transparent)!important;background:color-mix(in srgb,var(--ct-accent) 8%,var(--ct-surface))!important;border-radius:var(--ct-radius-lg)!important}
-.carma-demo-banner-chip{display:inline-flex!important;align-items:center!important;gap:.35rem!important;flex-shrink:0!important;font-size:.68rem!important;font-weight:800!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:var(--ct-accent)!important;background:color-mix(in srgb,var(--ct-accent) 16%,transparent)!important;padding:.3rem .6rem!important;border-radius:999px!important;line-height:1!important}
-.carma-demo-banner-text{min-width:0!important}
-.carma-demo-banner-title{font-family:var(--ct-font-heading)!important;font-weight:800!important;font-size:.95rem!important;color:var(--ct-text)!important;margin:0!important;line-height:1.3!important}
-.carma-demo-banner-desc{color:var(--ct-muted)!important;font-size:.85rem!important;margin:.12rem 0 0!important;line-height:1.5!important}
-@media (max-width:560px){.carma-demo-banner{align-items:flex-start!important;flex-direction:column!important;gap:.55rem!important}}
-
-/* Article — magazine-grade typography with a centered prose column and
-   media that "bleeds" out for breathing room. Fluid type via clamp() scales
-   smoothly from phone → desktop with no breakpoints needed. */
-.carma-article{max-width:880px!important;margin:0 auto!important;padding:.5rem clamp(1rem,3vw,1.5rem) 0!important}
-.carma-back{display:inline-flex!important;align-items:center!important;gap:.5rem!important;color:var(--ct-text)!important;font-weight:700!important;font-size:.95rem!important;margin-bottom:2.5rem!important;padding:.6rem 1.15rem!important;border:1px solid var(--ct-border)!important;border-radius:9999px!important;background:var(--ct-surface)!important;text-decoration:none!important;line-height:1!important;transition:color .15s ease,border-color .15s ease,background .15s ease!important}
-.carma-back:hover{color:var(--ct-accent)!important;border-color:var(--ct-accent)!important}
-.carma-article-header{margin:0 0 3rem!important;max-inline-size:70ch!important;margin-inline:auto!important}
-/* Commanding hero title — fluid 2.25rem (phone) → 3.75rem (desktop), tight
-   leading and negative tracking so it reads as a masthead, not a big <p>. */
-.carma-article-title{font-family:var(--ct-font-heading)!important;font-size:clamp(2.25rem,1.5rem + 3.2vw,3.75rem)!important;font-weight:800!important;margin:0 0 1.15rem!important;line-height:1.04!important;letter-spacing:-0.025em!important;color:var(--ct-text)!important;text-wrap:balance}
-.carma-article-lede{font-size:clamp(1.2rem,1.08rem + 0.55vw,1.4rem)!important;line-height:1.55!important;color:var(--ct-muted)!important;margin:0 0 1.4rem!important;font-weight:400!important;text-wrap:pretty}
-.carma-article-meta{font-size:.8125rem!important;color:var(--ct-muted)!important;margin:0!important;display:flex!important;gap:.6rem!important;flex-wrap:wrap!important;align-items:center!important;text-transform:uppercase!important;letter-spacing:.05em!important;font-weight:600!important}
-.carma-article-image-wrap{margin:0 0 2.25rem!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important;background:var(--ct-border)!important;aspect-ratio:16/9!important}
-.carma-article-image-wrap picture,.carma-article-image-wrap img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
-.carma-article-image{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;margin:0!important;border-radius:0!important}
-.carma-article-content{font-family:var(--ct-font-body)!important;font-size:clamp(1.0625rem,1.03rem + 0.25vw,1.125rem)!important;color:var(--ct-text)!important;line-height:${clampLineHeight(t.bodyLineHeight, 1.75, 1.6, 1.9)}!important;max-inline-size:70ch!important;margin-inline:auto!important}
-.carma-article-content > *{max-inline-size:70ch!important;margin-inline:auto!important}
-.carma-article-content p{margin:${t.paragraphSpacing ?? '1.5rem'} 0!important;text-wrap:pretty;hyphens:auto;-webkit-hyphens:auto}
-.carma-article-content p:first-of-type{margin-top:0!important}
-/* Heading ladder — one modular scale (≈1.25 ratio against the 1.125rem body) so
-   hierarchy reads as a graded staircase, not isolated big strings. */
-.carma-article-content h2{font-family:var(--ct-font-heading)!important;font-size:clamp(1.6rem,1.4rem + 0.85vw,2rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2.5rem 0 .9rem!important;line-height:${clampLineHeight(t.headingLineHeight, 1.25, 1.1, 1.45)}!important;letter-spacing:-0.015em!important;color:var(--ct-text)!important;text-wrap:balance}
-.carma-article-content h3{font-family:var(--ct-font-heading)!important;font-size:clamp(1.3rem,1.2rem + 0.5vw,1.5rem)!important;font-weight:${t.headingWeight ?? '700'}!important;margin:2rem 0 .65rem!important;line-height:${clampLineHeight(t.headingLineHeight, 1.3, 1.15, 1.45)}!important;letter-spacing:-0.008em!important;color:var(--ct-text)!important;text-wrap:balance}
-.carma-article-content h4{font-family:var(--ct-font-heading)!important;font-size:1.17rem!important;font-weight:700!important;margin:1.75rem 0 .5rem!important;line-height:1.35!important;color:var(--ct-text)!important}
-.carma-article-content h5{font-family:var(--ct-font-heading)!important;font-size:1.05rem!important;font-weight:700!important;margin:1.5rem 0 .4rem!important;line-height:1.4!important;color:var(--ct-text)!important}
-.carma-article-content h6{font-family:var(--ct-font-heading)!important;font-size:.8125rem!important;font-weight:800!important;margin:1.5rem 0 .4rem!important;line-height:1.4!important;color:var(--ct-muted)!important;text-transform:uppercase!important;letter-spacing:.07em!important}
-.carma-article-content picture,.carma-article-content img{display:block;margin:1.5rem 0!important;border-radius:var(--ct-radius)!important;width:100%!important;height:auto!important}
-.carma-article-content figure picture,.carma-article-content figure img{margin:0!important}
-/* Media bleed: figures and galleries break out past the 70ch prose column up to
-   the article container's edge for a magazine feel. */
-.carma-article-content figure.carma-figure,
-.carma-article-content .carma-gallery,
-.carma-article-content .carma-columns,
-.carma-article-content > picture,
-.carma-article-content > img{
-  max-inline-size:none!important;
-  width:100%!important;
-  margin-inline:0!important;
-}
-@media (min-width:900px){
-  .carma-article-content figure.carma-figure,
-  .carma-article-content .carma-gallery{margin-inline:-2.5rem!important;width:calc(100% + 5rem)!important}
-}
-.carma-article-content a{color:${t.linkColor ?? 'var(--ct-accent)'}!important;text-decoration:${t.linkUnderline === 'none' ? 'none' : 'underline'}!important;text-decoration-thickness:1px!important;text-underline-offset:2px!important}
-${t.linkUnderline === 'hover' ? '.carma-article-content a{text-decoration:none!important}.carma-article-content a:hover{text-decoration:underline!important}' : ''}
-.carma-article-content blockquote{border-left:3px solid ${t.blockquoteBorderColor ?? 'var(--ct-accent)'}!important;margin:2rem 0!important;padding:.25rem 0 .25rem 1.5rem!important;color:var(--ct-text)!important;font-style:${t.blockquoteStyle ?? 'italic'}!important;font-size:1.1em!important;line-height:1.6!important}
-.carma-article-content blockquote p{margin:.6em 0!important}
-.carma-article-content ul,.carma-article-content ol{padding-left:1.5rem!important;margin:1.25rem 0!important;list-style:revert!important}
-.carma-article-content li{margin:.4em 0!important}
-.carma-article-content li p{margin:0!important}
-.carma-article-content li::marker{color:var(--ct-accent)!important}
-/* ── Editor/render parity ──
-   Every block the editor (or a WordPress import) can produce must look
-   deliberate here. Before this, pre/code/hr/tables hit the isolation reset
-   unstyled and rendered visibly broken on the public page. */
-.carma-article-content strong{font-weight:700!important}
-.carma-article-content code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.875em!important;background:color-mix(in srgb,var(--ct-text) 7%,transparent)!important;border-radius:5px!important;padding:.15em .4em!important}
-.carma-article-content pre{background:var(--ct-text)!important;color:var(--ct-bg)!important;border-radius:var(--ct-radius-lg)!important;padding:1.1rem 1.3rem!important;margin:1.75rem 0!important;overflow-x:auto!important;font-size:.875rem!important;line-height:1.65!important}
-.carma-article-content pre code{background:none!important;padding:0!important;font-size:inherit!important;color:inherit!important}
-.carma-article-content hr{border:none!important;border-top:2px solid var(--ct-border)!important;width:88px!important;margin:2.75rem auto!important}
-.carma-article-content table{display:block!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;border-collapse:collapse!important;margin:1.75rem 0!important;font-size:.95em!important;line-height:1.5!important}
-.carma-article-content th{text-align:left!important;font-weight:700!important;font-size:.8125rem!important;text-transform:uppercase!important;letter-spacing:.05em!important;color:var(--ct-muted)!important;padding:.6rem .75rem!important;border-bottom:2px solid var(--ct-border)!important}
-.carma-article-content td{padding:.65rem .75rem!important;border-bottom:1px solid var(--ct-border)!important;vertical-align:top!important}
-.carma-article-content tr:last-child td{border-bottom:none!important}
-.carma-article-content .carma-callout{position:relative!important;margin:1.5rem 0!important;padding:1.1rem 1.25rem 1.1rem 3.1rem!important;border-radius:var(--ct-radius-lg)!important;border:1px solid!important;font-size:1rem!important;line-height:1.65!important}
-.carma-article-content .carma-callout>*:first-child{margin-top:0!important}
-.carma-article-content .carma-callout>*:last-child{margin-bottom:0!important}
-.carma-article-content .carma-callout::before{position:absolute!important;left:1.05rem!important;top:1rem!important;font-size:1.15rem!important}
-.carma-article-content .carma-callout[data-variant="info"]{background:#eff6ff!important;border-color:#bfdbfe!important;color:#1e3a8a!important}
-.carma-article-content .carma-callout[data-variant="info"]::before{content:"💡"!important}
-.carma-article-content .carma-callout[data-variant="success"]{background:#ecfdf5!important;border-color:#a7f3d0!important;color:#065f46!important}
-.carma-article-content .carma-callout[data-variant="success"]::before{content:"✅"!important}
-.carma-article-content .carma-callout[data-variant="warning"]{background:#fffbeb!important;border-color:#fde68a!important;color:#92400e!important}
-.carma-article-content .carma-callout[data-variant="warning"]::before{content:"⚠️"!important}
-.carma-article-content .carma-callout[data-variant="danger"]{background:#fef2f2!important;border-color:#fecaca!important;color:#991b1b!important}
-.carma-article-content .carma-callout[data-variant="danger"]::before{content:"🚫"!important}
-.carma-article-content .carma-gallery{position:relative!important;margin:1.6rem 0!important}
-.carma-article-content .carma-gallery-track{display:flex!important;overflow-x:auto!important;scroll-snap-type:x mandatory!important;scroll-behavior:smooth!important;border-radius:var(--ct-radius-lg)!important;gap:0!important}
-.carma-article-content .carma-slide{position:relative!important;flex:0 0 100%!important;scroll-snap-align:center!important;aspect-ratio:16/9!important}
-.carma-article-content .carma-gallery-item{display:block!important;width:100%!important;height:100%!important;text-decoration:none!important;cursor:zoom-in!important;background:var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;overflow:hidden!important}
-.carma-article-content .carma-gallery-item img{width:100%!important;height:100%!important;object-fit:cover!important;margin:0!important}
-.carma-article-content .carma-slide-arrow{position:absolute!important;top:50%!important;transform:translateY(-50%)!important;z-index:2!important;display:flex!important;align-items:center!important;justify-content:center!important;width:44px!important;height:44px!important;border-radius:9999px!important;background:rgba(255,255,255,.9)!important;color:#1c1917!important;text-decoration:none!important;font-size:26px!important;line-height:1!important;box-shadow:0 4px 14px -4px rgba(0,0,0,.4)!important}
-.carma-article-content .carma-slide-arrow:hover{background:#fff!important}
-.carma-article-content .carma-slide-arrow.prev{left:14px!important}
-.carma-article-content .carma-slide-arrow.next{right:14px!important}
-.carma-article-content .carma-lightbox{display:none!important}
-.carma-article-content .carma-lightbox:target{display:flex!important;position:fixed!important;inset:0!important;z-index:9999!important;align-items:center!important;justify-content:center!important;background:rgba(0,0,0,.88)!important}
-.carma-article-content .carma-lightbox-backdrop{position:absolute!important;inset:0!important}
-.carma-article-content .carma-lightbox-img{max-width:88vw!important;max-height:85vh!important;object-fit:contain!important;border-radius:8px!important;position:relative!important;z-index:1!important;margin:0!important}
-.carma-article-content .carma-lightbox-nav,.carma-article-content .carma-lightbox-close{position:absolute!important;z-index:2!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:9999px!important;background:rgba(255,255,255,.16)!important;color:#fff!important;text-decoration:none!important;line-height:1!important}
-.carma-article-content .carma-lightbox-nav{top:50%!important;transform:translateY(-50%)!important;width:48px!important;height:48px!important;font-size:30px!important}
-.carma-article-content .carma-lightbox-nav:hover,.carma-article-content .carma-lightbox-close:hover{background:rgba(255,255,255,.32)!important}
-.carma-article-content .carma-lightbox-nav.prev{left:16px!important}
-.carma-article-content .carma-lightbox-nav.next{right:16px!important}
-.carma-article-content .carma-lightbox-close{top:16px!important;right:16px!important;width:40px!important;height:40px!important;font-size:24px!important}
-.carma-article-content figure.carma-figure{margin:1.75rem 0!important}
-.carma-article-content figure.carma-figure img{width:100%!important;border-radius:var(--ct-radius-lg)!important;margin:0 0 .5rem!important}
-.carma-article-content figure.carma-figure figcaption{text-align:center!important;font-size:.85rem!important;color:var(--ct-muted)!important;font-style:italic!important;margin-top:.65rem!important;line-height:1.5!important}
-.carma-article-content .carma-columns{display:grid!important;grid-template-columns:1fr 1fr!important;gap:1.5rem!important;margin:1.6rem 0!important}
-.carma-article-content .carma-column{min-width:0!important}
-.carma-article-content .carma-column>*:first-child{margin-top:0!important}
-@media (max-width:640px){.carma-article-content .carma-columns{grid-template-columns:1fr!important}}
-.carma-article-content details.carma-toggle{border:1px solid var(--ct-border)!important;border-radius:var(--ct-radius)!important;padding:.5rem 1.2rem!important;margin:1.5rem 0!important;background:var(--ct-surface)!important}
-.carma-article-content details.carma-toggle>summary{cursor:pointer!important;font-weight:700!important;list-style:none!important;padding:.5rem 0!important;color:var(--ct-text)!important}
-.carma-article-content details.carma-toggle>summary::-webkit-details-marker{display:none!important}
-.carma-article-content details.carma-toggle>summary::before{content:'▸'!important;display:inline-block!important;margin-right:.5rem!important;transition:transform .2s ease!important;color:var(--ct-muted)!important}
-.carma-article-content details.carma-toggle[open]>summary::before{transform:rotate(90deg)!important}
-.carma-article-content .carma-toc{display:block!important;border:1px solid var(--ct-border)!important;border-left:3px solid var(--ct-accent)!important;border-radius:var(--ct-radius)!important;padding:1rem 1.25rem!important;margin:1.75rem 0!important;background:var(--ct-surface)!important}
-.carma-article-content .carma-toc-title{font-size:.78rem!important;font-weight:800!important;text-transform:uppercase!important;letter-spacing:.08em!important;color:var(--ct-muted)!important;margin:0 0 .5rem!important}
-.carma-article-content .carma-toc ol{list-style:none!important;margin:0!important;padding:0!important}
-.carma-article-content .carma-toc li{margin:.25rem 0!important}
-.carma-article-content .carma-toc li.lvl-2{padding-left:.85rem!important}
-.carma-article-content .carma-toc li.lvl-3{padding-left:1.7rem!important;font-size:.95em!important}
-.carma-article-content .carma-toc a{color:var(--ct-text)!important;text-decoration:none!important}
-.carma-article-content .carma-toc a:hover{color:var(--ct-accent)!important;text-decoration:underline!important}
-.carma-article-content .carma-embed{position:relative!important;width:100%!important;aspect-ratio:16/9!important;margin:1.85rem 0!important;border-radius:var(--ct-radius)!important;overflow:hidden!important;background:var(--ct-surface)!important}
-.carma-article-content .carma-embed iframe{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important}
-.carma-article-content .carma-button-wrap{margin:1.6rem 0!important}
-.carma-article-content .carma-button-wrap[data-align=center]{text-align:center!important}
-.carma-article-content .carma-button-wrap[data-align=right]{text-align:right!important}
-.carma-article-content a.carma-button{display:inline-block!important;background:var(--ct-accent)!important;color:#fff!important;font-weight:700!important;padding:.7rem 1.5rem!important;border-radius:var(--ct-radius)!important;text-decoration:none!important;transition:opacity .2s ease!important}
-${buildButtonCss(t)}
-
-/* Empty state */
-.carma-empty{text-align:center!important;padding:4.5rem 2rem!important;background:var(--ct-surface)!important;border:2px dashed var(--ct-border)!important;border-radius:var(--ct-radius-lg)!important;max-width:560px!important;margin:0 auto!important}
-.carma-empty-title{font-size:1.3rem!important;font-weight:800!important;margin:0 0 .6rem!important;color:var(--ct-text)!important}
-.carma-empty-desc{color:var(--ct-muted)!important;margin:0!important;font-size:.95rem!important}
-
-/* (No mobile title override needed — the clamp() scale already lands at
-   2.1rem on a phone; the old 1.9rem media query just fought it.) */
-
-/* Feed layout (grid/list) — emitted LAST so it overrides the card defaults above. */
-${buildLayoutCss(t)}
-`.trim()
-}
-
-// ─── Native card replication (GOAL 2) ────────────────────────────────────────
-//
-// When the Theme Grabber detected the client's existing blog and extracted its
-// article-card style (blog_signature.card), we emit CSS that overrides OUR feed
-// defaults so the Carma feed mirrors their native cards: column count, gap, card
-// radius/border/shadow/background, image aspect ratio and title type. Emitted
-// AFTER buildTemplateCss (and !important) so it wins; absent → premium defaults.
-// Values come from the client's own CSS; we still strip CSS-structural chars
-// defensively (the whole stylesheet is also </style>-guarded by renderBlogHost).
-function buildNativeCardCss(card: CardStyle | null | undefined): string {
-  if (!card) return ''
-  const safe = (v: string): string => v.replace(/[{}<>;]/g, '').trim()
-  const rules: string[] = []
-
-  if (card.gap) rules.push(`.carma-grid{gap:${safe(card.gap)}!important}`)
-  if (card.columns) {
-    rules.push(`@media (min-width:1024px){.carma-grid{grid-template-columns:repeat(${Math.round(card.columns)},minmax(0,1fr))!important}}`)
-  }
-
-  const box: string[] = []
-  if (card.radius) box.push(`border-radius:${safe(card.radius)}!important`)
-  if (card.border) box.push(`border:${safe(card.border)}!important`)
-  if (card.shadow) box.push(`box-shadow:${safe(card.shadow)}!important`)
-  if (card.background) box.push(`background:${safe(card.background)}!important`)
-  if (box.length) rules.push(`.carma-card{${box.join(';')}}`)
-
-  if (card.imageAspect) rules.push(`.carma-card-media{aspect-ratio:${safe(card.imageAspect)}!important}`)
-
-  const title: string[] = []
-  if (card.titleSize) title.push(`font-size:${safe(card.titleSize)}!important`)
-  if (card.titleWeight) title.push(`font-weight:${safe(card.titleWeight)}!important`)
-  if (card.titleColor) title.push(`color:${safe(card.titleColor)}!important`)
-  if (title.length) rules.push(`.carma-card-title{${title.join(';')}}`)
-
-  return rules.length ? `\n/* Native card replication — captured from the source blog */\n${rules.join('\n')}` : ''
-}
-
 function isFontStylesheet(href: string): boolean {
   return /fonts\.(googleapis|gstatic)\.com|use\.typekit|typography\.com|cloud\.typography|fonts\.adobe|fonts\.bunny|fontawesome/i.test(href)
 }
@@ -1061,12 +714,18 @@ function parseRegion(value: string | null | undefined): ChromeRegion | null {
 // itself now renders inside a Declarative Shadow DOM, so this is ALWAYS emitted
 // (old engines without native DSD support need the attach; the menu shim only
 // helps the injected chrome whose JS we didn't keep, and is otherwise inert).
+//
+// The polyfill also FLATTENS the blog's cascade layers when the browser has no
+// @layer (it would otherwise drop every layered block whole — an unstyled blog).
+// Every engine shipped @layer before native DSD, so this branch is exactly the
+// population that needs it; a modern browser never reaches it. See blogCss.ts.
 const DSD_RUNTIME = `(function(){
   try{
     if(!Object.prototype.hasOwnProperty.call(HTMLTemplateElement.prototype,'shadowRootMode')){
+      var flat=typeof CSSLayerBlockRule==='undefined'?${UNLAYER_JS}:null;
       document.querySelectorAll('template[shadowrootmode]').forEach(function(tpl){
         var host=tpl.parentNode; if(!host||!host.attachShadow||host.shadowRoot) return;
-        try{ var sr=host.attachShadow({mode:tpl.getAttribute('shadowrootmode')||'open'}); sr.appendChild(tpl.content); tpl.remove(); }catch(e){}
+        try{ if(flat) tpl.content.querySelectorAll('style').forEach(function(s){s.textContent=flat(s.textContent)}); var sr=host.attachShadow({mode:tpl.getAttribute('shadowrootmode')||'open'}); sr.appendChild(tpl.content); tpl.remove(); }catch(e){}
       });
     }
   }catch(e){}
@@ -1367,15 +1026,13 @@ function articleModuleParts(
 // leak onto the chrome. The blog's token-driven stylesheet lives INSIDE the
 // shadow root via renderBlogHost.
 
-// Wrap OUR blog markup in the Declarative-Shadow-DOM host. The template CSS is
-// emitted INSIDE the shadow <style> so it is fully encapsulated. We bind the
-// design tokens to :host too (inside a shadow tree :root matches the host
-// document's <html>, not our wrapper) and give :host the page background + an
-// explicit base font/color so nothing is inherited across the boundary from the
-// client's body{} rules.
-function renderBlogHost(innerHtml: string, tokens: DesignTokens, extraCss = ''): string {
-  const css = `${buildTemplateCss(tokens).replace(':root{', ':root,:host{')}
-:host{display:block;color-scheme:light;background:var(--ct-bg);color:var(--ct-text);font-family:var(--ct-font-body);font-size:var(--ct-size);line-height:1.65}${extraCss}`
+// Wrap OUR blog markup in the Declarative-Shadow-DOM host. The blog's layered
+// stylesheet (blogCss.ts) is emitted INSIDE the shadow <style>, so it is fully
+// encapsulated — which is the whole reason it no longer needs `!important`.
+// `card` is the captured native card (it closes `ornament`); `overrides` are the
+// decisions layered over the template, in precedence order.
+function renderBlogHost(innerHtml: string, tokens: DesignTokens, overrides = '', card?: CardStyle | null): string {
+  const css = buildBlogCss(tokens, { host: 'page', card, overrides })
   // The CSS is rawtext inside <style>: escape any literal </style>/</template>
   // so it can't terminate the block early.
   const guardCss = (s: string) => s.replace(/<\/(template|style)/gi, '<\\/$1')
@@ -1389,6 +1046,23 @@ function renderBlogHost(innerHtml: string, tokens: DesignTokens, extraCss = ''):
   return `<div class="carma-embed-host"><template shadowrootmode="open"><style>${guardCss(css)}</style>
 ${safeInner}
 </template></div>`
+}
+
+// The `overrides` layer, in precedence order: the owner's structural feed layout,
+// then the genome's own layer (which refines that rhythm), then the modules. Each
+// is a decision layered over the template, and a tie goes to the later one. The
+// article has no feed, so no layout. (The captured native card is not a decision —
+// it is the template's own card, tuned to the source — see buildBlogCss.)
+function listingOverrides(theme: Theme, tokens: DesignTokens, modulesCss: string): string {
+  return [
+    feedLayoutCss(tokens.feedLayout),
+    theme?.genome_css ?? '',
+    modulesCss,
+  ].filter(s => s.trim()).join('\n')
+}
+
+function articleOverrides(theme: Theme, modulesCss: string): string {
+  return [theme?.genome_css ?? '', modulesCss].filter(s => s.trim()).join('\n')
 }
 
 // OUR blog markup for the listing (the .carma-root <main>). Returned WITHOUT the
@@ -1446,9 +1120,8 @@ function listingBodyHtml(theme: Theme, siteName: string, siteId: string, link: L
   const blog = renderBlogHost(
     listingBlogInner(theme, siteName, link, posts, locale, parts),
     tokens,
-    // Native-card replication first, then the user-chosen structural feed layout,
-    // then the enabled Smart Modules' CSS — all inherit the brand --ct-* tokens.
-    buildNativeCardCss(theme?.blog_signature?.card) + feedLayoutCss(tokens.feedLayout) + parts.css,
+    listingOverrides(theme, tokens, parts.css),
+    theme?.blog_signature?.card,
   )
   return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
 }
@@ -1508,7 +1181,7 @@ function articleSetup(theme: Theme, siteId: string, link: LinkCtx, post: Post, l
 
 function articleBodyHtml(theme: Theme, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const tokens = tokensOf(theme)
-  const blog = renderBlogHost(articleBlogInner(theme, link, post, locale, parts), tokens, parts.css)
+  const blog = renderBlogHost(articleBlogInner(theme, link, post, locale, parts), tokens, articleOverrides(theme, parts.css))
   return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
 }
 
@@ -1620,12 +1293,10 @@ ${trackingScript(siteId, post.id, 'article')}
 
 export type RenderFragment = { css: string; html: string; fonts: string[] }
 
-// Shadow-DOM-safe stylesheet. The template defines the design tokens on :root,
-// but inside a shadow tree :root matches nothing (it points at the host
-// document's <html>), so we also bind them to :host.
-function fragmentCss(t: DesignTokens, extraCss = ''): string {
-  return `${buildTemplateCss(t).replace(':root{', ':root,:host{')}
-:host{display:block;color-scheme:light;background:var(--ct-bg);color:var(--ct-text);font-family:var(--ct-font-body);box-sizing:border-box}${extraCss}`
+// The same layered sheet, for the embed loader's own shadow root. The host rule
+// differs: inside a customer's page the blog claims only its own box model.
+function fragmentCss(t: DesignTokens, overrides = '', card?: CardStyle | null): string {
+  return buildBlogCss(t, { host: 'fragment', card, overrides })
 }
 
 export function buildListingFragment(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE, link?: LinkCtx): RenderFragment {
@@ -1633,7 +1304,7 @@ export function buildListingFragment(theme: Theme, siteName: string, siteId: str
   const ctx = link ?? defaultLink(siteId, theme)
   const parts = listingModuleParts(theme, siteId, ctx, posts, locale)
   return {
-    css: fragmentCss(tokens, buildNativeCardCss(theme?.blog_signature?.card) + feedLayoutCss(tokens.feedLayout) + parts.css),
+    css: fragmentCss(tokens, listingOverrides(theme, tokens, parts.css), theme?.blog_signature?.card),
     html: listingBlogInner(theme, siteName, ctx, posts, locale, parts),
     fonts: collectFontHrefs(theme),
   }
@@ -1644,7 +1315,7 @@ export function buildArticleFragment(theme: Theme, siteId: string, post: Post, l
   const ctx = link ?? defaultLink(siteId, theme)
   const parts = articleSetup(theme, siteId, ctx, post, locale, extra)
   return {
-    css: fragmentCss(tokens, parts.css),
+    css: fragmentCss(tokens, articleOverrides(theme, parts.css)),
     html: articleBlogInner(theme, ctx, post, locale, parts),
     fonts: collectFontHrefs(theme),
   }

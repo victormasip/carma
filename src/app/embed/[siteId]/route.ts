@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server'
 import { PARAM_MAP } from '@/lib/render/embedParams'
 import { LOCALES, LOCALE_META, normalizeLocale } from '@/lib/i18n/config'
 import { tr } from '@/lib/i18n/messages'
+import { UNLAYER_JS } from '@/lib/render/blogCss'
 
 // The Magic Wand embed loader.
 //
@@ -43,6 +44,10 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
   var UI = ${UI};
   var MSG = ${msgJson};
   var LOC = ${localesJson};
+  // The blog's stylesheet is cascade-layered (lib/render/blogCss.ts). A browser
+  // without @layer drops every layered block whole, so there — and only there —
+  // the layers are flattened back into one sheet before injection.
+  var FLAT = typeof CSSLayerBlockRule === 'undefined' ? ${UNLAYER_JS} : null;
   var CODES = LOC.codes || [];
   var ALIAS = LOC.alias || {};
   var current = document.currentScript;
@@ -179,7 +184,7 @@ function buildScript(origin: string, siteId: string, params: string, localesJson
   function render(root, frag){
     hoistFonts(frag.fonts);
     var style = document.createElement('style');
-    style.textContent = frag.css || '';
+    style.textContent = FLAT ? FLAT(frag.css || '') : (frag.css || '');
     root.innerHTML = '';
     root.appendChild(style);
     var wrap = document.createElement('div');

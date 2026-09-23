@@ -7,7 +7,10 @@
 // straight into the live render's shadow root and every colour / font / size /
 // section-title tweak lands INSTANTLY, with no reload.
 //
-// Mirrors the variable block + section-title rule in theme.ts `buildTemplateCss`.
+// Mirrors the variable block + section-title rule of the blog stylesheet
+// (blogCss.ts, layers `carma.tokens` and `carma.type`). It is injected UNLAYERED,
+// last, into the shadow root — and an unlayered rule outranks every cascade layer,
+// so a live edit wins by construction (test:cascade §4 checks it in Chrome).
 // Structural tokens (layout / columns / feedLayout) change CSS *rules*, not these
 // variables, so they stay on the reload path — this only covers the visual ones.
 

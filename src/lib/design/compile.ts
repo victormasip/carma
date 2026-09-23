@@ -190,14 +190,22 @@ function typeLayers(g: Genome): Layer[] {
     })
   }
   const track = TRACKING_EM[g.type.headingTracking]
-  const caseRule = g.type.headingCase === 'upper' ? 'text-transform:uppercase;'
-    : g.type.headingCase === 'title' ? 'text-transform:capitalize;' : ''
-  if (track || caseRule) {
-    out.push({
-      name: 'type.headingStyle',
-      css: `.carma-article-title,.carma-card-title,.carma-section-title{${caseRule}${track ? `letter-spacing:${track};` : ''}}`,
-    })
+  const heads = '.carma-article-title,.carma-card-title,.carma-section-title'
+  const rules: string[] = []
+  if (g.type.headingCase === 'upper' || track) {
+    rules.push(`${heads}{${g.type.headingCase === 'upper' ? 'text-transform:uppercase;' : ''}${track ? `letter-spacing:${track};` : ''}}`)
   }
+  // TITLE CASE IS AN ENGLISH CONVENTION. `capitalize` upper-cases every word, which
+  // on a Catalan or Spanish headline reads as a mistake ("La Cocina De Mercado Al
+  // Estilo Del Nautilus") — and most of this product's blogs are Catalan or Spanish.
+  // It was harmless while this layer never rendered; W5's cascade layers made it
+  // live, and the Door's first real preview showed it. So it applies where the
+  // convention exists and nowhere else: :lang() inherits from <html lang> into the
+  // shadow tree, and every other language keeps sentence case.
+  if (g.type.headingCase === 'title') {
+    rules.push(heads.split(',').map(h => `:lang(en) ${h}`).join(',') + '{text-transform:capitalize}')
+  }
+  if (rules.length) out.push({ name: 'type.headingStyle', css: rules.join('') })
   // NOTE, deliberately not emitted in W0: `text-wrap: pretty` on body paragraphs.
   // `theme.ts` already balances titles and prettifies the lede, but not prose. It
   // belongs in the renderer's own baseline rather than in a genome layer — putting
@@ -216,7 +224,7 @@ function spaceLayers(g: Genome): Layer[] {
   // measure. It is the single most recognisable move in editorial layout.
   return [{
     name: 'space.lanes',
-    css: `.carma-article-content{display:grid;grid-template-columns:[full-start] minmax(1rem,1fr) [wide-start] minmax(0,${wide}) [content-start] min(${g.type.measure}ch,100% - 2rem) [content-end] minmax(0,${wide}) [wide-end] minmax(1rem,1fr) [full-end];max-inline-size:none!important}
+    css: `.carma-article-content{display:grid;grid-template-columns:[full-start] minmax(1rem,1fr) [wide-start] minmax(0,${wide}) [content-start] min(${g.type.measure}ch,100% - 2rem) [content-end] minmax(0,${wide}) [wide-end] minmax(1rem,1fr) [full-end];max-inline-size:none}
 .carma-article-content>*{grid-column:content}
 .carma-article-content>[data-lane="wide"],.carma-article-content>figure.carma-figure{grid-column:wide}${full ? `
 .carma-article-content>[data-lane="full"]{grid-column:full}` : ''}`,
@@ -235,7 +243,7 @@ function ornamentLayers(g: Genome): Layer[] {
   if (g.ornament.quoteMark === 'oversize') {
     out.push({
       name: 'ornament.quoteMark',
-      css: '.carma-article-content blockquote{position:relative;padding-left:2.4rem!important;border-left:0!important}.carma-article-content blockquote::before{content:"\\201C";position:absolute;left:0;top:-.15em;font-size:3.2em;line-height:1;color:var(--ct-accent);opacity:.35}',
+      css: '.carma-article-content blockquote{position:relative;padding-left:2.4rem;border-left:0}.carma-article-content blockquote::before{content:"\\201C";position:absolute;left:0;top:-.15em;font-size:3.2em;line-height:1;color:var(--ct-accent);opacity:.35}',
     })
   } else if (g.ornament.quoteMark === 'rule') {
     out.push({ name: 'ornament.quoteMark', css: '' })
@@ -252,12 +260,12 @@ function ornamentLayers(g: Genome): Layer[] {
   if (g.ornament.divider === 'mark') {
     out.push({
       name: 'ornament.divider',
-      css: '.carma-article-content hr{border:0!important;width:auto!important;text-align:center;overflow:visible}.carma-article-content hr::after{content:"\\2042";display:block;color:var(--ct-muted);font-size:1.2rem;line-height:1}',
+      css: '.carma-article-content hr{border:0;width:auto;text-align:center;overflow:visible}.carma-article-content hr::after{content:"\\2042";display:block;color:var(--ct-muted);font-size:1.2rem;line-height:1}',
     })
   } else if (g.ornament.divider === 'gradient') {
     out.push({
       name: 'ornament.divider',
-      css: '.carma-article-content hr{border:0!important;height:2px!important;width:100%!important;background:linear-gradient(90deg,transparent,var(--ct-accent),transparent)}',
+      css: '.carma-article-content hr{border:0;height:2px;width:100%;background:linear-gradient(90deg,transparent,var(--ct-accent),transparent)}',
     })
   }
   if (g.ornament.corner === 'cut') {
@@ -269,12 +277,12 @@ function ornamentLayers(g: Genome): Layer[] {
   if (g.ornament.underline === 'offset') {
     out.push({
       name: 'ornament.underline',
-      css: '.carma-article-content a{text-underline-offset:.28em!important;text-decoration-thickness:1px!important}',
+      css: '.carma-article-content a{text-underline-offset:.28em;text-decoration-thickness:1px}',
     })
   } else if (g.ornament.underline === 'hover-grow') {
     out.push({
       name: 'ornament.underline',
-      css: '.carma-article-content a{text-decoration-thickness:1px!important;transition:text-decoration-thickness .15s ease}.carma-article-content a:hover{text-decoration-thickness:2px!important}',
+      css: '.carma-article-content a{text-decoration-thickness:1px;transition:text-decoration-thickness .15s ease}.carma-article-content a:hover{text-decoration-thickness:2px}',
     })
   }
   return out.filter(l => l.css)
