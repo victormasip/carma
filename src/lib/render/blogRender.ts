@@ -21,6 +21,8 @@ import { LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { isUuid, appOrigin } from '@/lib/sites/domain'
 import { isModuleOn, type SiteModules } from '@/lib/modules/registry'
 import { siteTag, postTag, linkCtxFor } from '@/lib/render/cache'
+import { loadActiveGenome } from '@/lib/design/store'
+import { compileGenome, COMPILER_VERSION } from '@/lib/design/compile'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -54,7 +56,31 @@ export async function loadSite(admin: Admin, param: string): Promise<SiteRow | n
 
 export async function loadTheme(admin: Admin, siteId: string): Promise<ThemeRow> {
   const { data } = await admin.from('site_themes').select('*').eq('site_id', siteId).maybeSingle()
-  return data as ThemeRow
+  return withGenomeCss(admin, siteId, data as ThemeRow)
+}
+
+/**
+ * W6 — the chosen genome's own stylesheet (drop caps, lanes, ornament: what tokens
+ * cannot carry), joined from its migration-039 row.
+ *
+ * Only when the theme's tokens still carry that genome's id (`design_tokens.genome`,
+ * stamped by the Door hand-off). A template or a re-capture replaces the tokens
+ * and the stamp with them, so the genome's CSS retires by itself; a colour the
+ * owner nudges in the Studio keeps the stamp, and the CSS reads `--ct-*`, so it
+ * follows. A site with no stamp — every site before W6 — costs no extra query.
+ *
+ * The CSS is the one compiled at adoption, unless the compiler has moved on since:
+ * then it is compiled again here, from the genome, which is the source of truth.
+ */
+async function withGenomeCss(admin: Admin, siteId: string, theme: ThemeRow): Promise<ThemeRow> {
+  const stamp = (theme?.design_tokens as Partial<DesignTokens> | null | undefined)?.genome
+  if (!theme || !stamp) return theme
+  const active = await loadActiveGenome(admin, siteId)
+  if (!active || active.genomeId !== stamp) return theme
+  const css = active.compilerVersion === COMPILER_VERSION && active.compiledCss !== null
+    ? active.compiledCss
+    : compileGenome(active.genome).css
+  return { ...theme, genome_css: css } as ThemeRow
 }
 
 /** Published posts for the feed. Never selects `content` — cards don't render it. */

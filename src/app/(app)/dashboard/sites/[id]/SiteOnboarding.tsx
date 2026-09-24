@@ -37,6 +37,7 @@ import Wordmark from '@/components/ui/Wordmark'
 import BrandIntake, { type BrandIntakeValue } from '@/components/onboarding/BrandIntake'
 import {
   clearDoorCarry, doorCarrySnapshot, doorCarryServerSnapshot, subscribeDoorCarry,
+  type DoorCarry, type DoorDesignChoice,
 } from '@/lib/onboarding/glimpse'
 
 /** The subset of the glimpse the capture actually needs. */
@@ -67,6 +68,21 @@ function normalizeUrl(raw: string): string {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`
 }
 
+const hostOf = (u: string) => {
+  try { return new URL(normalizeUrl(u)).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' }
+}
+
+/**
+ * The design chosen on the Door — only for the site it was chosen FOR. Someone
+ * who picked a design for verne.cat and then types another address here gets
+ * that site's own capture, not verne's design laid over it.
+ */
+function doorDesignFor(carry: DoorCarry | null, url: string): DoorDesignChoice | null {
+  const d = carry?.design
+  if (!d || !carry?.url || !url) return null
+  return hostOf(carry.url) === hostOf(url) ? d : null
+}
+
 // Mirror of /api/onboarding/detect's payload (the fields this flow reads).
 type Detected = {
   ok: boolean
@@ -95,7 +111,7 @@ export default function SiteOnboarding({
   onTemplateApplied: (templateName: string) => void
   onDismiss: () => void
 }) {
-  const { grab, applyTemplate, setBlogUrl } = useThemeStudio()
+  const { grab, applyTemplate, setBlogUrl, setPendingDesign } = useThemeStudio()
 
   // NO MICRO-FLASH ON THE SEAMLESS FUNNEL (founder, 2026-09-17: "fix the glitch
   // where the 'explica'ns qui sou' screen flashes briefly during the 'estem
@@ -125,6 +141,12 @@ export default function SiteOnboarding({
     const carry = doorCarrySnapshot()
     return { url: bootUrl, text: carry?.text ?? '', files: [], audio: null }
   })
+  // W6 — the design they chose on the Door ("Aquest. Comencem."), read with the
+  // rest of the carry and kept in state because the carry is cleared long before
+  // the capture that adopts it starts.
+  const [doorDesign, setDoorDesign] = useState<DoorDesignChoice | null>(
+    () => (boot ? doorDesignFor(doorCarrySnapshot(), bootUrl) : null),
+  )
   const [detected, setDetected] = useState<Detected | null>(null)
   // Preselected so "Continua" is live the moment the gallery opens. It used to
   // start null, which meant the primary CTA greeted every owner disabled.
@@ -216,6 +238,7 @@ export default function SiteOnboarding({
       const g = carried.glimpse
       setSeed({ prose: g.prose, siteName: g.siteName, locale: g.locale, palette: g.palette, fonts: g.fonts, pages: g.pages })
     }
+    setDoorDesign(doorDesignFor(carried, merged.url))
     clearDoorCarry()
     setIntake(merged)
     if (merged.url) await detectOnce(merged.url)
@@ -273,6 +296,9 @@ export default function SiteOnboarding({
       // thirty seconds ago. See CONTINUED_COPY in ZenCaptureModal.
       onMagicWandStarted({ importArticles: !!blog, afterBrandRead: view === 'capturing' || !!seed })
       setBusy(false)
+      // Registered BEFORE the capture: its `result` handler adopts the design
+      // with the fresh capture in hand (ThemeStudioContext#adoptDesign).
+      setPendingDesign(doorDesign)
       void grab(target)
     })
   }

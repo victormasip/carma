@@ -4,9 +4,16 @@ import { validateGenome } from '@/lib/design/validate'
 import { compileGenome } from '@/lib/design/compile'
 import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
-import { guardPreview } from '@/lib/render/previewGuard'
+import { guardPreview, scriptHashes } from '@/lib/render/previewGuard'
 import { isLocale, type Locale } from '@/lib/i18n/config'
+import { isSafeUrl, isValidHttpUrl } from '@/lib/scrape/http'
+import { chromeFor, type ChromeCapture } from '@/lib/design/chrome'
+import { captureSiteChrome } from '@/lib/design/reveal'
+import { designDb, domainOf, getChrome, putChrome } from '@/lib/design/store'
 import type { DesignTokens } from '@/lib/scrape/tokens'
+
+// A cold capture reads one page and up to eight stylesheets.
+export const maxDuration = 30
 
 /**
  * W5 — ONE VARIANT OF THE DOOR'S REVEAL, LIVE.
@@ -20,12 +27,32 @@ import type { DesignTokens } from '@/lib/scrape/tokens'
  * business (decision 2): their articles, on their blog, in their colours. With no
  * pitches, the neutral sample posts `no-invented-proof` already mandates.
  *
- * THREAT MODEL. Public and unauthenticated, but PURE: no fetch, no model, no
- * database, a few milliseconds of CPU. The genome arrives in a URL anyone can
+ * W6 — THEIR HEADER, IN THIS VARIANT'S POLICY. With `s` (their site), the
+ * preview renders the captured header the way the genome's chrome policy says:
+ * Fidel KEEPS it, Elevat HARMONISES it (their markup, this palette and these
+ * faces), Reimaginat REBUILDS it (their logo, nav labels and links in an archetype
+ * this design drew). See design/chrome.ts. The capture comes from the glimpse,
+ * remembered per domain (memo → migration-039 table); failing both it is taken
+ * again, once, under its own rate limit.
+ *
+ * THREAT MODEL. Public and unauthenticated. The genome arrives in a URL anyone can
  * write, so it goes through `validateGenome` — the engine's untrusted-input
- * boundary, the one that runs on the model's output too — before the compiler
- * sees it. Every string that reaches the page is escaped by the renderer.
+ * boundary, the one that runs on the model's output too — before the compiler sees
+ * it. Every string we write into the page is escaped by the renderer.
+ *
+ * The captured header is worse: a stranger's HTML, rendered in OUR origin, for a
+ * site named in a URL anyone can send to a signed-in owner. Two layers:
+ *   1. it was sanitised at capture over a spec parse (design/chrome.ts) — no
+ *      scripts, frames, handlers, script/data URLs or SVG animation;
+ *   2. the response carries a CSP whose `script-src` lists the HASHES of our own
+ *      scripts, taken from the same page rendered WITHOUT their chrome. Anything
+ *      the header could smuggle past layer 1 — a script, a handler, a
+ *      javascript: URL — has no hash on the list and does not run.
+ * A re-capture goes through the same SSRF guard as every other fetch.
  */
+
+/** One capture per domain per instance at a time — three previews, one fetch. */
+const capturing = new Map<string, Promise<ChromeCapture | null>>()
 
 const HOUR = 60 * 60 * 1000
 const MAX_PARAM = 8_000
@@ -109,9 +136,29 @@ export async function GET(request: NextRequest) {
       }))
     : buildSamplePosts(locale, siteName || 'Carma').map(p => ({ ...p, default_locale: locale }))
 
+  // Their header, in this variant's policy.
+  let chrome: ReturnType<typeof chromeFor>['fields'] | null = null
+  const siteUrl = (sp.get('s') ?? '').trim().slice(0, 500)
+  if (siteUrl && isValidHttpUrl(siteUrl) && isSafeUrl(siteUrl)) {
+    const db = designDb()
+    const domain = domainOf(siteUrl)
+    let capture = await getChrome(db, domain)
+    if (!capture && rateLimit(`design:capture:${clientIp(request)}`, 20, HOUR).ok) {
+      let run = capturing.get(domain)
+      if (!run) {
+        run = captureSiteChrome(siteUrl).finally(() => capturing.delete(domain))
+        capturing.set(domain, run)
+      }
+      capture = await run
+      if (capture) await putChrome(db, domain, capture)
+    }
+    chrome = chromeFor({ capture, genome, tokens: compiled.tokens, siteName, homeHref: siteUrl }).fields
+  }
+
   const theme = {
+    ...(chrome ?? {}),
     design_tokens: compiled.tokens,
-    font_links: compiled.fonts.map(f => f.href),
+    font_links: [...compiled.fonts.map(f => f.href), ...(chrome?.font_links ?? [])],
     genome_css: compiled.css,
     // Their name as the blog's masthead: it is the first thing that makes a
     // design read as THEIR blog rather than a template.
@@ -119,18 +166,26 @@ export async function GET(request: NextRequest) {
     default_locale: locale,
   }
 
-  const page = buildListingPage(
-    theme as Parameters<typeof buildListingPage>[0],
+  const render = (t: object) => guardPreview(buildListingPage(
+    t as Parameters<typeof buildListingPage>[0],
     siteName || 'Blog',
     'preview',
     posts as Parameters<typeof buildListingPage>[3],
     locale,
-  )
+  ))
+  const page = render(theme)
+  // Our scripts are the ones a page WITHOUT their chrome runs (see THREAT MODEL).
+  const ours = chrome ? render({ ...theme, ...Object.fromEntries(Object.keys(chrome).map(k => [k, null])), font_links: theme.font_links }) : page
+  const csp = [
+    `script-src ${scriptHashes(ours).join(' ') || "'none'"}`,
+    "object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-src 'none'",
+  ].join('; ')
 
-  return new NextResponse(guardPreview(page), {
+  return new NextResponse(page, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': csp,
       // The URL is the whole input, so the response is a pure function of it: a
       // tab revisited is served from the browser, not re-rendered.
       'Cache-Control': 'private, max-age=3600',

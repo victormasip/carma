@@ -78,6 +78,11 @@ export type DesignTokens = {
   buttonBorder?: string            // border shorthand (outline/ghost buttons)
   buttonShadow?: string            // box-shadow
   buttonTextTransform?: 'uppercase' | 'none' | 'capitalize' | 'lowercase'
+  // ── W6: the genome (`g_…`) these tokens were compiled from, when the owner
+  // chose a design on the Door. The render adds that genome's own stylesheet only
+  // while this still matches the site's active genome — so a template or a
+  // re-capture, which replace the tokens, retire the genome's CSS with them.
+  genome?: string
 }
 
 export const DEFAULT_TOKENS: DesignTokens = {

@@ -22,6 +22,9 @@ import {
 } from '@/lib/render/captureProgress'
 import { templateChromeJson, type BlogTemplate } from '@/lib/render/templates'
 import { archetypeForTemplate } from '@/lib/render/archetypes'
+import { adoptDoorDesign } from '@/lib/actions/design'
+import { stripHarmony } from '@/lib/design/revealTypes'
+import type { DoorDesignChoice } from '@/lib/onboarding/glimpse'
 
 type ChromeI18n = Record<string, { header?: string; footer?: string; section_title?: string }>
 
@@ -117,6 +120,9 @@ type ThemeStudio = {
   analyzing: boolean
   error: string | null
   grab: (overrideUrl?: string) => Promise<void>
+  // W6 — the design chosen on the Door. Registered BEFORE grab(); the capture's
+  // `result` adopts it (see adoptDesign). null clears it.
+  setPendingDesign: (choice: DoorDesignChoice | null) => void
   removeTheme: () => Promise<void>
   // ── Freemium theme-regeneration quota ──
   // The onboarding capture is free; free clients then get FREE_REGENS re-captures
@@ -522,6 +528,63 @@ export function ThemeStudioProvider({
     if (mods.length > 0) void enableModules(siteId, mods.map((m) => m.id)).catch(() => {})
   }, [siteId, chromeDefaultLocale])
 
+  // ── W6: the Door's design, adopted on the onboarding capture ──
+  // The owner chose a design on the Door before they had an account. It becomes
+  // theirs here, on top of the capture of their own site — because the capture
+  // is what the chosen header policy works from (keep their markup, harmonise it,
+  // or rebuild it from their logo and links).
+  //
+  // A ref, not state: it is work the next `result` consumes, never something to
+  // render. It survives a failed capture on purpose — the retry adopts it.
+  const pendingDesign = useRef<DoorDesignChoice | null>(null)
+  const setPendingDesign = useCallback((choice: DoorDesignChoice | null) => { pendingDesign.current = choice }, [])
+
+  // Called with the capture's own result object, not with state: the setters
+  // applyResult just called have not rendered yet, and the header, base URL and
+  // compiled CSS the policy needs are all right here.
+  const adoptDesign = useCallback(async (choice: DoorDesignChoice, data: AnalyzeResult) => {
+    const res = await adoptDoorDesign(siteId, choice, {
+      header: data.extracted_header || null,
+      baseUrl: data.base_url || null,
+      styled: !!data.compiled_chrome_css,
+    }, data.site_name ?? '')
+    if (res.error || !res.tokens || !res.chrome) {
+      // The capture already applied: they keep their own site's look, which is
+      // what onboarding did before W6. Never an error screen for this.
+      console.warn('[studio] Door design not applied:', res.error)
+      return
+    }
+    // What they chose is what they get — the preview drew exactly this: the
+    // genome's tokens whole (its feed rhythm is part of the design), OUR cards
+    // (no preview ever drew their captured card), and the header by its policy.
+    // The autosave persists all of it, like any other edit; the tokens carry the
+    // genome's id, which is what lets the render add the genome's own stylesheet.
+    setTokens({ ...DEFAULT_TOKENS, ...res.tokens })
+    setExtractedCard('')
+    setBlogSignature(s => (s?.card ? { ...s, card: null } : s))
+    const chrome = res.chrome
+    const genomeFonts = res.fontLinks ?? []
+    if (chrome.policy === 'rebuild') {
+      // A header we drew from their logo and links: self-contained, scoped JSON
+      // regions, like a starter template's — none of their page's CSS or scripts.
+      setExtractedHeader(chrome.header)
+      setExtractedFooter(chrome.footer)
+      setExtractedHead(''); setExtractedBodyAttrs(''); setExtractedScripts('')
+      setCompiledChromeCss(''); setChromeCompileStats(null)
+      setExternalStyles([]); setExternalScripts([])
+      setFontLinks(genomeFonts)
+    } else {
+      // Keep: their header exactly as captured. Harmonise: the same markup, with
+      // this design's palette and faces laid over it (a marked block, replaced
+      // rather than stacked if a design is ever applied twice).
+      if (chrome.policy === 'harmonise') {
+        const css = chrome.css
+        setCompiledChromeCss(prev => `${stripHarmony(prev)}\n${css}`.trim())
+      }
+      setFontLinks([...new Set([...genomeFonts, ...(data.font_links ?? [])])])
+    }
+  }, [siteId])
+
   // Stream the capture pipeline over SSE, surfacing every step to the modal.
   // There is NO arbitrary total timeout: we abort only if the stream goes
   // completely silent for CAPTURE_STALL_MS (a real hang).
@@ -575,6 +638,8 @@ export function ThemeStudioProvider({
         }))
       } else if (evt.type === 'result') {
         applyResult(evt.data)
+        const chosen = pendingDesign.current
+        if (chosen) { pendingDesign.current = null; void adoptDesign(chosen, evt.data) }
         // A successful free re-capture consumes one regeneration of the quota.
         if (isRecapture && !isPremiumRef.current) {
           setRegenCount(c => c + 1)
@@ -654,7 +719,7 @@ export function ThemeStudioProvider({
       setAnalyzing(false)
       if (captureAbort.current === controller) captureAbort.current = null
     }
-  }, [url, applyResult, siteId])
+  }, [url, applyResult, adoptDesign, siteId])
 
   // Dismiss the modal after the stream has ended (success or error).
   const closeCapture = useCallback(() => setCapture(c => ({ ...c, open: false })), [])
@@ -791,7 +856,7 @@ export function ThemeStudioProvider({
     saveStatus,
     savedAt,
     undo, redo, canUndo, canRedo,
-    url, setUrl, blogUrl, setBlogUrl, baseUrl, analyzing, error, grab, removeTheme,
+    url, setUrl, blogUrl, setBlogUrl, baseUrl, analyzing, error, grab, setPendingDesign, removeTheme,
     isPremium, regenCount, freeRegens: FREE_REGENS, canRegenerate,
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,

@@ -34,7 +34,7 @@ export async function resolve(specifier, context, next) {
   }
   // `next/server` is a CommonJS file with no `exports` map, so Node's ESM resolver
   // cannot find it by its bare name. Route handlers import it; test:reveal imports
-  // route handlers.
-  if (specifier === 'next/server') return next('next/server.js', context)
+  // route handlers. `next/cache` likewise, for the render core (blogRender.ts).
+  if (specifier === 'next/server' || specifier === 'next/cache') return next(`${specifier}.js`, context)
   return next(specifier, context)
 }

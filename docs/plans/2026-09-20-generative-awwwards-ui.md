@@ -1030,9 +1030,10 @@ Each wave is shippable, each has a gate, and the product is never broken in betw
 | **W3** ✅ | **Rung 3: the deterministic art director.** Evidence → three genomes, no model. The three variants are one derivation at three amplitudes. | **`test:director` 68/68** · 297/297 valid · distinctiveness **0.623** · p99 **0.91ms** | Not yet wired — the engine is done, the surface is W5 |
 | **W4** ✅ | **Rung 1: the LLM art director.** One call, three variants, a closed JSON schema, adaptive thinking. Constrained by the same cohesion engine as the maths; every failure degrades to W3. | **`test:director-llm` mock 233/233** · live A/B recorded in §15.10 | Not yet wired — the surface is W5 |
 | **W5** ✅ | **Door A**: W3 paints three live designs at once, W4 upgrades them in the background and crossfades in place; pitches are the feed; the choice crosses signup in sessionStorage. **Cascade layers** in the blog stylesheet, proven equivalent in Chrome. | **`test:reveal` 56/56** · **`test:cascade` 17/17** (30,408 computed-style comparisons) · `test:landing`/`test:perf` hold | Yes — conversion not yet measured |
-| **W6** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
-| **W7** | **Studio on genomes**: partial regeneration, history, undo, `dropped[]` surfaced. | `test:perf` product class holds | Yes |
-| **W8** | The taste loop: log choices and nudges, feed back as priors. Showcase gallery (`038_showcase_optin` already exists) of real generated blogs — which doubles as the Awwwards submission pipeline. | distinctiveness and human-review scores trending up | Yes |
+| **W6** ✅ | **Persistence and the full preview**: the art director on Haiku 4.5 and cached per domain; migration 039; the Door's choice adopted on the onboarding capture and served by the render; their header in each variant's rung (keep / harmonise / rebuild) behind a sanitiser, a CSP of our own script hashes and a measured faithful gate. | **`test:reveal` 109/109** · hand-off E2E on the real database · 0 CSP violations in Chrome | Yes |
+| **W7** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
+| **W8** | **Studio on genomes**: partial regeneration, history, undo, `dropped[]` surfaced. | `test:perf` product class holds | Yes |
+| **W9** | The taste loop: log choices and nudges, feed back as priors. Showcase gallery (`038_showcase_optin` already exists) of real generated blogs — which doubles as the Awwwards submission pipeline. | distinctiveness and human-review scores trending up | Yes |
 
 **W0–W1 were the whole bet, and the bet came in.** The compiler reproduces the eight
 templates exactly and the blog now has a budget. Everything after this is execution
@@ -1448,8 +1449,9 @@ a Smart Module card's corners — a specificity accident).
   module margins, the module cards' background, the Pull Quote's overrides.
 - **Pull Quote and Key Takeaways reference `--accent` / `--text` / `--surface`**, which do
   not exist in the render (ours are `--ct-*`). They paint Carma gold on every customer
-  blog, or inherit a WordPress theme's own `--accent` when embedded. Not fixed here — a
-  fix is a visible change on live blogs; filed.
+  blog, or inherit a WordPress theme's own `--accent` when embedded. **Fixed in W6
+  (528ca5b)**, Read Next with them — 19 references, and a `test:cascade` check that
+  fails on the old code.
 - **Title case is English.** The first live preview put *"La Cocina De Mercado Al Estilo
   Del Nautilus"* on a Spanish blog. `headingCase: 'title'` now compiles under `:lang(en)`
   only (Chrome confirms `:lang` inherits into the shadow tree).
@@ -1457,10 +1459,90 @@ a Smart Module card's corners — a specificity accident).
   browser already runs the DSD polyfill, which now flattens the layers first (~170 bytes;
   the blog's inline JS is 2.35KB of its 2.5KB budget).
 
-**Still open for W5's promise.** The chosen genome reaches `/registre` but nothing after
-signup reads it yet (no migration 039; the site is still themed by the clone), and the
-chrome ladder (keep / harmonise / rebuild) is carried in each genome but not rendered —
-the preview shows the blog body the genome controls, with the brand as its masthead.
+**Still open for W5's promise** — both closed by W6 (§15.12): the chosen genome now
+reaches the site after signup, and the preview renders their header in each rung.
+
+---
+
+### 15.12 W6 — a cent, a memory, and their header
+
+**The art director moved to Haiku 4.5.** One call still returns all three variants
+through the same closed schema and the same validate → sample → cohesion pipeline;
+the schema now asks only for the axes that need judgement (the engine fills motion,
+the header archetype, dividers, columns and texture inside the register the model
+picks), which is most of the output saving. **Projected cost per run: $0.008–0.011,
+~$0.009 typical** (Haiku $1/$5 per MTok; W4's measured 5,573 input tokens re-counted
+for the smaller schema, output capped) — against **~$0.10 on Opus: a ≥90% cut.** It is
+a projection, not a measurement: the Anthropic account has had no credit since
+2026-09-23 (even `count_tokens` answers 400). The live A/B is one command and fails the
+gate above $0.01: `npm run test:director-llm -- --live --n=10 --trace=resto-verne`.
+Whether Haiku still makes the Jules Verne leap is exactly what that run must show.
+
+**A second visitor costs nothing.** Answers are cached per domain (`design/store.ts`),
+keyed on a hash of the model, the director version, the prompt and the evidence: a
+memo per instance in front of `design_direction_cache`. `test:reveal` proves it with
+the model *removed* — no mock, no key — and the second visitor still gets the same
+three designs (`cached: memo`), six hits in a row from one IP all served, and only a
+miss spends the 3/h budget.
+
+**Migration 039 is live.** `site_design_genomes` (history as rows, one active per
+site by a partial unique index), `design_direction_cache`, `design_chrome_cache`, all
+RLS — checked column by column against the file on 2026-09-24. Everything still reads
+and writes fail-open, so a database without it behaves as before W6.
+
+**The hand-off, end to end, in Chrome, on the real database** (a throwaway QA user,
+deleted after): Door → Elevat → *"Este. Empecemos."* → the carry holds the genome, its
+signed evidence and the header rung the preview drew → login → `/benvinguda` → the
+onboarding capture's own `result` handler calls `adoptDoorDesign` → an active row with
+provenance **recomputed** (`derived`: the arithmetic lands on the same genome again;
+`directed` only if the domain's cached answer holds it; honestly `edited` otherwise),
+evidence, brief and author → the Studio applies tokens stamped with the genome id and
+its autosave persists them → **the published `/render/<id>` serves the genome's own
+stylesheet and the harmonised header.** The render joins the genome's CSS only while
+the tokens carry its stamp, so a template or a re-capture retires it without a second
+write, and a site with no stamp pays for no extra query.
+
+**Their header, in each variant's rung.** Fidel keeps their markup, Elevat harmonises
+it (their markup in this palette and these faces: one marked block, replaced, never
+stacked), Reimaginat rebuilds their logo, navigation and CTA in the design's own
+archetype; each tab says which. What they saw is what they get: the rung rides in
+the carry and the adoption honours it.
+
+**What it found.**
+- **A third of captured headers render broken.** Rendered in Chrome over the 69
+  corpus sites the compiler could style, their markup, with no scripts, came out
+  recognisable for ~26: mega-menus exploded, hero sliders full height, cookie modals
+  open, fixed headers over the blog, nav as bare lists. The failures clustered on
+  sites declaring more stylesheets than the capture reads (median 22 vs 6), and
+  reading them all is no cure (the compiled subset then outgrows its cap). So the
+  preview **frames** their chrome (sub-menus, sliders, dialogs pruned; contained,
+  clamped, fixed headers put back in flow) and shows their markup only through a
+  **faithful gate** (every declared sheet read, identity found): 25 pass and 18 of
+  those render well (72%). Everyone else sees their logo and links redrawn, never a
+  broken header.
+- **A stranger's header on our origin.** Anyone can send a signed-in owner a
+  preview URL naming any site. 98 of 99 raw corpus headers carry `<script>`; after the
+  parse5 sanitiser, 0 — and 13 classic payloads (entity-encoded `javascript:`, SVG
+  `<set>`, `<math>` mXSS, `<scr<script>`) leave nothing executable. Behind it, the
+  preview's CSP lists only the **hashes of our own scripts**, taken from the same page
+  rendered without their chrome: a script planted in a capture is in the page and
+  refused by the browser (zero violations of our own across every E2E page).
+- **Logos vanish on a new ground.** Verne's white mark on a paper bar; Cambra's dark
+  one on ink. The capture now measures each logo's pixels (`sharp`, 64px) and a
+  one-colour mark that would disappear is re-inked; colour marks are never touched.
+- **The id on the tab was not the id of the row.** The director emits an empty
+  `prose: {}` that validation drops (25 of 297 genomes), and `genomeId` hashed key
+  order. The Door now shows the validated genome and the id is canonical: 0 drift.
+- **A remembered capture outlived its rules.** The first E2E served captures stored
+  a day earlier, before logo tone and the gate. Captures carry `CAPTURE_VERSION`; an
+  old one is a miss.
+- **Raw escapes in onboarding.** The brand confirmation ("Això és el que he entès…")
+  had shown `ò`-style escapes to every new owner since 2026-09-18 — JSX text does
+  not read JS escapes. Fixed; the repo has no other instance.
+
+**Still open.** The live cost and the Haiku Jules Verne run (needs credit). The Door's
+capture is 72% faithful where it shows their markup; the adopted `keep` uses the
+Studio's full capture, which has always been the product's clone path.
 
 ---
 

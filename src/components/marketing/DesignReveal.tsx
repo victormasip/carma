@@ -198,6 +198,7 @@ export default function DesignReveal({ c, pd }: { c: LandingCopy['door']; pd: Pr
       </p>
       <p className="mt-1 text-xs font-semibold text-subtle">
         {current.heading}{current.body !== current.heading ? ` + ${current.body}` : ''}
+        {current.chrome && <> · {c.chrome[current.chrome]}</>}
       </p>
       {advice && (
         <p className="mt-3 rounded-xl border border-accent/25 bg-accent-soft/40 px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-text">

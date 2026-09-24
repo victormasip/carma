@@ -21,21 +21,25 @@
 // glimpse's bundle never carries the Anthropic SDK.
 //
 // WHY A SIGNED TOKEN AND NOT THE EVIDENCE ITSELF
-// The upgrade is a ~$0.10 model call on an unauthenticated endpoint, and its
-// input is a prompt. Accepting evidence from the browser would make it an open
+// The upgrade is a paid model call on an unauthenticated endpoint (~$0.01 on
+// Haiku 4.5 since W6, ~$0.10 on Opus before), and its input is a prompt. Accepting evidence from the browser would make it an open
 // relay for both — unbounded spend from any IP pool, and a prompt the attacker
 // writes. Accepting only what OUR glimpse signed means every upgrade was paid for
 // by a scrape that passed the glimpse's own rate limits, and its prompt is ours.
-// No table, no TTL row, no migration — strings across the boundary, the same
-// decision glimpse.ts already documents.
+// No row per visitor — strings across the boundary, the same decision glimpse.ts
+// already documents. (W6 remembers the art director's ANSWERS per domain, keyed on
+// the evidence, so a second visitor costs nothing: see design/store.ts.)
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { isSafeUrl, safeFetchText } from '@/lib/scrape/http'
+import { isSafeUrl, safeFetch, safeFetchText } from '@/lib/scrape/http'
+import { captureChrome, drawnPolicy, type ChromeCapture } from '@/lib/design/chrome'
+import { withLogoTone } from '@/lib/design/logoTone'
 import { collectStylesheets } from '@/lib/grabber-lab/evalRun'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { readEvidence, type DesignEvidence } from '@/lib/design/evidence'
-import { directDeterministic, type Directed } from '@/lib/design/director'
+import { directDeterministic } from '@/lib/design/director'
 import { compileGenome } from '@/lib/design/compile'
+import { validateGenome } from '@/lib/design/validate'
 import { font } from '@/lib/design/fonts'
 import type { Genome } from '@/lib/design/genome'
 import type { BrandBrief } from '@/lib/design/llm'
@@ -52,41 +56,68 @@ const MAX_SHEETS = 8
 const CSS_BUDGET = 400_000
 const SHEET_TIMEOUT_MS = 6_000
 
+type Sheets = { inline: string[]; sheets: { url: string; css: string }[]; fontLinks: string[]; declared: number }
+
 /**
- * The site's design evidence, from the home page the glimpse already fetched.
- *
- * Sheets are fetched in PARALLEL (the scrape's prose pages stay sequential —
- * those are a courtesy to someone's server; eight CSS files from a CDN are not),
- * then admitted in document order under the byte budget, exactly as the gates do.
- * Never throws: null means "no design half to this reveal", and the Door shows
- * the understanding alone, as it did before W5.
+ * The page's stylesheets, fetched in PARALLEL (the scrape's prose pages stay
+ * sequential — those are a courtesy to someone's server; eight CSS files from a
+ * CDN are not), capped at the gates' calibration and admitted in document order.
  */
-export async function readSiteEvidence(url: string, html: string): Promise<DesignEvidence | null> {
+async function gatherSheets(url: string, html: string): Promise<Sheets> {
+  const { urls, inline, fontLinks } = collectStylesheets(html, new URL(url))
+  const wanted = urls.slice(0, MAX_SHEETS)
+  const bodies = await Promise.all(wanted.map(u =>
+    isSafeUrl(u)
+      ? safeFetchText(u, { accept: 'text/css,*/*', timeout: SHEET_TIMEOUT_MS, retries: 0 }).catch(() => null)
+      : Promise.resolve(null),
+  ))
+  const sheets: { url: string; css: string }[] = []
+  let budget = CSS_BUDGET
+  wanted.forEach((u, i) => {
+    const css = bodies[i]
+    if (!css || budget <= 0) return
+    const slice = css.length > budget ? css.slice(0, css.lastIndexOf('}', budget) + 1) : css
+    budget -= slice.length
+    if (slice) sheets.push({ url: u, css: slice })
+  })
+  return { inline, sheets, fontLinks, declared: urls.length }
+}
+
+/**
+ * The site's design EVIDENCE and its captured CHROME, from the home page the
+ * glimpse already fetched — one set of stylesheet requests serves both. Never
+ * throws: a null evidence means "no design half to this reveal" (the Door shows the
+ * understanding alone, as before W5); a null chrome means every variant draws its
+ * own header from the brand's name.
+ */
+export async function readSiteDesign(url: string, html: string): Promise<{ evidence: DesignEvidence | null; chrome: ChromeCapture | null }> {
   try {
     const base = new URL(url)
-    const { urls, inline, fontLinks } = collectStylesheets(html, base)
-    const sheets = await Promise.all(urls.slice(0, MAX_SHEETS).map(u =>
-      isSafeUrl(u)
-        ? safeFetchText(u, { accept: 'text/css,*/*', timeout: SHEET_TIMEOUT_MS, retries: 0 }).catch(() => null)
-        : Promise.resolve(null),
-    ))
-    const cssTexts = [...inline]
-    let budget = CSS_BUDGET
-    for (const css of sheets) {
-      if (!css || budget <= 0) continue
-      const slice = css.length > budget ? css.slice(0, css.lastIndexOf('}', budget) + 1) : css
-      budget -= slice.length
-      if (slice) cssTexts.push(slice)
-    }
+    const { inline, sheets, fontLinks, declared } = await gatherSheets(url, html)
     const split = splitPageChrome(html, base)
-    return readEvidence({
-      url, html, cssTexts, fontLinks,
+    const evidence = readEvidence({
+      url, html, cssTexts: [...inline, ...sheets.map(s => s.css)], fontLinks,
       chrome: { top: split.top, bottom: split.bottom, bodyAttrs: split.bodyAttrs },
     })
+    return { evidence, chrome: await withLogoTone(captureChrome({ url, html, sheets, inline, fontLinks, declared })) }
   } catch (e) {
     console.error('[design/reveal] evidence failed:', e instanceof Error ? e.message : e)
-    return null
+    return { evidence: null, chrome: null }
   }
+}
+
+/**
+ * The header again, for a preview whose capture has gone (another instance, an
+ * expired memo, no migration 039): one page and its stylesheets.
+ */
+export async function captureSiteChrome(url: string): Promise<ChromeCapture | null> {
+  try {
+    if (!isSafeUrl(url)) return null
+    const res = await safeFetch(url, { accept: 'text/html,*/*', timeout: 10_000, retries: 0 })
+    if (!res?.body) return null
+    const { inline, sheets, fontLinks, declared } = await gatherSheets(url, res.body)
+    return await withLogoTone(captureChrome({ url, html: res.body, sheets, inline, fontLinks, declared }))
+  } catch { return null }
 }
 
 // ─── Variants ────────────────────────────────────────────────────────────────
@@ -98,6 +129,8 @@ export type RevealContext = {
   siteName: string | null
   locale: string | null
   pitches: PreviewPitch[]
+  /** Their site — whose captured header each preview renders (W6). */
+  siteUrl?: string | null
 }
 
 /**
@@ -113,9 +146,26 @@ export function mastheadName(raw: string | null | undefined): string | null {
   return name ? name.slice(0, 80) : null
 }
 
-/** `g_` + 16 hex of sha-256 over the genome. Same genome, same id, forever. */
+/** JSON with every object's keys sorted: the same value always serialises the same way. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).sort()
+      .filter(k => (v as Record<string, unknown>)[k] !== undefined)
+      .map(k => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(',')}}`
+  }
+  return JSON.stringify(v) ?? 'null'
+}
+
+/**
+ * `g_` + 16 hex of sha-256 over the genome. Same genome, same id, forever — over a
+ * CANONICAL serialisation (key order is not identity). The first live hand-off
+ * (W6) stored a different id from the one the Door showed: the director emits an
+ * empty `prose: {}` that validation drops (25 of 297 corpus genomes), so the Door
+ * now shows the VALIDATED genome — the one the preview renders and the site stores.
+ */
 export function genomeId(g: Genome): string {
-  return `g_${createHash('sha256').update(JSON.stringify(g)).digest('hex').slice(0, 16)}`
+  return `g_${createHash('sha256').update(canonical(g)).digest('hex').slice(0, 16)}`
 }
 
 const b64url = (v: unknown) => Buffer.from(JSON.stringify(v), 'utf8').toString('base64url')
@@ -138,17 +188,25 @@ export function previewPath(genome: Genome, ctx: RevealContext): string {
   const q = new URLSearchParams({ g: b64url(genome), l: ctx.locale || 'ca', preview: '1' })
   if (ctx.siteName) q.set('n', ctx.siteName.slice(0, 80))
   if (ctx.pitches.length) q.set('p', b64url(ctx.pitches.map(p => ({ t: p.title, a: p.angle }))))
+  if (ctx.siteUrl) q.set('s', ctx.siteUrl)
   return `/api/onboarding/design/preview?${q.toString()}`
 }
 
 /** Directions → the variants the Door draws. `why` is the model's, when there is one. */
 export function toRevealVariants(
-  directed: Pick<Directed, RevealVariantName>,
+  // Only each variant's genome is read, so a cached answer (genomes alone) and a
+  // fresh direction go through the same function.
+  directed: Record<RevealVariantName, { genome: Genome }>,
   ctx: RevealContext,
   why: Partial<Record<RevealVariantName, string>> = {},
+  // Their captured header, when known: it decides the rung each preview can draw
+  // (drawnPolicy). `undefined` = not known here — the genome's own rung stands.
+  capture?: ChromeCapture | null,
 ): RevealVariant[] {
   return REVEAL_ORDER.map(variant => {
-    const genome = directed[variant].genome
+    // Validated here, once: it is what the preview renders (it validates its URL)
+    // and what the hand-off stores, so the id on the tab is the id of the row.
+    const genome = validateGenome(directed[variant].genome).genome as Genome
     const t = compileGenome(genome).tokens
     return {
       variant,
@@ -161,6 +219,7 @@ export function toRevealVariants(
       swatches: [t.colorBg, t.colorText, t.colorAccent, t.colorPrimary],
       preview: previewPath(genome, ctx),
       why: why[variant]?.trim() || null,
+      chrome: drawnPolicy(genome, capture),
     }
   })
 }
@@ -236,7 +295,9 @@ export function verifyDesignToken(token: unknown, maxAgeMs = UPGRADE_TOKEN_TTL_M
  * Evidence → the design half of the reveal: three W3 variants, painted at once,
  * plus the token that lets the browser ask for the W4 upgrade. Never throws.
  */
-export function doorDesign(evidence: DesignEvidence, rawCtx: RevealContext, brief: BrandBrief | null): RevealDesign | null {
+export function doorDesign(
+  evidence: DesignEvidence, rawCtx: RevealContext, brief: BrandBrief | null, capture?: ChromeCapture | null,
+): RevealDesign | null {
   try {
     // Normalised ONCE, here, because the context is signed into the token: the
     // upgrade's previews then carry exactly the same masthead as the first paint.
@@ -246,7 +307,7 @@ export function doorDesign(evidence: DesignEvidence, rawCtx: RevealContext, brie
     return {
       token: signDesignToken({ ...ctx, evidence, brief }),
       source: 'derived',
-      variants: toRevealVariants(directed, ctx),
+      variants: toRevealVariants(directed, ctx, {}, capture),
       preferred,
       advice,
     }

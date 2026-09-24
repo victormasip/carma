@@ -294,10 +294,11 @@ export default function Door({
      going deeper instead of going back. */
   //
   // W5 — "AQUEST. COMENCEM." The chosen design crosses with it: its content-hash
-  // id, the genome itself (there is no genome table to look an id up in yet) and
+  // id, the genome itself (an anonymous visitor's designs are never stored) and
   // the SIGNED evidence it was made from. sessionStorage only — an anonymous
-  // visitor gets no database row. Whichever design is on screen is the one they
-  // chose: the art director's if it has landed, the arithmetic's if not.
+  // visitor gets no database row; the onboarding capture adopts it (W6). Whichever
+  // design is on screen is the one they chose: the art director's if it has
+  // landed, the arithmetic's if not.
   const enter = useCallback(() => {
     const url = isUrl ? normalizeUrl(value) : ''
     const parts = [
@@ -313,7 +314,7 @@ export default function Door({
       locale: result?.locale ?? null,
       glimpse: result,
       design: d && chosen
-        ? { genomeId: chosen.id, variant: chosen.variant, source: d.source, genome: chosen.genome, evidence: d.token }
+        ? { genomeId: chosen.id, variant: chosen.variant, source: d.source, genome: chosen.genome, evidence: d.token, chrome: chosen.chrome }
         : null,
     })
     router.push(url ? `/registre?url=${encodeURIComponent(url)}` : '/registre')

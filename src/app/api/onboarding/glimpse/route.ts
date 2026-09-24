@@ -5,8 +5,10 @@ import { scrapeBrandSite, candidateSentences } from '@/lib/brand/scrape'
 import { parseDocuments, isAcceptedDocument } from '@/lib/brand/documents'
 import { transcribeAudio } from '@/lib/whatsapp/transcribe'
 import { synthesiseBrand } from '@/lib/onboarding/synthesis'
-import { doorDesign, previewPitches, readSiteEvidence } from '@/lib/design/reveal'
+import { doorDesign, previewPitches, readSiteDesign } from '@/lib/design/reveal'
+import { designDb, domainOf, putChrome } from '@/lib/design/store'
 import type { DesignEvidence } from '@/lib/design/evidence'
+import type { ChromeCapture } from '@/lib/design/chrome'
 import {
   glimpseFloor, glimpseWeight, pickQuotes, CARRY_PROSE_CAP,
   type GlimpseEvent, type GlimpseResult, type GlimpseStep,
@@ -124,7 +126,8 @@ export async function POST(request: NextRequest) {
       // W5 — the design half. Started the moment their home page arrives and run
       // in parallel with the deep pages and the synthesis; no model, no extra page
       // fetch (it reads the HTML the scrape already has), at most eight stylesheets.
-      let evidence: Promise<DesignEvidence | null> = Promise.resolve(null)
+      let design: Promise<{ evidence: DesignEvidence | null; chrome: ChromeCapture | null }> =
+        Promise.resolve({ evidence: null, chrome: null })
       // Everything readable, kept for the synthesis pass at the end.
       let corpus = ''
 
@@ -133,7 +136,7 @@ export async function POST(request: NextRequest) {
         if (url) {
           progress('read', 'running')
           const scraped = await scrapeBrandSite(url, {
-            onHome: home => { evidence = readSiteEvidence(home.url, home.html) },
+            onHome: home => { design = readSiteDesign(home.url, home.html) },
           })
           if (scraped.pages.length > 0) {
             result.pages = scraped.pages.length
@@ -232,13 +235,17 @@ export async function POST(request: NextRequest) {
         // spends on the art director's upgrade in the background. The pitches go
         // into every preview as the feed's headlines: their articles, on their
         // blog, in their colours.
-        const ev = await evidence
+        const { evidence: ev, chrome } = await design
+        // W6: the captured header, remembered per domain, so each preview can show
+        // it in the variant's chrome policy without reading the site again.
+        if (chrome && url) await putChrome(designDb(), domainOf(url), chrome)
         if (ev) {
           const s = result.synthesis
           result.design = doorDesign(
             ev,
-            { siteName: result.siteName, locale: result.locale, pitches: previewPitches(s?.pitches) },
+            { siteName: result.siteName, locale: result.locale, pitches: previewPitches(s?.pitches), siteUrl: url || null },
             s ? { understanding: s.understanding, sector: s.sector, audience: s.audience, edge: s.edge, locale: result.locale } : { locale: result.locale },
+            chrome,
           )
         }
 

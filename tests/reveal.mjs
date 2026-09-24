@@ -18,6 +18,12 @@
 //   5. THE HAND-OFF. The chosen design crosses into signup through sessionStorage
 //      alone, and its evidence still verifies on the other side.
 //   6. THE BUNDLE. None of the design engine can reach the landing's client code.
+//   7. THE HEADER (W6). Their chrome is captured over the corpus with nothing
+//      executable left in it, each variant draws it in its own policy (keep,
+//      harmonise, rebuild), and the preview's CSP refuses what the sanitiser missed.
+//   8. THE ADOPTION (W6). The carried choice is re-verified (genome, signature,
+//      provenance), stored as the site's active genome with its evidence, and the
+//      render joins its stylesheet only while the tokens carry its stamp.
 //
 // Run: npm run test:reveal
 
@@ -25,7 +31,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { NextRequest } from 'next/server'
-import { parse as parse5 } from 'parse5'
+import { parse as parse5, parseFragment } from 'parse5'
 import { EVAL_DATASET } from '@/lib/grabber-lab/evalDataset'
 import { collectStylesheets } from '@/lib/grabber-lab/evalRun'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
@@ -38,6 +44,16 @@ import { PRESET_GENOMES } from '@/lib/design/presets'
 import { designReducer, INITIAL_DESIGN_STATE, isUsableUpgrade } from '@/components/marketing/useProgressiveDesign'
 import { GET as previewGET } from '@/app/api/onboarding/design/preview/route'
 import { POST as upgradePOST } from '@/app/api/onboarding/design/route'
+import {
+  captureChrome, chromeFor, drawnPolicy, frameChrome, FRAME_CSS, harmoniseCss, logoFilter, rebuildChrome,
+  sanitizeBodyAttrs, sanitizeChromeHtml,
+} from '@/lib/design/chrome'
+import { toneOfPixels } from '@/lib/design/logoTone'
+import { clearDesignMemo, domainOf, getChrome, loadActiveGenome, putChrome, saveActiveGenome } from '@/lib/design/store'
+import { planAdoption } from '@/lib/design/adopt'
+import { compileGenome, COMPILER_VERSION } from '@/lib/design/compile'
+import { loadTheme } from '@/lib/render/blogRender'
+import { CAPTURE_VERSION, HARMONY_MARK, stripHarmony } from '@/lib/design/revealTypes'
 
 // The token needs a key; the model must never be called by a test.
 process.env.DESIGN_TOKEN_SECRET ||= 'test-only-design-token-secret'
@@ -238,16 +254,41 @@ head('3. THE UPGRADE — only a token our glimpse signed buys a model call')
   ok(forged.status === 403 && (await forged.json()).source === 'derived', 'a forged token: 403, and "keep what you have"')
   const junk = await post('not json', '10.1.0.2')
   ok(junk.status === 400 && (await junk.json()).source === 'derived', 'a malformed body: 400, and "keep what you have"')
-  const statuses = []
-  for (let i = 0; i < 4; i++) statuses.push((await post({ token }, '10.1.0.9')).status)
-  ok(statuses.slice(0, 3).every(s => s === 200) && statuses[3] === 429, 'the fourth upgrade in an hour from one IP is refused', statuses.join(' '))
 
-  // The fail-open, end to end: no key at all → derived, silently.
+  // W6 — THE SECOND VISITOR. Same domain, another IP, and NO MODEL AT ALL: the mock
+  // is off and the key is gone, so a miss could only answer "derived". A hit
+  // answers the art director's three, from memory.
   const prevKey = process.env.ANTHROPIC_API_KEY
-  process.env.DESIGN_LLM_MOCK = '0'; delete process.env.ANTHROPIC_API_KEY
+  const noModel = () => { process.env.DESIGN_LLM_MOCK = '0'; delete process.env.ANTHROPIC_API_KEY }
+  const mockModel = () => { process.env.DESIGN_LLM_MOCK = '1'; if (prevKey) process.env.ANTHROPIC_API_KEY = prevKey }
+  noModel()
+  const second = await post({ token }, '10.1.0.4')
+  const sj = await second.json()
+  ok(second.status === 200 && sj.source === 'directed' && sj.cached === 'memo',
+    'the second visitor for a domain gets the cached designs — no model call (there is not even a key)', `${second.status} ${sj.source} cached=${sj.cached}`)
+  ok(JSON.stringify(sj.variants?.map(v => v.id)) === JSON.stringify(gj.variants.map(v => v.id)), '…and they are the SAME three designs the first visitor was shown')
+  const burst = []
+  for (let i = 0; i < 6; i++) burst.push((await post({ token }, '10.1.0.5')).status)
+  ok(burst.every(s => s === 200), 'a cache hit spends no budget: six in a row from one IP, all served', burst.join(' '))
+  const other = corpus.find(x => domainOf(x.c.url) !== domainOf(ev.url))?.ev
+  const otherToken = other ? signDesignToken({ ...CTX, evidence: other, brief: null }) : null
+  const miss = otherToken ? await (await post({ token: otherToken }, '10.1.0.6')).json() : null
+  ok(miss?.source === 'derived', 'another domain is a miss — it would need the model, and there is none', miss?.source)
+  const names = [['https://www.Nike.com/es/', 'nike.com'], ['http://nike.com', 'nike.com'], ['https://shop.nike.com', 'shop.nike.com']]
+  ok(names.every(([u, d]) => domainOf(u) === d), 'nike.com, www.nike.com and https://www.nike.com/es are one cache entry', names.map(([u]) => domainOf(u)).join(', '))
+  mockModel()
+
+  // The budget still binds a MISS: forget the memo before each call.
+  const statuses = []
+  for (let i = 0; i < 4; i++) { clearDesignMemo(); statuses.push((await post({ token }, '10.1.0.9')).status) }
+  ok(statuses.slice(0, 3).every(s => s === 200) && statuses[3] === 429, 'the fourth MISS in an hour from one IP is refused', statuses.join(' '))
+
+  // The fail-open, end to end: no key at all, nothing cached → derived, silently.
+  clearDesignMemo()
+  noModel()
   const nokey = await post({ token }, '10.1.0.3')
-  ok(nokey.status === 200 && (await nokey.json()).source === 'derived', 'no API key: the route answers "keep W3", the visitor sees nothing wrong')
-  process.env.DESIGN_LLM_MOCK = '1'; if (prevKey) process.env.ANTHROPIC_API_KEY = prevKey
+  ok(nokey.status === 200 && (await nokey.json()).source === 'derived', 'no API key and no cache: the route answers "keep W3", the visitor sees nothing wrong')
+  mockModel()
 }
 
 /* ══ 4. THE STATE MACHINE ═══════════════════════════════════════════════════ */
@@ -331,6 +372,311 @@ head('6. THE BUNDLE — the engine never follows the Door into a visitor’s bro
   ok(/dynamic\(\(\) => import\('\.\/DesignReveal'\)\)/.test(door) && !/^import .*DesignReveal/m.test(door),
     'the reveal UI is its own chunk, fetched only when a design exists')
   ok(!/useEffect\([^)]*paint/.test(door) && /paintDesign\(got\.design\)/.test(door), 'the upgrade starts from the submit handler, never an effect')
+}
+
+/* ══ 7. THE HEADER (W6) ═════════════════════════════════════════════════════ */
+
+head('7. THE HEADER — their chrome, captured clean, drawn by each policy')
+
+function loadCapture(c) {
+  const f = path.join(ROOT, '.grabber-cache', 'html', `${c.id}.html`)
+  if (!existsSync(f)) return null
+  const html = readFileSync(f, 'utf8')
+  const { urls, inline, fontLinks } = collectStylesheets(html, new URL(c.url))
+  const sheets = urls.slice(0, 8)
+    .map(u => ({ u, p: path.join(ROOT, '.grabber-cache', 'css', `${sha1(u).slice(0, 20)}.css`) }))
+    .filter(x => existsSync(x.p))
+    .map(x => ({ url: x.u, css: readFileSync(x.p, 'utf8') }))
+  return captureChrome({ url: c.url, html, sheets, inline, fontLinks, declared: urls.length })
+}
+
+// What a browser would build from it, walked — never a string search.
+const EXEC_TAGS = new Set(['script', 'iframe', 'frame', 'object', 'embed', 'applet', 'base', 'meta', 'link', 'style', 'noscript', 'template', 'set', 'animate', 'animatemotion', 'animatetransform', 'math'])
+function dirt(html) {
+  const out = []
+  ;(function walk(n) {
+    if (n.tagName && EXEC_TAGS.has(n.tagName.toLowerCase())) out.push(`<${n.tagName}>`)
+    for (const a of n.attrs ?? []) {
+      if (/^on/i.test(a.name) || /^(srcdoc|shadowrootmode)$/i.test(a.name)) out.push(`${a.name}=`)
+      const v = a.value.replace(/[\u0000- ]+/g, '').toLowerCase()
+      if (/^(href|src|action|formaction|data|poster)$/i.test(a.name) && /^(javascript|vbscript):|^data:(?!image\/)/.test(v)) out.push(`${a.name}=${v.slice(0, 24)}`)
+      if (/[<>]/.test(a.value)) out.push(`${a.name} carries markup`)
+    }
+    for (const c of n.childNodes ?? []) walk(c)
+    if (n.content) walk(n.content)
+  })(parseFragment(html))
+  return out
+}
+
+const caps = corpus.map(x => ({ ...x, cap: loadCapture(x.c) })).filter(x => x.cap)
+{
+  const styled = caps.filter(x => x.cap.css).length
+  const withNav = caps.filter(x => x.cap.nav.links.length).length
+  const withLogo = caps.filter(x => x.cap.nav.logo).length
+  const dirty = caps.filter(x => dirt(x.cap.header).length + dirt(x.cap.footer).length)
+  console.log(`    ${caps.length}/${corpus.length} headers captured · ${styled} styled by the chrome compiler · ${withNav} with navigation · ${withLogo} with a logo`)
+  ok(caps.length >= Math.floor(corpus.length * 0.9), 'a header is captured for nine real sites in ten', `${caps.length}/${corpus.length}`)
+  ok(dirty.length === 0, 'no captured header or footer carries anything executable, over the whole corpus',
+    dirty.slice(0, 3).map(x => `${x.c.id}: ${[...dirt(x.cap.header), ...dirt(x.cap.footer)].slice(0, 3).join(' ')}`).join(' | '))
+  ok(withNav >= Math.floor(caps.length * 0.8), 'their navigation is read: labels and working links', `${withNav}/${caps.length}`)
+  ok(caps.every(x => x.cap.nav.links.every(l => /^(https?|mailto|tel):/.test(l.href))), 'every lifted link is http(s), mailto or tel — nothing else is followed')
+  ok(caps.every(x => !/<\/style/i.test(x.cap.css)), 'no captured stylesheet can close the <style> it is inlined in')
+}
+
+{
+  // HOSTILE MARKUP — the classics, each in the form that beats a regex.
+  const evil = [
+    '<header><a href="java&#115;cript:alert(1)">A</a><a href=javascript:alert(2)>B</a>',
+    '<img src=x onerror=alert(3)><svg><a><set attributeName="href" to="javascript:alert(4)"/><text>C</text></a></svg>',
+    '<svg><style><img src=x onerror=alert(5)></style></svg><iframe srcdoc="<script>alert(6)</script>"></iframe>',
+    '<math><mtext><table><mglyph><style><img src=x onerror=alert(7)></style></mglyph></table></mtext></math>',
+    '<a id="</style><img src=x onerror=alert(8)>">D</a><form action="javascript:alert(9)"><button formaction="  JaVaScRiPt:alert(10)">E</button></form>',
+    '<object data="data:text/html,<script>alert(11)</script>"></object><base href="https://evil.example/"><meta http-equiv="refresh" content="0;url=https://evil.example">',
+    '<a href="https://ok.example/">Home</a><img src="data:image/png;base64,iVBORw0KGgo=" alt="logo">',
+    // Last: an element literally named "scr<script" swallows everything after it.
+    '<template shadowrootmode="open"><img src=x onerror=alert(12)></template><scr<script>ipt>alert(13)</script></header>',
+  ].join('')
+  const clean = sanitizeChromeHtml(evil)
+  ok(dirt(clean).length === 0, 'thirteen hostile payloads, sanitised: nothing executable survives', dirt(clean).join(' ') || `${clean.length} chars left`)
+  ok(clean.includes('href="https://ok.example/"') && clean.includes('data:image/png;base64') && clean.includes('Home'),
+    'what is honest survives: a real link, a data-URI logo, the labels')
+  const body = sanitizeBodyAttrs('class="home page" onload="alert(1)" style="color:red" data-x="1" id="b" onclick=alert(2)')
+  ok(body?.includes('class="home page"') && body.includes('data-x="1"') && !/onload|onclick|alert/.test(body), 'their <body> keeps only attributes that style', body)
+}
+
+{
+  // THE FRAME. A still picture of their header: menus that nothing would open,
+  // sliders, dialogs and popups go; the rest is boxed and clamped.
+  const messy = '<header class="site-header"><a href="/"><img src="/logo.png" alt="Logo"></a><nav><ul><li class="menu-item-has-children dropdown"><a href="/a">Serveis</a><ul class="sub-menu"><li><a href="/a/1">Un</a></li></ul></li><li><a href="/b">Contacte</a></li></ul></nav><div class="hero-slider swiper"><img src="/h.jpg"></div><div class="offcanvas-menu">…</div><div role="dialog">Cookies?</div><dialog open>x</dialog></header>'
+  const framed = frameChrome(messy, 'header')
+  ok(framed.startsWith('<div class="carma-door-chrome" data-region="header"') && framed.includes('max-height:220px') && framed.includes('contain:paint'),
+    'their header is framed: contained (even position:fixed) and clamped to 220px')
+  ok(framed.includes('Serveis') && framed.includes('Contacte') && framed.includes('Logo') && !/sub-menu|swiper|offcanvas|Cookies|<dialog/.test(framed),
+    'the frame keeps the logo and every top-level item — sub-menus, sliders, off-canvas panels and dialogs go')
+  ok(frameChrome('', 'header') === '' && FRAME_CSS.includes('position:relative!important'), 'an empty region stays empty; a fixed header is put back in flow inside its frame')
+}
+
+{
+  // THE FAITHFUL GATE — their markup is only shown when the capture read all of it.
+  const gate = caps.filter(x => x.cap.faithful).length
+  const g = PRESET_GENOMES.find(p => p.chrome.policy === 'keep') ?? { ...PRESET_GENOMES[0], chrome: { ...PRESET_GENOMES[0].chrome, policy: 'keep' } }
+  const faithful = caps.find(x => x.cap.faithful)?.cap
+  const unfaithful = caps.find(x => x.cap.css && !x.cap.faithful)?.cap
+  console.log(`    ${gate}/${caps.length} captures faithful enough to show their markup; the rest are redrawn`)
+  ok(gate > 0 && gate < caps.length, 'the gate passes some captures and refuses others', `${gate}/${caps.length}`)
+  ok(!!faithful && drawnPolicy(g, faithful) === 'keep' && !!unfaithful && drawnPolicy(g, unfaithful) === 'rebuild' && drawnPolicy(g, null) === 'rebuild' && drawnPolicy(g, undefined) === 'keep',
+    'keep on a faithful capture · rebuild on an unfaithful or missing one · the genome’s own rung when nothing is known')
+  ok(caps.every(x => !x.cap.faithful || (x.cap.css && (x.cap.nav.links.length >= 2 || x.cap.nav.logo))), 'a faithful capture is always styled and always carries their identity')
+}
+
+{
+  // THEIR LOGO ON A NEW GROUND — measured, and re-inked only when it would vanish.
+  const px = (w, h, fill) => { const a = new Uint8Array(w * h * 4); for (let i = 0; i < w * h; i++) a.set(fill(i), i * 4); return a }
+  const mark = rgb => px(10, 10, i => (i % 10 > 2 && i % 10 < 7 ? [...rgb, 255] : [0, 0, 0, 0]))
+  const tones = [toneOfPixels(mark([255, 255, 255]), 4), toneOfPixels(mark([10, 10, 10]), 4), toneOfPixels(mark([200, 30, 60]), 4),
+    toneOfPixels(px(10, 10, () => [255, 255, 255, 255]), 4), toneOfPixels(px(10, 10, () => [0, 0, 0, 0]), 4)]
+  ok(JSON.stringify(tones) === JSON.stringify(['light', 'dark', 'any', 'any', null]),
+    'logo tone: a white mark is light, a black mark dark, a colour mark or a plate reads anywhere, nothing is unreadable', tones.join(' · '))
+  ok(logoFilter('light', '#ffffff') === 'brightness(0)' && logoFilter('dark', '#0b0f14') === 'brightness(0) invert(1)' &&
+    logoFilter('light', '#0b0f14') === '' && logoFilter('any', '#ffffff') === '' && logoFilter(null, '#ffffff') === '',
+    'a white mark on paper is inked, a black mark on ink is whitened — and nothing else is touched')
+  const g = PRESET_GENOMES.find(p => p.palette.ground === 'ink') ?? PRESET_GENOMES[0]
+  const t = compileGenome(g).tokens
+  const nav = { logo: { src: 'https://x.example/img/logo-dark.svg', alt: 'X', tone: 'dark' }, links: [{ label: 'Inici', href: 'https://x.example/' }], cta: null }
+  const rebuilt = JSON.parse(rebuildChrome({ nav, siteName: 'X', genome: g, tokens: t, homeHref: 'https://x.example/' }).header)
+  const harm = harmoniseCss({ ...t, colorSurface: '#0b0f14' }, nav.logo)
+  ok(rebuilt.css.includes(`filter:${logoFilter('dark', t.colorBg)}`) === (logoFilter('dark', t.colorBg) !== '') &&
+    harm.includes('img[src*="logo-dark.svg"]{filter:brightness(0) invert(1)!important}'),
+    'a rebuilt or harmonised header re-inks their logo when its ground would swallow it')
+}
+
+// Every variant, every site: the policy the preview draws is the one the gate allows.
+const byPolicy = { keep: 0, harmonise: 0, rebuild: 0 }
+let policyWrong = 0, labelsLost = 0, rebuiltScripts = 0
+for (const { c, ev, cap } of caps) {
+  const d = doorDesign(ev, CTX, null, cap)
+  if (!d) continue
+  for (const v of d.variants) {
+    const tokens = compileGenome(v.genome).tokens
+    const out = chromeFor({ capture: cap, genome: v.genome, tokens, siteName: 'Demo', homeHref: c.url })
+    byPolicy[out.policy]++
+    if (out.policy !== v.chrome || out.policy !== drawnPolicy(v.genome, cap)) policyWrong++
+    const f = out.fields
+    const framedOk = f.extracted_header === frameChrome(cap.header, 'header') && f.extracted_footer === frameChrome(cap.footer, 'footer')
+    if (out.policy === 'keep' && !(framedOk && f.compiled_chrome_css === `${cap.css}\n${FRAME_CSS}`)) policyWrong++
+    if (out.policy === 'harmonise' && !(framedOk && f.compiled_chrome_css.split(HARMONY_MARK).length === 3 &&
+      f.compiled_chrome_css.includes(tokens.colorAccent) && stripHarmony(f.compiled_chrome_css) === `${cap.css}\n${FRAME_CSS}`.trim())) policyWrong++
+    if (out.policy === 'rebuild') {
+      const h = JSON.parse(f.extracted_header)
+      if (typeof h.html !== 'string' || typeof h.css !== 'string' || f.compiled_chrome_css !== null) policyWrong++
+      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+      if (!cap.nav.links.every(l => h.html.includes(esc(l.label)))) labelsLost++
+      if (dirt(h.html).length) rebuiltScripts++
+    }
+  }
+}
+console.log(`    policies drawn over ${caps.length} sites × 3: keep ${byPolicy.keep} · harmonise ${byPolicy.harmonise} · rebuild ${byPolicy.rebuild}`)
+ok(byPolicy.keep > 0 && byPolicy.harmonise > 0 && byPolicy.rebuild > 0, 'all three rungs of the ladder are drawn somewhere in the corpus')
+ok(policyWrong === 0, 'keep = their header, framed · harmonise = the same + one marked block in this palette · rebuild = our scoped regions — and each variant says which', `${policyWrong} wrong`)
+ok(labelsLost === 0 && rebuiltScripts === 0, 'a rebuilt header keeps every navigation label it lifted, escaped', `${labelsLost} lost, ${rebuiltScripts} unsafe`)
+
+{
+  // THE PREVIEW, WITH THEIR HEADER. The capture is seeded as the glimpse would.
+  // A faithful capture whose three variants draw three different rungs.
+  const rungs = x => doorDesign(x.ev, CTX, null, x.cap)?.variants.map(v => v.chrome).join(',')
+  const pick = caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2 && rungs(x) === 'keep,harmonise,rebuild')
+    ?? caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2)
+  if (pick) {
+    await putChrome(null, domainOf(pick.c.url), pick.cap)
+    const d = doorDesign(pick.ev, { ...CTX, siteUrl: pick.c.url }, null, pick.cap)
+    const seen = []
+    for (const v of d.variants) {
+      const { status, html, headers } = await previewOf(v.preview, '10.2.0.1')
+      const policy = v.chrome
+      const label = pick.cap.nav.links[0].label.replace(/&/g, '&amp;')
+      const drawn = policy === 'rebuild' ? /data-carma-chrome="header"/.test(html) && html.includes('cb-nav')
+        : html.includes('class="carma-door-chrome"') && html.includes(HARMONY_MARK) === (policy === 'harmonise')
+      seen.push(`${v.variant}:${policy}${drawn && html.includes(label) ? '' : '✗'}`)
+      const csp = headers.get('content-security-policy') ?? ''
+      const allowed = new Set(csp.match(/'sha256-[^']+'/g) ?? [])
+      const ours = (await import('@/lib/render/previewGuard')).scriptHashes(html)
+      if (!(status === 200 && drawn && html.includes(label) && ours.every(h => allowed.has(h)) && /object-src 'none'/.test(csp))) seen.push('✗')
+    }
+    ok(!seen.join(' ').includes('✗'), 'each variant’s preview draws THEIR header in its own policy, under a CSP that runs all our scripts', seen.join(' · '))
+
+    // LAYER TWO, proven on its own: a capture that got past the sanitiser still
+    // cannot run, because its script has no hash on the list.
+    const planted = { ...pick.cap, header: `${pick.cap.header}<script>window.__pwned=1</script>` }
+    await putChrome(null, 'planted.example', planted)
+    const g = d.variants.find(v => chromeFor({ capture: planted, genome: v.genome, tokens: compileGenome(v.genome).tokens, siteName: '', homeHref: 'https://planted.example/' }).policy === 'keep') ?? d.variants[0]
+    const q = new URL(g.preview, 'http://localhost'); q.searchParams.set('s', 'https://planted.example/')
+    const res = await previewOf(q.pathname + q.search, '10.2.0.2')
+    const allowed = new Set((res.headers.get('content-security-policy') ?? '').match(/'sha256-[^']+'/g) ?? [])
+    const plantedHash = (await import('@/lib/render/previewGuard')).scriptHashes('<script>window.__pwned=1</script>')[0]
+    ok(res.html.includes('window.__pwned') ? !allowed.has(plantedHash) : true,
+      'a script planted in a capture is in the page but NOT in the CSP — the browser refuses it', res.html.includes('window.__pwned') ? 'planted, refused' : 'not drawn by this policy')
+  } else ok(false, 'a styled capture with navigation exists to preview')
+
+  const unsafe = await previewOf(`${firstDesign.variants[0].preview}&s=${encodeURIComponent('http://169.254.169.254/latest/meta-data/')}`, '10.2.0.3')
+  ok(unsafe.status === 200 && !unsafe.html.includes('meta-data'), 'a preview naming a private address renders without fetching it (the SSRF guard)')
+}
+
+/* ══ 8. THE ADOPTION (W6) ═══════════════════════════════════════════════════ */
+
+head('8. THE ADOPTION — the Door’s choice becomes the site’s design')
+
+{
+  const pick = caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2)
+  const d = doorDesign(pick.ev, { ...CTX, siteUrl: pick.c.url }, { understanding: 'x', locale: 'ca' }, pick.cap)
+  // The Studio's own capture of the same site, styled.
+  const capture = { header: pick.cap.header, baseUrl: pick.c.url, styled: true }
+  const carry = v => ({ genomeId: v.id, variant: v.variant, source: 'derived', genome: JSON.parse(JSON.stringify(v.genome)), evidence: d.token, chrome: v.chrome })
+  const plans = d.variants.map(v => ({ v, plan: planAdoption(carry(v), capture, 'Demo') }))
+  ok(plans.every(({ v, plan }) => plan?.derived && plan.genomeId === v.id && plan.tokens.genome === v.id),
+    'each Door design, carried through signup, is recognised as ours: same id, provenance re-derived, tokens stamped')
+  // The id the Door shows is the id the row is stored under, for EVERY corpus
+  // genome — the live run found 25 of 297 where validation reordered the keys.
+  let idDrift = 0
+  for (const { ev } of corpus) for (const v of doorDesign(ev, CTX, null)?.variants ?? []) {
+    if (planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: JSON.parse(JSON.stringify(v.genome)), evidence: null }, capture, 'x')?.genomeId !== v.id) idDrift++
+  }
+  ok(idDrift === 0, 'the id the Door shows is the id the site stores — over every corpus genome', `${idDrift} drifted`)
+  ok(plans.every(({ v, plan }) => plan.chrome.policy === v.chrome),
+    'the header adopted is the header the preview drew', plans.map(({ plan }) => plan.chrome.policy).join(' · '))
+  const keepish = d.variants.find(v => v.genome.chrome.policy === 'keep' || v.genome.chrome.policy === 'harmonise')
+  const redrawn = keepish && planAdoption({ ...carry(keepish), chrome: 'rebuild' }, capture, 'Demo')
+  ok(!keepish || redrawn.chrome.policy === 'rebuild',
+    'a Fidel the Door could only redraw is adopted redrawn — never with markup they did not see')
+  const rebuilt = plans.find(({ plan }) => plan.chrome.policy === 'rebuild')?.plan
+  ok(!rebuilt || pick.cap.nav.links.every(l => JSON.parse(rebuilt.chrome.header).html.includes(l.label.replace(/&/g, '&amp;'))),
+    'a rebuilt header carries their navigation into their blog')
+
+  const v = d.variants[1]
+  const tampered = JSON.parse(JSON.stringify(v.genome)); tampered.palette.pins = { ...(tampered.palette.pins ?? {}), accent: '#ff00aa' }
+  const t = planAdoption({ genomeId: v.id, variant: v.variant, source: 'directed', genome: tampered, evidence: d.token }, capture, 'Demo')
+  ok(t && !t.derived && t.genomeId !== v.id, 'an edited genome still applies — but is recorded as what it is, not as ours', t ? `${t.genomeId} ≠ ${v.id}` : 'null')
+  const forged = planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: v.genome, evidence: 'e30.forged' }, capture, 'Demo')
+  ok(forged && forged.payload === null && !forged.derived, 'a forged evidence token proves nothing: no evidence stored, no provenance')
+  ok(planAdoption({ variant: 'bespoke', genome: v.genome }, capture, 'x') === null && planAdoption(null, capture, 'x') === null, 'something that is not a choice is refused')
+  const keepV = d.variants.find(x => x.genome.chrome.policy === 'keep') ?? d.variants[0]
+  const naked = planAdoption({ genomeId: keepV.id, variant: keepV.variant, source: 'derived', genome: keepV.genome, evidence: d.token }, { ...capture, styled: false }, 'Demo')
+  ok(naked.chrome.policy === 'rebuild', 'a header the compiler could not style is rebuilt, never rendered naked', naked.chrome.policy)
+}
+
+{
+  // THE ROWS — a fake PostgREST, so the writes are checked without a database.
+  const fakeDb = (tables, log) => ({
+    from(table) {
+      const q = { table, ops: [] }
+      const run = async kind => { log.push(q); return tables[table]?.(q, kind) ?? { data: null, error: null } }
+      const b = {
+        select: c => (q.ops.push(['select', c]), b), eq: (k, v) => (q.ops.push(['eq', k, v]), b),
+        gte: () => b, limit: () => b,
+        update: v => (q.ops.push(['update', v]), b), insert: v => (q.ops.push(['insert', v]), b), upsert: v => (q.ops.push(['upsert', v]), b),
+        maybeSingle: () => run('maybeSingle'), single: () => run('single'),
+        then: (res, rej) => run('list').then(res, rej),
+      }
+      return b
+    },
+  })
+  const genome = firstDesign.variants[0].genome
+  const row = { siteId: 's1', userId: 'u1', genome, genomeId: firstDesign.variants[0].id, source: 'derived', variant: 'faithful', evidence: { url: 'x' }, brief: null, compiledCss: compileGenome(genome).css, compilerVersion: COMPILER_VERSION }
+
+  const log = []
+  const saved = await saveActiveGenome(fakeDb({ site_design_genomes: (q, kind) => kind === 'single' ? { data: { id: 'row-1' }, error: null } : { data: null, error: null } }, log), row)
+  const [off, ins] = log
+  const insert = ins?.ops.find(o => o[0] === 'insert')?.[1]
+  ok(saved.persisted && saved.id === 'row-1', 'a Door design is stored as the site’s active genome', JSON.stringify(saved))
+  ok(off?.ops.some(o => o[0] === 'update' && o[1].is_active === false) && off.ops.some(o => o[0] === 'eq' && o[1] === 'is_active'),
+    'the previous active genome is retired first — history is rows, nothing is overwritten')
+  ok(insert?.genome_id === row.genomeId && insert.is_active && insert.evidence?.url === 'x' && insert.compiler_version === COMPILER_VERSION && insert.created_by === 'u1',
+    'the row carries the genome, its evidence, its compiled CSS and who chose it')
+  const absent = await saveActiveGenome(fakeDb({ site_design_genomes: () => ({ data: null, error: { code: 'PGRST205', message: 'Could not find the table' } }) }, []), row)
+  ok(!absent.persisted && absent.reason === 'migration 039 not applied', 'without migration 039: nothing stored, and it says why', absent.reason)
+  ok((await saveActiveGenome(null, row)).reason === 'no database configured', 'without a database: the same, never a throw')
+
+  // THE RENDER JOIN — loadTheme adds the genome's stylesheet only while the tokens carry its stamp.
+  const active = { genome, genome_id: row.genomeId, compiled_css: '/*compiled-at-adoption*/', compiler_version: COMPILER_VERSION }
+  const db = (theme, genomeRow, glog = []) => fakeDb({
+    site_themes: () => ({ data: theme, error: null }),
+    site_design_genomes: () => (genomeRow instanceof Error ? { data: null, error: { code: 'PGRST205', message: 'x' } } : { data: genomeRow, error: null }),
+  }, glog)
+  const plain = []
+  const t0 = await loadTheme(db({ design_tokens: { colorAccent: '#123456' } }, active, plain), 's1')
+  ok(!t0.genome_css && !plain.some(q => q.table === 'site_design_genomes'), 'a site with no chosen genome pays for no extra query and gets no genome CSS')
+  const t1 = await loadTheme(db({ design_tokens: { genome: row.genomeId } }, active), 's1')
+  ok(t1.genome_css === '/*compiled-at-adoption*/', 'the stamped site renders the CSS compiled at adoption')
+  const t2 = await loadTheme(db({ design_tokens: { genome: 'g_somethingelse00' } }, active), 's1')
+  ok(!t2.genome_css, 'a template or a re-capture replaced the tokens: the old genome’s CSS retires with them')
+  const t3 = await loadTheme(db({ design_tokens: { genome: row.genomeId } }, { ...active, compiler_version: 'genome-0.0.1' }), 's1')
+  ok(t3.genome_css === compileGenome(genome).css, 'a compiler that has moved on recompiles from the genome, the source of truth')
+  const t4 = await loadTheme(db({ design_tokens: { genome: row.genomeId } }, new Error('absent')), 's1')
+  ok(t4 && !t4.genome_css, 'no migration 039: the blog renders exactly as before')
+  ok((await loadActiveGenome(null, 's1')) === null, 'no database: no genome, no throw')
+
+  // A REMEMBERED CAPTURE OF ANOTHER SHAPE is a miss — the lesson of the first live
+  // run: captures stored before logo tone and the gate kept being served.
+  clearDesignMemo()
+  const stale = fakeDb({ design_chrome_cache: () => ({ data: { capture: { ...caps[0].cap, v: 1 } }, error: null }) }, [])
+  const fresh = fakeDb({ design_chrome_cache: () => ({ data: { capture: caps[0].cap }, error: null }) }, [])
+  ok(caps[0].cap.v === CAPTURE_VERSION && (await getChrome(stale, 'stale.example')) === null && (await getChrome(fresh, 'fresh.example'))?.v === CAPTURE_VERSION,
+    'a capture made under older rules is re-taken, never served')
+}
+
+{
+  // MIGRATION 039 — every column the code reads or writes is declared, idempotently.
+  const sql = readFileSync(path.join(ROOT, 'supabase/migrations/039_design_genome.sql'), 'utf8')
+  const table = name => (new RegExp(`CREATE TABLE IF NOT EXISTS (?:public\\.)?${name}\\s*\\(([\\s\\S]*?)\\n\\);`).exec(sql) ?? [])[1] ?? ''
+  const want = {
+    site_design_genomes: ['site_id', 'genome', 'genome_id', 'genome_version', 'source', 'variant', 'evidence', 'brief', 'is_active', 'compiled_css', 'compiled_at', 'compiler_version', 'created_by'],
+    design_direction_cache: ['domain', 'cache_key', 'model', 'variants', 'cost_usd', 'hits', 'created_at', 'last_hit_at'],
+    design_chrome_cache: ['domain', 'capture', 'captured_at'],
+  }
+  const missing = Object.entries(want).flatMap(([t, cols]) => cols.filter(c => !new RegExp(`^\\s*${c}\\s`, 'm').test(table(t))).map(c => `${t}.${c}`))
+  ok(missing.length === 0, 'migration 039 declares every column the store reads and writes', missing.join(', ') || `${Object.values(want).flat().length} columns`)
+  ok(/CREATE UNIQUE INDEX IF NOT EXISTS[\s\S]*?site_design_genomes[\s\S]*?WHERE is_active/i.test(sql), 'one active genome per site, enforced by the database')
+  ok(Object.keys(want).every(t => new RegExp(`ALTER TABLE (?:public\\.)?${t} ENABLE ROW LEVEL SECURITY`, 'i').test(sql)), 'row-level security on all three tables')
+  ok(/'edited'/.test(sql) && /PRIMARY KEY \(domain, cache_key\)/i.test(sql), 'the vocabulary and keys the code relies on')
 }
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed · ${fail} failed`)

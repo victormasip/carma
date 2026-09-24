@@ -32,7 +32,7 @@
 // no table, no TTL and no migration.
 
 import type { BrandSynthesis } from './synthesis'
-import type { RevealDesign, RevealVariantName } from '@/lib/design/revealTypes'
+import type { RevealDesign, RevealVariantName, RevealChrome } from '@/lib/design/revealTypes'
 
 /** One brand sentence we found, verbatim, in the visitor's own material. */
 export type GlimpseQuote = { text: string; from: string }
@@ -121,7 +121,9 @@ export type DoorCarry = {
   /**
    * W5 — the design they chose on the Door ("Aquest. Comencem."), carried into
    * signup. Browser storage only: NO database row is written for an anonymous
-   * visitor. Absent when they entered without a design reveal.
+   * visitor. W6 adopts it on the onboarding's capture of the same site, once
+   * there is an account and a site to store it on (actions/design.ts). Absent
+   * when they entered without a design reveal.
    */
   design?: DoorDesignChoice | null
   at: number
@@ -130,13 +132,15 @@ export type DoorCarry = {
 /**
  * The chosen design, as it crosses signup.
  *
- * The genome travels WHOLE, not just its id: there is no genome table yet
- * (migration 039 is planned, not written), and a model-directed genome cannot be
- * re-derived from evidence the way a deterministic one can. Whoever reads this
- * must run it through `validateGenome` — it spent time in a browser.
+ * The genome travels WHOLE, not just its id: an anonymous visitor's designs are
+ * never stored (only the art director's answers are cached, per domain), and a
+ * model-directed genome cannot be re-derived from evidence the way a
+ * deterministic one can. Whoever reads this must run it through `validateGenome`
+ * — it spent time in a browser. actions/design.ts does, and recomputes `source`
+ * rather than believing it.
  */
 export type DoorDesignChoice = {
-  /** Content hash (`g_…`) — the id a `site_design_genomes` row will be keyed on. */
+  /** Content hash (`g_…`) — the `genome_id` of the `site_design_genomes` row it becomes. */
   genomeId: string
   variant: RevealVariantName
   source: 'derived' | 'directed'
@@ -147,6 +151,12 @@ export type DoorDesignChoice = {
    * re-scraping. Null only when the server had no key to sign with.
    */
   evidence: string | null
+  /**
+   * W6 — the rung their header was drawn on in the preview they chose (keep,
+   * harmonise, rebuild). The hand-off applies the same one: what they saw is what
+   * their blog gets. Absent on carries written before W6.
+   */
+  chrome?: RevealChrome
 }
 
 /** Corpus cap for the carry. Beyond this the marginal paragraph adds nothing. */
