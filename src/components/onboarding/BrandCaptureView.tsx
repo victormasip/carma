@@ -409,8 +409,8 @@ function BrandReveal({ siteId, brain, onContinue }: {
   const facts: { label: string; value: string }[] = []
   if (current.identity.whatTheySell) facts.push({ label: 'Que feu', value: current.identity.whatTheySell })
   if (current.audience.who) facts.push({ label: 'Per a qui', value: current.audience.who })
-  if (current.voice.descriptors.length) facts.push({ label: 'To de veu', value: current.voice.descriptors.slice(0, 4).join(' \u00b7 ') })
-  if (current.pillars.length) facts.push({ label: 'Temes', value: current.pillars.slice(0, 4).map(p => p.name).join(' \u00b7 ') })
+  if (current.voice.descriptors.length) facts.push({ label: 'To de veu', value: current.voice.descriptors.slice(0, 4).join(' · ') })
+  if (current.pillars.length) facts.push({ label: 'Temes', value: current.pillars.slice(0, 4).map(p => p.name).join(' · ') })
 
   return (
     <div className="zen-fade-up mx-auto w-full max-w-2xl">
@@ -422,7 +422,7 @@ function BrandReveal({ siteId, brain, onContinue }: {
           Ja et conec<span className="text-accent">.</span>
         </h2>
         <p className="mx-auto mt-2.5 max-w-lg text-sm leading-relaxed text-muted">
-          Aix\u00f2 \u00e9s el que he ent\u00e8s de la teva marca. Ho far\u00e9 servir a cada article \u2014 aix\u00ed que si hi ha res que no quadra, corregeix-m\u2019ho ara.
+          Això és el que he entès de la teva marca. Ho faré servir a cada article — així que si hi ha res que no quadra, corregeix-m’ho ara.
         </p>
       </div>
 
@@ -450,20 +450,20 @@ function BrandReveal({ siteId, brain, onContinue }: {
           <div className="grid gap-3 sm:grid-cols-2">
             <EditField label="Que feu" value={sell} onChange={setSell} placeholder="Reformes integrals de pisos antics" multiline />
             <EditField label="Per a qui" value={who} onChange={setWho} placeholder="Propietaris del barri que hi volen viure, no revendre" multiline />
-            <EditField label="To de veu" value={tone} onChange={setTone} placeholder="directe, proper, sense floritures" hint="Separa\u2019ls amb comes" />
-            <EditField label="Temes" value={themes} onChange={setThemes} placeholder="Reformes, Materials, Pressupostos" hint="Separa\u2019ls amb comes" />
+            <EditField label="To de veu" value={tone} onChange={setTone} placeholder="directe, proper, sense floritures" hint="Separa’ls amb comes" />
+            <EditField label="Temes" value={themes} onChange={setThemes} placeholder="Reformes, Materials, Pressupostos" hint="Separa’ls amb comes" />
           </div>
 
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-card">
-            <p className="text-xs font-bold uppercase tracking-wider text-subtle">Explica\u2019m qualsevol altra cosa</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-subtle">Explica’m qualsevol altra cosa</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              El que no cap en una casella: qu\u00e8 no sou, com no us hem de dir mai, un detall que ho canvia tot.
+              El que no cap en una casella: què no sou, com no us hem de dir mai, un detall que ho canvia tot.
             </p>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
               rows={3}
-              placeholder="No som una botiga, som un taller. I no ens diguis mai \u00abbarats\u00bb."
+              placeholder="No som una botiga, som un taller. I no ens diguis mai «barats»."
               className="mt-2.5 w-full resize-none rounded-xl border border-border bg-surface-subtle px-3 py-2.5 text-sm text-text outline-none transition-colors placeholder:text-subtle focus:border-accent focus:bg-surface"
             />
             <div className="mt-2.5">
