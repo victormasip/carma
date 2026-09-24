@@ -31,12 +31,12 @@
 // lane structures), and a set half-derived from a model and half from the maths
 // satisfies none of them.
 
+import { createHash } from 'node:crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import {
-  CORNERS, DIVIDERS, DROP_CAPS, ENTRANCES, FIGURES, FOOTER_ARCHETYPES, GROUNDS,
-  HEADER_ARCHETYPES, HEADING_CASES, HOVERS, LANES, LEADINGS, LEADS, LEXICON,
-  QUOTE_MARKS, REGISTERS, RHYTHMS, SATURATIONS, SCALES, SCHEMES, TRACKINGS,
-  TRANSITIONS, TREATMENTS, UNDERLINES, type Genome, type Register,
+  CORNERS, DROP_CAPS, GROUNDS, HEADING_CASES, LANES, LEADINGS, LEADS, LEXICON,
+  QUOTE_MARKS, REGISTERS, RHYTHMS, SATURATIONS, SCALES, SCHEMES,
+  type Genome, type Register,
 } from '@/lib/design/genome'
 import { FONT_IDS, font, isFontId, type FontId } from '@/lib/design/fonts'
 import { REGISTER_RULES } from '@/lib/design/cohesion'
@@ -48,8 +48,57 @@ import {
   type Directed, type Direction, type VariantName,
 } from '@/lib/design/director'
 
-// Following the project convention (cf. WRITING_GEN_MODEL, TRANSLATE_LLM_MODEL).
-export const DESIGN_LLM_MODEL = process.env.DESIGN_LLM_MODEL || 'claude-opus-5'
+// ─── The model, and what it costs ────────────────────────────────────────────
+//
+// W6 — THE COST CRACKDOWN. W4 shipped on claude-opus-5 with adaptive thinking at
+// effort high: measured live at 5,573 input + 2,878 output tokens a call, $0.0998.
+// On an anonymous funnel that is a bill for every tire-kicker. Output was 72% of it,
+// and nearly all of that output was thinking the schema already makes unnecessary:
+// the response opens with `reading` (what this business is) and each variant with
+// its `rationale`, so the model reasons in the answer before it chooses anything.
+//
+// So the default is claude-haiku-4-5, thinking off, answering only the judgement
+// axes (below). Projected from the measured W4 token profile at $0.008–0.011 a call;
+// NOT yet measured live — on 2026-09-23 the Anthropic account was out of credit
+// (even count_tokens was refused). The live A/B against the W4 baseline, on the same
+// sites, is `npm run test:director-llm -- --live --n=10 --trace=resto-verne`, and it
+// FAILS if a call costs $0.01 or more. Override the model with DESIGN_LLM_MODEL; the
+// request below adapts to the tier.
+//
+// Read at CALL time, like the mock flag: config a test needs to toggle cannot be
+// frozen at import.
+export const DESIGN_MODEL_DEFAULT = 'claude-haiku-4-5'
+export const designLlmModel = (): string => process.env.DESIGN_LLM_MODEL || DESIGN_MODEL_DEFAULT
+/** The model as configured when this module loaded — for banners and logs only. */
+export const DESIGN_LLM_MODEL = designLlmModel()
+
+/** First-party list prices, USD per million tokens (claude-api reference, 2026-06-24). */
+export const MODEL_PRICE: Record<string, { input: number; output: number }> = {
+  'claude-haiku-4-5': { input: 1, output: 5 },
+  'claude-sonnet-5': { input: 2, output: 10 },
+  'claude-opus-5-5': { input: 4, output: 20 },
+  'claude-opus-5': { input: 5, output: 25 },
+}
+
+/** What one call cost, from the tokens the API reported. Null for an unpriced model. */
+export function costOf(model: string, usage: { input: number; output: number } | null): number | null {
+  const p = MODEL_PRICE[model]
+  if (!p || !usage) return null
+  return (usage.input * p.input + usage.output * p.output) / 1_000_000
+}
+
+/**
+ * The tiers do not accept the same request, and sending the wrong one is a 400.
+ *   · Haiku 4.5 rejects `effort` and has no adaptive thinking — so neither is sent.
+ *   · Sonnet 5 runs with thinking off: the schema's `reading`/`rationale` fields are
+ *     where it reasons, and thinking is what cost W4 its output bill.
+ *   · Opus keeps W4's exact shape, so an override reproduces the measured baseline.
+ */
+function requestShape(model: string): { thinking?: { type: 'adaptive' } | { type: 'disabled' }; effort?: 'high' } {
+  if (model.startsWith('claude-haiku-4-5')) return {}
+  if (model.startsWith('claude-sonnet-5')) return { thinking: { type: 'disabled' } }
+  return { thinking: { type: 'adaptive' }, effort: 'high' }
+}
 /**
  * Canned response instead of a call — for gating the parse and fail-open paths.
  *
@@ -67,7 +116,7 @@ export type DirectedByModel = Directed & {
   model: string | null
   /** Why it fell back, when it did. Empty on success. This is the training signal. */
   violations: string[]
-  usage: { input: number; output: number } | null
+  usage: { input: number; output: number; costUsd: number | null } | null
   /** One line per variant, in the brand's own terms. Shown to the owner. */
   rationale: Partial<Record<VariantName, string>>
   ms: number
@@ -82,17 +131,29 @@ export type DirectedByModel = Directed & {
 
 const enumOf = (values: readonly (string | number)[]) => ({ enum: [...values] })
 
+// JUDGEMENT AXES ONLY (W6). W4 asked the model for all 31 values of a variant; the
+// cost crackdown asks for the 16 where knowing the business changes the answer —
+// register, palette mood, the two faces, scale, leading, case, density, lanes, the
+// feed's rhythm and lead, and the three ornaments a reader notices. Everything else
+// (tracking, figures, columns, numbering, grain, dividers, underline, motion,
+// imagery, the chrome archetype) is omitted, and an omitted axis is not a default:
+// `completeGenome` SAMPLES it inside the register the model chose, exactly as W3
+// does. The register is the biggest lever and it stays the model's. Half the answer
+// is half the output tokens, and output is priced at 5× input.
 const VARIANT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['register', 'rationale', 'palette', 'type', 'space', 'feed', 'ornament', 'motion', 'imagery', 'chrome'],
+  // RATIONALE FIRST (W6). Structured output is generated in schema order, and the
+  // cheaper tiers run without thinking — so the variant says WHY before it commits
+  // to a register, instead of justifying a choice it has already made.
+  required: ['rationale', 'register', 'palette', 'type', 'space', 'feed', 'ornament'],
   properties: {
-    register: enumOf(REGISTERS),
     rationale: {
       type: 'string',
       description:
-        'One sentence naming something about THIS BUSINESS that drove the choice. Not a restatement of the measurements — the maths already has those.',
+        'One sentence, at most 20 words, naming something about THIS BUSINESS that drives this variant. Not a restatement of the measurements — the maths already has those.',
     },
+    register: enumOf(REGISTERS),
     palette: {
       type: 'object', additionalProperties: false,
       required: ['scheme', 'ground', 'saturation'],
@@ -100,15 +161,13 @@ const VARIANT_SCHEMA = {
     },
     type: {
       type: 'object', additionalProperties: false,
-      required: ['heading', 'body', 'scale', 'leading', 'headingCase', 'headingTracking', 'figures'],
+      required: ['heading', 'body', 'scale', 'leading', 'headingCase'],
       properties: {
         heading: enumOf(FONT_IDS),
         body: enumOf(FONT_IDS),
         scale: enumOf(SCALES),
         leading: enumOf(LEADINGS),
         headingCase: enumOf(HEADING_CASES),
-        headingTracking: enumOf(TRACKINGS),
-        figures: enumOf(FIGURES),
       },
     },
     space: {
@@ -118,37 +177,13 @@ const VARIANT_SCHEMA = {
     },
     feed: {
       type: 'object', additionalProperties: false,
-      required: ['rhythm', 'columns', 'lead', 'numbering'],
-      properties: {
-        rhythm: enumOf(RHYTHMS), columns: enumOf(['2', '3', '4']),
-        lead: enumOf(LEADS), numbering: { type: 'boolean' },
-      },
+      required: ['rhythm', 'lead'],
+      properties: { rhythm: enumOf(RHYTHMS), lead: enumOf(LEADS) },
     },
     ornament: {
       type: 'object', additionalProperties: false,
-      required: ['dropCap', 'quoteMark', 'grain', 'divider', 'corner', 'underline'],
-      properties: {
-        dropCap: enumOf(DROP_CAPS), quoteMark: enumOf(QUOTE_MARKS), grain: enumOf([0, 1, 2]),
-        divider: enumOf(DIVIDERS), corner: enumOf(CORNERS), underline: enumOf(UNDERLINES),
-      },
-    },
-    motion: {
-      type: 'object', additionalProperties: false,
-      required: ['entrance', 'hover', 'transition', 'intensity'],
-      properties: {
-        entrance: enumOf(ENTRANCES), hover: enumOf(HOVERS),
-        transition: enumOf(TRANSITIONS), intensity: enumOf([0, 1, 2]),
-      },
-    },
-    imagery: {
-      type: 'object', additionalProperties: false,
-      required: ['treatment'],
-      properties: { treatment: enumOf(TREATMENTS) },
-    },
-    chrome: {
-      type: 'object', additionalProperties: false,
-      required: ['header', 'footer', 'sticky'],
-      properties: { header: enumOf(HEADER_ARCHETYPES), footer: enumOf(FOOTER_ARCHETYPES), sticky: { type: 'boolean' } },
+      required: ['dropCap', 'quoteMark', 'corner'],
+      properties: { dropCap: enumOf(DROP_CAPS), quoteMark: enumOf(QUOTE_MARKS), corner: enumOf(CORNERS) },
     },
   },
 } as const
@@ -173,7 +208,7 @@ const OUTPUT_SCHEMA = {
   properties: {
     reading: {
       type: 'string',
-      description: 'Two sentences on what this business actually is, and what that means for how its writing should look.',
+      description: 'Two short sentences, at most 30 words, on what this business actually is and what that means for how its writing should look.',
     },
     faithful: { $ref: '#/$defs/variant' },
     elevated: { $ref: '#/$defs/variant' },
@@ -250,11 +285,13 @@ HARD RULES (a violation means your entire response is discarded and the maths sh
   2. Every choice must be inside its register's allow-list, below. A design the
      guardrails have to repair is a design you did not think through.
   3. Stay under the register's energy budget. Loudness is counted: a vivid palette,
-     a heavy display face, an oversize quote mark, grain, a big type scale, staggered
-     motion. A design is allowed TWO loud moves — one hero, everything else supports.
+     a heavy display face, an oversize quote mark, a big type scale. A design is
+     allowed TWO loud moves — one hero, everything else supports.
   4. Typefaces come from the catalogue by ID. Nothing else exists.
-  5. Never put a filter over photographs of people. A duotone on a team photo is a
-     stylistic flourish applied to someone's face and no business asked for it.
+
+You choose the axes that need judgement. The engine fills the rest — motion, the
+header archetype, dividers, columns, texture — inside the register you choose, so
+the register is the biggest single decision you make.
 
 THE REGISTERS
 
@@ -339,6 +376,30 @@ function briefDigest(b: BrandBrief | null | undefined): string {
   return l.join('\n')
 }
 
+/** The user turn, exactly as sent. Exported so cost can be measured on the real prompt. */
+export function directorUserMessage(ev: DesignEvidence, baseline: Directed, brief?: BrandBrief | null): string {
+  return `${evidenceDigest(ev, baseline)}\n${briefDigest(brief)}`
+}
+
+/**
+ * What determines the art director's answer, as one key — for the per-domain cache.
+ *
+ * The model, the director version, the prompt and schema as sent, and the measured
+ * evidence (its URL left out, so nike.com and https://www.nike.com/ share an entry).
+ * If the site changes its colours or its type, the evidence changes, the key
+ * changes, and a stale answer is never served; if WE change the prompt, every entry
+ * is retired at once.
+ */
+export function directionCacheKey(evidence: DesignEvidence): string {
+  const prompt = createHash('sha256').update(SYSTEM).update(JSON.stringify(OUTPUT_SCHEMA)).digest('hex').slice(0, 12)
+  return createHash('sha256')
+    .update(JSON.stringify({ model: designLlmModel(), director: DIRECTOR_VERSION, prompt, evidence: { ...evidence, url: undefined } }))
+    .digest('hex').slice(0, 24)
+}
+
+/** The system prompt, exactly as sent. */
+export const DESIGN_SYSTEM_PROMPT = (): string => SYSTEM
+
 // ─── Assembly ────────────────────────────────────────────────────────────────
 
 type RawVariant = Record<string, unknown>
@@ -422,7 +483,7 @@ function assemble(
       trace: [{
         axis: '*', value: 'directed',
         from: typeof raw.rationale === 'string' ? raw.rationale.slice(0, 400) : 'no rationale given',
-        rule: `model ${DESIGN_LLM_MODEL}`,
+        rule: `model ${designLlmModel()}`,
       }],
       repairs: res.repairs,
     },
@@ -495,6 +556,7 @@ export async function directWithModel(
     return fallback(['no ANTHROPIC_API_KEY — the deterministic director is the design'])
   }
 
+  const modelId = designLlmModel()
   let payload: Record<string, unknown>
   let usage: DirectedByModel['usage'] = null
 
@@ -503,32 +565,33 @@ export async function directWithModel(
   } else {
     try {
       const client = new Anthropic({ maxRetries: 1 })
+      const shape = requestShape(modelId)
       const res = await client.messages.create(
         {
-          model: DESIGN_LLM_MODEL,
+          model: modelId,
           max_tokens: 8000,
-          // Art direction is a judgement task with a lot of interacting
-          // constraints — exactly what adaptive thinking is for.
-          thinking: { type: 'adaptive' },
+          ...(shape.thinking ? { thinking: shape.thinking } : {}),
           output_config: {
-            effort: 'high',
+            ...(shape.effort ? { effort: shape.effort } : {}),
             format: { type: 'json_schema', schema: OUTPUT_SCHEMA as unknown as Record<string, unknown> },
           },
           system: SYSTEM,
-          messages: [{ role: 'user', content: `${evidenceDigest(evidence, baseline)}\n${briefDigest(opts.brief)}` }],
+          messages: [{ role: 'user', content: directorUserMessage(evidence, baseline, opts.brief) }],
         },
         { timeout: TIMEOUT_MS },
       )
-      if (res.stop_reason === 'refusal') return fallback(['the model declined the request'], DESIGN_LLM_MODEL)
-      usage = { input: res.usage.input_tokens, output: res.usage.output_tokens }
+      if (res.stop_reason === 'refusal') return fallback(['the model declined the request'], modelId)
+      if (res.stop_reason === 'max_tokens') return fallback(['the answer was cut off at max_tokens'], modelId)
+      const tokens = { input: res.usage.input_tokens, output: res.usage.output_tokens }
+      usage = { ...tokens, costUsd: costOf(modelId, tokens) }
       const text = res.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('')
       payload = JSON.parse(text) as Record<string, unknown>
     } catch (e) {
-      return fallback([`model call failed: ${e instanceof Error ? e.message : String(e)}`], DESIGN_LLM_MODEL)
+      return fallback([`model call failed: ${e instanceof Error ? e.message : String(e)}`], modelId)
     }
   }
 
-  const model = mock ? 'mock' : DESIGN_LLM_MODEL
+  const model = mock ? 'mock' : modelId
   const base = seedFrom(opts.siteId ?? evidence.url ?? 'carma', DIRECTOR_VERSION, 'llm')
   const recent = opts.recent ?? {}
   const violations: string[] = []

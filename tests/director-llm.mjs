@@ -26,7 +26,7 @@ import { collectStylesheets } from '@/lib/grabber-lab/evalRun'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { readEvidence } from '@/lib/design/evidence'
 import { directDeterministic } from '@/lib/design/director'
-import { directWithModel, disagreements, DESIGN_LLM_MODEL } from '@/lib/design/llm'
+import { directWithModel, disagreements, DESIGN_LLM_MODEL, MODEL_PRICE } from '@/lib/design/llm'
 import { validateGenome } from '@/lib/design/validate'
 import { applyCohesion, energyOf, REGISTER_RULES } from '@/lib/design/cohesion'
 import { compileGenome } from '@/lib/design/compile'
@@ -36,7 +36,10 @@ import { font } from '@/lib/design/fonts'
 const ROOT = process.cwd()
 const HTML_DIR = path.join(ROOT, '.grabber-cache', 'html')
 const CSS_DIR = path.join(ROOT, '.grabber-cache', 'css')
-const OUT = path.join(ROOT, 'tests', 'grabber', 'llm-director.json')
+// One record per model, so a cheaper tier is always compared against the measured
+// W4 baseline (llm-director.json = claude-opus-5, 2026-09-20) instead of overwriting it.
+const OUT = path.join(ROOT, 'tests', 'grabber', DESIGN_LLM_MODEL === 'claude-opus-5' ? 'llm-director.json' : `llm-director.${DESIGN_LLM_MODEL}.json`)
+const BASELINE = path.join(ROOT, 'tests', 'grabber', 'llm-director.json')
 
 const args = process.argv.slice(2)
 const LIVE = args.includes('--live')
@@ -222,7 +225,7 @@ ok(DESIGN_OUTPUT_SCHEMA.properties.faithful.$ref === '#/$defs/variant', 'the var
 ok(vs.additionalProperties === false, 'the variant schema allows additional properties')
 ok(Array.isArray(vs.properties.type.properties.heading.enum), 'type.heading is not an enum')
 ok(vs.properties.type.properties.heading.enum.length >= 20, 'the font enum is suspiciously short')
-ok(!('policy' in vs.properties.chrome.properties), 'the model can choose the chrome POLICY — that is a consent decision, not a design one')
+ok(!('policy' in (vs.properties.chrome?.properties ?? {})), 'the model can choose the chrome POLICY — that is a consent decision, not a design one')
 ok(!('seed' in (vs.properties.palette.properties ?? {})), 'the model can choose the palette seed — that would undo W2')
 note('axes the model chooses', String(Object.keys(vs.properties).length))
 note('font ids it may name', String(vs.properties.type.properties.heading.enum.length))
@@ -276,6 +279,18 @@ if (!LIVE) {
   note('latency', `W3 median ${pct(rows.map(r => r.w3.ms), 0.5)}ms · W4 median ${pct(rows.map(r => r.w4.ms), 0.5)}ms`)
   const tokens = directed.reduce((a, r) => ({ input: a.input + (r.w4.usage?.input ?? 0), output: a.output + (r.w4.usage?.output ?? 0) }), { input: 0, output: 0 })
   note('tokens', `${tokens.input} in · ${tokens.output} out across ${directed.length} calls`)
+  // THE NUMBER THIS WAVE EXISTS FOR — from the tokens the API reported, not an estimate.
+  const costs = directed.map(r => r.w4.usage?.costUsd).filter(c => typeof c === 'number')
+  const perCall = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : null
+  note('cost per call', perCall === null ? 'unpriced model' : `$${perCall.toFixed(4)} mean · $${Math.max(...costs).toFixed(4)} worst · ${DESIGN_LLM_MODEL}`)
+  if (existsSync(BASELINE) && OUT !== BASELINE) {
+    const b = JSON.parse(readFileSync(BASELINE, 'utf8'))
+    const n = b.sites.filter(x => x.source === 'directed').length || 1
+    const p = MODEL_PRICE[b.model]
+    const bCost = p ? (b.tokens.input * p.input + b.tokens.output * p.output) / 1e6 / n : null
+    note('W4 baseline', `${b.model} · $${bCost?.toFixed(4)} per call · distinctiveness ${b.distinctiveness.w4SameSites ?? b.distinctiveness.w4}`)
+  }
+  ok(perCall === null || DESIGN_LLM_MODEL === 'claude-opus-5' || perCall < 0.01, `a call costs $${perCall?.toFixed(4)} — the crackdown's ceiling is $0.01`)
 
   // Every live genome must clear the same bars the deterministic ones do.
   let liveBad = 0
@@ -299,11 +314,11 @@ if (!LIVE) {
 
   mkdirSync(path.dirname(OUT), { recursive: true })
   writeFileSync(OUT, JSON.stringify({
-    model: DESIGN_LLM_MODEL, at: new Date().toISOString(),
+    model: DESIGN_LLM_MODEL, at: new Date().toISOString(), costPerCall: perCall,
     distinctiveness: { w3SameSites: dW3, w4SameSites: dW4, w3AllAttempted: distinctiveness(w3All), sites: directed.length }, tokens,
     sites: rows.map(r => ({
       id: r.c.id, name: r.c.name, url: r.c.url, source: r.w4.source, ms: r.w4.ms,
-      violations: r.w4.violations, rationale: r.w4.rationale,
+      violations: r.w4.violations, rationale: r.w4.rationale, usage: r.w4.usage,
       w3: ['faithful', 'elevated', 'reimagined'].map(v => ({ variant: v, register: r.w3[v].genome.register, heading: font(r.w3[v].genome.type.heading).family, ground: r.w3[v].genome.palette.ground, density: r.w3[v].genome.space.density, rhythm: r.w3[v].genome.feed.rhythm })),
       w4: r.w4.source !== 'directed' ? null : ['faithful', 'elevated', 'reimagined'].map(v => ({ variant: v, register: r.w4[v].genome.register, heading: font(r.w4[v].genome.type.heading).family, ground: r.w4[v].genome.palette.ground, density: r.w4[v].genome.space.density, rhythm: r.w4[v].genome.feed.rhythm })),
       disagreements: r.w4.source !== 'directed' ? [] : disagreements(r.w3, r.w4),
