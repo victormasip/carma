@@ -21,9 +21,9 @@
 // glimpse's bundle never carries the Anthropic SDK.
 //
 // WHY A SIGNED TOKEN AND NOT THE EVIDENCE ITSELF
-// The upgrade is a paid model call on an unauthenticated endpoint (~$0.01 on
-// Haiku 4.5 since W6, ~$0.10 on Opus before), and its input is a prompt. Accepting evidence from the browser would make it an open
-// relay for both — unbounded spend from any IP pool, and a prompt the attacker
+// The upgrade is a paid model call on an unauthenticated endpoint (~$0.017 on
+// Sonnet 5, measured 2026-09-28; ~$0.10 on Opus before), and its input is a
+// prompt. Accepting evidence from the browser would make it an open relay for both — unbounded spend from any IP pool, and a prompt the attacker
 // writes. Accepting only what OUR glimpse signed means every upgrade was paid for
 // by a scrape that passed the glimpse's own rate limits, and its prompt is ours.
 // No row per visitor — strings across the boundary, the same decision glimpse.ts

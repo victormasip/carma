@@ -57,17 +57,31 @@ import {
 // the response opens with `reading` (what this business is) and each variant with
 // its `rationale`, so the model reasons in the answer before it chooses anything.
 //
-// So the default is claude-haiku-4-5, thinking off, answering only the judgement
-// axes (below). Projected from the measured W4 token profile at $0.008–0.011 a call;
-// NOT yet measured live — on 2026-09-23 the Anthropic account was out of credit
-// (even count_tokens was refused). The live A/B against the W4 baseline, on the same
-// sites, is `npm run test:director-llm -- --live --n=10 --trace=resto-verne`, and it
-// FAILS if a call costs $0.01 or more. Override the model with DESIGN_LLM_MODEL; the
-// request below adapts to the tier.
+// THE INTELLIGENCE GAUGE (W7, 2026-09-28, measured live — Verne, the same brief
+// production passes, three samples each; see docs/plans §15.13):
+//
+//   haiku-4-5,  no thinking   $0.0059/call  ~6s   UNDERSTANDS, DOES NOT DESIGN IT.
+//     Its rationales read "aventura submarina", but its typefaces copy the maths
+//     (Outfit / DM Sans / Jost) — once claiming "serifs" over a DM Sans genome.
+//   sonnet-5,   no thinking   $0.0174/call  ~10s  THE LEAP, IN THE DESIGN.
+//     Elevat moves to warm with a literary serif (Lora, Fraunces — Opus's own W4
+//     pick); Reimaginat a period serif on ink, "an exploration notebook". Rationale
+//     and genome agree.
+//   sonnet-5 + adaptive thinking, NO brief  $0.0525/call  30–65s  2/3.
+//   Without the brief every tier WITHOUT thinking read Verne as "a design studio":
+//   the synthesis brief is what carries the business, so the gate passes it
+//   (tests/grabber/briefs.json).
+//
+// So the default is claude-sonnet-5, thinking off — ~83% below Opus's $0.0998, and
+// $0 for every repeat visit to a domain (design/store.ts). The founder's rule was:
+// Haiku unless it is too literal, Sonnet if so, never Opus. The live gate fails a
+// call above the ceiling below. Override with DESIGN_LLM_MODEL; the request adapts.
 //
 // Read at CALL time, like the mock flag: config a test needs to toggle cannot be
 // frozen at import.
-export const DESIGN_MODEL_DEFAULT = 'claude-haiku-4-5'
+export const DESIGN_MODEL_DEFAULT = 'claude-sonnet-5'
+/** The most one call may cost, per tier — what the live gate enforces. */
+export const COST_CEILING: Record<string, number> = { 'claude-haiku-4-5': 0.01, 'claude-sonnet-5': 0.02 }
 export const designLlmModel = (): string => process.env.DESIGN_LLM_MODEL || DESIGN_MODEL_DEFAULT
 /** The model as configured when this module loaded — for banners and logs only. */
 export const DESIGN_LLM_MODEL = designLlmModel()
@@ -399,7 +413,6 @@ export function directionCacheKey(evidence: DesignEvidence): string {
 
 /** The system prompt, exactly as sent. */
 export const DESIGN_SYSTEM_PROMPT = (): string => SYSTEM
-
 // ─── Assembly ────────────────────────────────────────────────────────────────
 
 type RawVariant = Record<string, unknown>

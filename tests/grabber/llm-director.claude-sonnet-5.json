@@ -1,0 +1,4040 @@
+{
+  "model": "claude-sonnet-5",
+  "at": "2026-09-27T23:33:34.164Z",
+  "costPerCall": 0.016812200000000003,
+  "distinctiveness": {
+    "w3SameSites": 0.622,
+    "w4SameSites": 0.617,
+    "w3AllAttempted": 0.622,
+    "sites": 10
+  },
+  "tokens": {
+    "input": 47681,
+    "output": 7276
+  },
+  "sites": [
+    {
+      "id": "dental-cdb",
+      "name": "Clínica Dental Barcelona",
+      "url": "https://www.clinicadentalbarcelona.com/",
+      "source": "directed",
+      "ms": 9246,
+      "violations": [],
+      "rationale": {
+        "faithful": "Their own site already pairs a low-contrast grotesk with a geometric body at ordinary density — reproduce that dentist's-office cleanliness.",
+        "elevated": "Patients researching a dentist want calm reassurance; quiet restraint and generous air read as trustworthy, not sterile.",
+        "reimagined": "Inverting to ink turns a routine dental clinic into a confident modern practice, a real leap from their grey backdrop."
+      },
+      "usage": {
+        "input": 4758,
+        "output": 745,
+        "costUsd": 0.016966
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Archivo",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Sora",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Archivo",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Sora",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.414",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 290637799,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3454542801925129,
+              "c": 0.1357487706820862,
+              "h": 260.44507199001885
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#FFFFFF",
+              "accent": "#05337e",
+              "bg": "#EEEEEE",
+              "surface": "#ffffff",
+              "text": "#1b1b1b",
+              "muted": "#E5E5E5",
+              "border": "#e7e7e7",
+              "link": "#05337e"
+            }
+          },
+          "type": {
+            "heading": "spaceGrotesk",
+            "body": "dmSans",
+            "scale": 1.25,
+            "measure": 78,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "hairline",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "tint",
+            "transition": "shared-image",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 1719968642,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3454542801925129,
+              "c": 0.1357487706820862,
+              "h": 260.44507199001885
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#05337e"
+            }
+          },
+          "type": {
+            "heading": "archivo",
+            "body": "outfit",
+            "scale": 1.25,
+            "measure": 76,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "vast",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 308330309,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3454542801925129,
+              "c": 0.1357487706820862,
+              "h": 260.44507199001885
+            },
+            "scheme": "monochrome",
+            "ground": "ink",
+            "saturation": "natural",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "sora",
+            "body": "outfit",
+            "scale": 1.333,
+            "measure": 73,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "comfortable",
+            "lanes": "content-wide-full",
+            "rule": "none"
+          },
+          "feed": {
+            "rhythm": "gridxl",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "mark",
+            "corner": "pill",
+            "underline": "hover"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "shift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "resto-verne",
+      "name": "Verne Barcelona",
+      "url": "https://www.vernebarcelona.com/",
+      "source": "directed",
+      "ms": 8074,
+      "violations": [],
+      "rationale": {
+        "faithful": "Mantiene el sans geométrico y la calma azul actuales, ordenando la jerarquía que hoy confunde al lector.",
+        "elevated": "Una aventura submarina de Julio Verne pide calidez narrativa y un serif con carácter, no la frialdad de un producto digital.",
+        "reimagined": "Para una experiencia familiar de aventura bajo el océano, un fondo tinta evoca la profundidad marina y da al relato un aire de expedición."
+      },
+      "usage": {
+        "input": 5009,
+        "output": 749,
+        "costUsd": 0.017508
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Lora",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Fraunces",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "magazine"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Lora"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Inter",
+          "model": "Work Sans"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Jost",
+          "model": "Fraunces"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "magazine"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "soft"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 3294579593,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "complementary",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#007cba",
+              "accent": "#2ea3f2",
+              "bg": "#ddd",
+              "surface": "#ffffff",
+              "text": "#666",
+              "muted": "#abb8c3",
+              "border": "#e5e7eb",
+              "link": "#2ea3f2"
+            }
+          },
+          "type": {
+            "heading": "outfit",
+            "body": "interTight",
+            "scale": 1.25,
+            "measure": 66,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "heavy",
+            "maxWidthPx": 1080
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover-grow",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "shared-image",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          },
+          "prose": {
+            "blockquoteBorderColor": "#2ea3f2"
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "warm",
+          "origin": {
+            "source": "directed",
+            "seed": 3238818536,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "analogous",
+            "ground": "tinted",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#2ea3f2"
+            }
+          },
+          "type": {
+            "heading": "loraSerif",
+            "body": "workSans",
+            "scale": 1.333,
+            "measure": 58,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "heavy"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "raised",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "offset"
+          },
+          "motion": {
+            "entrance": "rise",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 4162921403,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "triad",
+            "ground": "ink",
+            "saturation": "natural",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "fraunces",
+            "body": "figtree",
+            "scale": 1.414,
+            "measure": 75,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": true
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "comfortable",
+            "lanes": "content-wide-full",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "magazine",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "none",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "gym-colom",
+      "name": "CEM Colom",
+      "url": "https://www.cemcolom.com/",
+      "source": "directed",
+      "ms": 10696,
+      "violations": [],
+      "rationale": {
+        "faithful": "Keeps the sans-on-paper, compact-card format that already carries the red brand and people photography well.",
+        "elevated": "The heavy reliance on people photography deserves generous air and a quieter type voice so faces, not chrome, carry the page.",
+        "reimagined": "A confident red-driven brand can invert to ink and let the colour become a genuine statement instead of an accent."
+      },
+      "usage": {
+        "input": 4720,
+        "output": 725,
+        "costUsd": 0.01669
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Manrope",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Manrope",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "cut"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 2128246317,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6327006512990554,
+              "c": 0.2269247896809553,
+              "h": 23.993925344750725
+            },
+            "scheme": "complementary",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#F5333F",
+              "accent": "#f5333f",
+              "bg": "#fff",
+              "text": "#001432",
+              "muted": "#585e6a",
+              "link": "#c36"
+            }
+          },
+          "type": {
+            "heading": "figtree",
+            "body": "plusJakarta",
+            "scale": 1.2,
+            "measure": 64,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "compact",
+            "lanes": "content-wide",
+            "rule": "heavy",
+            "maxWidthPx": 1230
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "none",
+            "numbering": true
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 1,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 246877036,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6327006512990554,
+              "c": 0.2269247896809553,
+              "h": 23.993925344750725
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#f5333f"
+            }
+          },
+          "type": {
+            "heading": "interTight",
+            "body": "workSans",
+            "scale": 1.25,
+            "measure": 78,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "vast",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": true
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "always-thin"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 189816151,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6327006512990554,
+              "c": 0.2269247896809553,
+              "h": 23.993925344750725
+            },
+            "scheme": "complementary",
+            "ground": "ink",
+            "saturation": "vivid",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "manrope",
+            "body": "manrope",
+            "scale": 1.333,
+            "measure": 73,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "comfortable",
+            "lanes": "content-wide-full",
+            "rule": "heavy"
+          },
+          "feed": {
+            "rhythm": "overlay",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "mark",
+            "corner": "cut",
+            "underline": "hover"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "legal-granvia",
+      "name": "Gran Via Advocats",
+      "url": "https://granviaadvocats.com/",
+      "source": "directed",
+      "ms": 8217,
+      "violations": [],
+      "rationale": {
+        "faithful": "Keeps the sans-geometric identity and tidy compact layout the firm already uses, just with a working hierarchy.",
+        "elevated": "A legal practice earns trust through restraint, so quiet register with real air replaces the busy palette and flat scale.",
+        "reimagined": "Inverting to ink gives the firm gravitas and authority, a bolder move than a law site usually risks but still legible and composed."
+      },
+      "usage": {
+        "input": 4856,
+        "output": 738,
+        "costUsd": 0.017092
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "DM Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.dropCap",
+          "maths": "raised",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 1960373241,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#2ea3f2",
+              "accent": "#2ea3f2",
+              "bg": "#fff",
+              "surface": "#ffffff",
+              "text": "#666",
+              "muted": "#abb8c3",
+              "border": "#e5e7eb",
+              "link": "#2ea3f2"
+            }
+          },
+          "type": {
+            "heading": "jost",
+            "body": "manrope",
+            "scale": 1.25,
+            "measure": 68,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "compact",
+            "lanes": "content-wide",
+            "rule": "none",
+            "maxWidthPx": 1425
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "square",
+            "underline": "offset",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "zoom",
+            "transition": "none",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          },
+          "prose": {
+            "blockquoteBorderColor": "#2ea3f2"
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 3292450264,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#2ea3f2"
+            }
+          },
+          "type": {
+            "heading": "outfit",
+            "body": "workSans",
+            "scale": 1.333,
+            "measure": 74,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "severe",
+          "origin": {
+            "source": "directed",
+            "seed": 101785611,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.6891474707892915,
+              "c": 0.1531508000067707,
+              "h": 243.9286562545135
+            },
+            "scheme": "monochrome",
+            "ground": "ink",
+            "saturation": "muted",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "archivo",
+            "body": "inter",
+            "scale": 1.414,
+            "measure": 67,
+            "leading": "normal",
+            "headingCase": "upper",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "heavy"
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "square",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "beauty-hipolita",
+      "name": "Hipolita",
+      "url": "https://www.hipolita.cat/",
+      "source": "directed",
+      "ms": 7714,
+      "violations": [],
+      "rationale": {
+        "faithful": "Sixteen mixed images and six sections suggest a personal, photo-led site best served by an editorial feed as-is.",
+        "elevated": "With no brand colour asserting itself and heavy imagery, quiet restraint lets the photographs and Catalan voice carry the page.",
+        "reimagined": "A dense, image-rich personal site could become a warm, unhurried read that trusts a serif and slows the pace."
+      },
+      "usage": {
+        "input": 4682,
+        "output": 740,
+        "costUsd": 0.016764
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Work Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Work Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "warm",
+          "heading": "Lora",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "magazine"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "muted",
+          "model": "natural"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "warm"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Plus Jakarta Sans",
+          "model": "Lora"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Newsreader"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "generous"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "magazine"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "4",
+          "model": "3"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.ground",
+          "maths": "ink",
+          "model": "tinted"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 2719594463,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.21778650104232838,
+              "c": 8.117773114346022e-9,
+              "h": 89.87556270749873
+            },
+            "scheme": "complementary",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#1a1a1a",
+              "accent": "#1a1a1a",
+              "bg": "#ffffff",
+              "surface": "#ffffff",
+              "text": "#1f2937",
+              "muted": "#6b7280",
+              "border": "#e5e7eb"
+            }
+          },
+          "type": {
+            "heading": "manrope",
+            "body": "figtree",
+            "scale": 1.25,
+            "measure": 70,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "compact",
+            "lanes": "content-wide",
+            "rule": "none",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 1,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "always-thin",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "zoom",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 390870106,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.21778650104232838,
+              "c": 8.117773114346022e-9,
+              "h": 89.87556270749873
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#1a1a1a"
+            }
+          },
+          "type": {
+            "heading": "workSans",
+            "body": "workSans",
+            "scale": 1.25,
+            "measure": 63,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "heavy"
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "hover"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "warm",
+          "origin": {
+            "source": "directed",
+            "seed": 2400525805,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.21778650104232838,
+              "c": 8.117773114346022e-9,
+              "h": 89.87556270749873
+            },
+            "scheme": "analogous",
+            "ground": "tinted",
+            "saturation": "natural",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "loraSerif",
+            "body": "newsreader",
+            "scale": 1.333,
+            "measure": 63,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "magazine",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "raised",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "mark",
+            "corner": "soft",
+            "underline": "always-thin"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "estate-westside",
+      "name": "West Side",
+      "url": "https://westside.cat/",
+      "source": "directed",
+      "ms": 8026,
+      "violations": [],
+      "rationale": {
+        "faithful": "Their own layout already leans on many small photos at a brisk pace; keep the geometric sans and tight rhythm.",
+        "elevated": "A green service mark deserves quiet confidence and air so the 256 images can breathe instead of crowd.",
+        "reimagined": "Inverting to ink turns a place-heavy, photo-dense identity into a gallery-like showcase with real visual authority."
+      },
+      "usage": {
+        "input": 4811,
+        "output": 702,
+        "costUsd": 0.016642
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "title"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 729624554,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.511514474388401,
+              "c": 0.10651606850403328,
+              "h": 144.1579219359709
+            },
+            "scheme": "analogous",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#8a8a8b",
+              "accent": "#3c763d",
+              "bg": "#fff",
+              "surface": "#ffffff",
+              "text": "#333",
+              "muted": "#abb8c3",
+              "border": "#e5e7eb",
+              "link": "#8a8a8b"
+            }
+          },
+          "type": {
+            "heading": "outfit",
+            "body": "inter",
+            "scale": 1.25,
+            "measure": 71,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "compact",
+            "lanes": "content-wide",
+            "rule": "hairline",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "gradient",
+            "corner": "soft",
+            "underline": "none",
+            "radiusPx": 4
+          },
+          "motion": {
+            "entrance": "rise",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 423364443,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.511514474388401,
+              "c": 0.10651606850403328,
+              "h": 144.1579219359709
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#3c763d"
+            }
+          },
+          "type": {
+            "heading": "dmSans",
+            "body": "figtree",
+            "scale": 1.333,
+            "measure": 64,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 3064580108,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.511514474388401,
+              "c": 0.10651606850403328,
+              "h": 144.1579219359709
+            },
+            "scheme": "complementary",
+            "ground": "ink",
+            "saturation": "vivid",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "jost",
+            "body": "interTight",
+            "scale": 1.414,
+            "measure": 66,
+            "leading": "normal",
+            "headingCase": "title",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "comfortable",
+            "lanes": "content-wide-full",
+            "rule": "none"
+          },
+          "feed": {
+            "rhythm": "overlay",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "square",
+            "underline": "always-thin"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "edu-idiomarum",
+      "name": "Idiomarum",
+      "url": "https://idiomarum.com/",
+      "source": "directed",
+      "ms": 7789,
+      "violations": [],
+      "rationale": {
+        "faithful": "Keeps their geometric sans and comfortable spacing, only fixing the contrast failure the measurements exposed.",
+        "elevated": "A single disciplined hue replaces the five scattered clusters, letting the geometric sans finally read as chosen.",
+        "reimagined": "An ink ground and a decisive grotesk give this unresolved brand the confidence its scattered palette never had."
+      },
+      "usage": {
+        "input": 4735,
+        "output": 725,
+        "costUsd": 0.01672
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Figtree",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "gridxl"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.25",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Figtree",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Sora",
+          "model": "Figtree"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "gridxl"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 963406841,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.5607994560246643,
+              "c": 0.13145009239604027,
+              "h": 241.32102539156293
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#007cba",
+              "accent": "#007cba",
+              "bg": "#ddd",
+              "surface": "#ffffff",
+              "text": "#1f2937",
+              "muted": "#abb8c3",
+              "border": "#e5e7eb"
+            }
+          },
+          "type": {
+            "heading": "dmSans",
+            "body": "jost",
+            "scale": 1.25,
+            "measure": 69,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "heavy",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 1,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "offset",
+            "radiusPx": 25
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "tint",
+            "transition": "none",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 2295483864,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.5607994560246643,
+              "c": 0.13145009239604027,
+              "h": 241.32102539156293
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#007cba"
+            }
+          },
+          "type": {
+            "heading": "outfit",
+            "body": "outfit",
+            "scale": 1.333,
+            "measure": 65,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "vast",
+            "lanes": "content-wide",
+            "rule": "none"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "none"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 4052787211,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.5607994560246643,
+              "c": 0.13145009239604027,
+              "h": 241.32102539156293
+            },
+            "scheme": "complementary",
+            "ground": "ink",
+            "saturation": "natural",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "archivo",
+            "body": "figtree",
+            "scale": 1.333,
+            "measure": 74,
+            "leading": "normal",
+            "headingCase": "upper",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "compact",
+            "lanes": "content-wide-full",
+            "rule": "heavy"
+          },
+          "feed": {
+            "rhythm": "gridxl",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "square",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "physio-fclinics",
+      "name": "FisioClinics BCN",
+      "url": "https://barcelona.fisio-clinics.com/",
+      "source": "directed",
+      "ms": 7611,
+      "violations": [],
+      "rationale": {
+        "faithful": "A physio practice benefits from clean, approachable sans type and orderly compact cards like their current site.",
+        "elevated": "Recovery and care call for calm generous space and a trustworthy humanist sans, not a dense clinic-brochure grid.",
+        "reimagined": "Inverting to a dark, confident ground reframes physiotherapy as expert body-science, a real departure from the clinical-white norm."
+      },
+      "usage": {
+        "input": 4699,
+        "output": 703,
+        "costUsd": 0.016428
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Work Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Inter",
+          "model": "DM Sans"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Work Sans",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "soft"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 1093474087,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3441348115624219,
+              "c": 0.05909930965431168,
+              "h": 210.30745179844033
+            },
+            "scheme": "complementary",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#337ab7",
+              "accent": "#01414a",
+              "bg": "#fff",
+              "surface": "#ffffff",
+              "text": "#333",
+              "muted": "#6b7280",
+              "border": "#e5e7eb",
+              "link": "#337ab7"
+            }
+          },
+          "type": {
+            "heading": "manrope",
+            "body": "manrope",
+            "scale": 1.25,
+            "measure": 78,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.333,
+            "density": "compact",
+            "lanes": "content-wide",
+            "rule": "hairline",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "gradient",
+            "corner": "soft",
+            "underline": "hover-grow",
+            "radiusPx": 4
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "zoom",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 44440770,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3441348115624219,
+              "c": 0.05909930965431168,
+              "h": 210.30745179844033
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#01414a"
+            }
+          },
+          "type": {
+            "heading": "dmSans",
+            "body": "workSans",
+            "scale": 1.333,
+            "measure": 78,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "none"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": true
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover"
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "lift",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 808262277,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3441348115624219,
+              "c": 0.05909930965431168,
+              "h": 210.30745179844033
+            },
+            "scheme": "complementary",
+            "ground": "ink",
+            "saturation": "natural",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "archivo",
+            "body": "figtree",
+            "scale": 1.414,
+            "measure": 62,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "comfortable",
+            "lanes": "content-wide-full",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "gridxl",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover-grow"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "shared-image",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "florist-herbs",
+      "name": "Herbs",
+      "url": "https://www.herbs.es/",
+      "source": "directed",
+      "ms": 8151,
+      "violations": [],
+      "rationale": {
+        "faithful": "Keeps the site's own quiet green restraint and airy sectioning, letting the sans headings breathe as they already do.",
+        "elevated": "A botanical business earns a serif with warmth and craft, giving the greenery a print-heritage trust it currently lacks.",
+        "reimagined": "Inverting to ink turns the herbal greens into a moody apothecary statement, a real departure from the current paper-and-pastel look."
+      },
+      "usage": {
+        "input": 4720,
+        "output": 733,
+        "costUsd": 0.01677
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Instrument Serif",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Newsreader",
+          "ground": "tinted",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Space Grotesk",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "classic",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Instrument Serif",
+          "model": "Newsreader"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Plus Jakarta Sans",
+          "model": "Space Grotesk"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 2791571903,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3634423281156393,
+              "c": 0.10825178129066654,
+              "h": 145.93044948394495
+            },
+            "scheme": "analogous",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#044c15",
+              "accent": "#044c15",
+              "bg": "#ffffff",
+              "surface": "#ffffff",
+              "text": "#000000",
+              "muted": "#6b7280",
+              "border": "#000000"
+            }
+          },
+          "type": {
+            "heading": "interTight",
+            "body": "figtree",
+            "scale": 1.25,
+            "measure": 60,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "vast",
+            "lanes": "content-wide",
+            "rule": "none",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "none",
+            "radiusPx": 8
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grayscale",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "warm",
+          "origin": {
+            "source": "directed",
+            "seed": 1162728250,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3634423281156393,
+              "c": 0.10825178129066654,
+              "h": 145.93044948394495
+            },
+            "scheme": "analogous",
+            "ground": "tinted",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#044c15"
+            }
+          },
+          "type": {
+            "heading": "newsreader",
+            "body": "workSans",
+            "scale": 1.333,
+            "measure": 78,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": true,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "raised",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "hover"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "grain",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "severe",
+          "origin": {
+            "source": "directed",
+            "seed": 1293915853,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.3634423281156393,
+              "c": 0.10825178129066654,
+              "h": 145.93044948394495
+            },
+            "scheme": "duotone",
+            "ground": "ink",
+            "saturation": "muted",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "spaceGrotesk",
+            "body": "manrope",
+            "scale": 1.25,
+            "measure": 58,
+            "leading": "normal",
+            "headingCase": "upper",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 16
+          },
+          "space": {
+            "ratio": 1.5,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "none"
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "square",
+            "underline": "always-thin"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "auto-xaus",
+      "name": "Xaus Taller Mecànic",
+      "url": "https://www.xaustm.es/",
+      "source": "directed",
+      "ms": 8697,
+      "violations": [],
+      "rationale": {
+        "faithful": "Poppins geometric sans and single-hue red on white are already their whole identity — keep it plain.",
+        "elevated": "The red is their one real asset; give it room to signal against generous quiet space instead of competing sections.",
+        "reimagined": "Inverting to ink lets the brand red act like a signature stamp rather than a button colour, a real departure from their flat white site."
+      },
+      "usage": {
+        "input": 4691,
+        "output": 716,
+        "costUsd": 0.016542
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Bodoni Moda",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "compact"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Bodoni Moda",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "compact"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ],
+      "genomes": {
+        "faithful": {
+          "v": 1,
+          "register": "contemporary",
+          "origin": {
+            "source": "directed",
+            "seed": 4199765570,
+            "variant": "faithful"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.4268088846013321,
+              "c": 0.1751422665579555,
+              "h": 29.2338851923426
+            },
+            "scheme": "complementary",
+            "ground": "paper",
+            "saturation": "natural",
+            "contrast": "AA",
+            "pins": {
+              "primary": "#333333",
+              "accent": "#980000",
+              "bg": "#ffffff",
+              "surface": "#ffffff",
+              "text": "#333333",
+              "muted": "#abb8c3",
+              "border": "#e5e7eb",
+              "link": "#333333"
+            }
+          },
+          "type": {
+            "heading": "jost",
+            "body": "dmSans",
+            "scale": 1.25,
+            "measure": 63,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "loose",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 17
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "heavy",
+            "maxWidthPx": 1200
+          },
+          "feed": {
+            "rhythm": "minimal",
+            "mode": "grid",
+            "columns": "3",
+            "lead": "none",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "soft",
+            "underline": "hover",
+            "radiusPx": 10
+          },
+          "motion": {
+            "entrance": "none",
+            "hover": "tint",
+            "transition": "crossfade",
+            "intensity": 1
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "keep",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "elevated": {
+          "v": 1,
+          "register": "quiet",
+          "origin": {
+            "source": "directed",
+            "seed": 2226800787,
+            "variant": "elevated"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.4268088846013321,
+              "c": 0.1751422665579555,
+              "h": 29.2338851923426
+            },
+            "scheme": "monochrome",
+            "ground": "paper",
+            "saturation": "muted",
+            "contrast": "AA",
+            "pins": {
+              "accent": "#980000"
+            }
+          },
+          "type": {
+            "heading": "outfit",
+            "body": "outfit",
+            "scale": 1.25,
+            "measure": 76,
+            "leading": "airy",
+            "headingCase": "sentence",
+            "headingTracking": "normal",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 17
+          },
+          "space": {
+            "ratio": 1.25,
+            "density": "generous",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "editorial",
+            "mode": "grid",
+            "columns": "4",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "none",
+            "grain": 0,
+            "divider": "none",
+            "corner": "soft",
+            "underline": "offset"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "lift",
+            "transition": "crossfade",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "harmonise",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        },
+        "reimagined": {
+          "v": 1,
+          "register": "bold",
+          "origin": {
+            "source": "directed",
+            "seed": 2462283252,
+            "variant": "reimagined"
+          },
+          "palette": {
+            "seed": {
+              "l": 0.4268088846013321,
+              "c": 0.1751422665579555,
+              "h": 29.2338851923426
+            },
+            "scheme": "complementary",
+            "ground": "ink",
+            "saturation": "vivid",
+            "contrast": "AA"
+          },
+          "type": {
+            "heading": "bodoniModa",
+            "body": "interTight",
+            "scale": 1.414,
+            "measure": 66,
+            "leading": "normal",
+            "headingCase": "sentence",
+            "headingTracking": "tight",
+            "figures": "lining",
+            "opticalSizing": false,
+            "basePx": 17
+          },
+          "space": {
+            "ratio": 1.618,
+            "density": "comfortable",
+            "lanes": "content-wide",
+            "rule": "hairline"
+          },
+          "feed": {
+            "rhythm": "compact",
+            "mode": "grid",
+            "columns": "2",
+            "lead": "first",
+            "numbering": false
+          },
+          "ornament": {
+            "dropCap": "none",
+            "quoteMark": "rule",
+            "grain": 0,
+            "divider": "rule",
+            "corner": "square",
+            "underline": "always-thin"
+          },
+          "motion": {
+            "entrance": "fade",
+            "hover": "none",
+            "transition": "none",
+            "intensity": 0
+          },
+          "imagery": {
+            "treatment": "none",
+            "fit": "cover"
+          },
+          "chrome": {
+            "policy": "rebuild",
+            "header": "masthead",
+            "footer": "columns",
+            "sticky": true
+          },
+          "budget": {
+            "faces": 4,
+            "cssKb": 14,
+            "js": 0
+          }
+        }
+      }
+    }
+  ]
+}

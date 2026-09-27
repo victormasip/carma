@@ -28,6 +28,7 @@ import { validateGenome } from '@/lib/design/validate.ts'
 import { completeGenome, distinctiveness, genomeDistance, seedFrom } from '@/lib/design/sample.ts'
 import { derivePalette, ratio, FLOOR } from '@/lib/design/color.ts'
 import { REGISTERS } from '@/lib/design/genome.ts'
+import { FONT_IDS, font } from '@/lib/design/fonts.ts'
 
 let pass = 0, fail = 0
 const fails = []
@@ -311,6 +312,37 @@ for (const register of REGISTERS) {
 note('worst-case extra stylesheet', `${(maxCss / 1024).toFixed(2)}KB of a 14KB ceiling`)
 note('worst-case face count', `${maxFaces} of 4`)
 ok(overBudget === 0, `${overBudget}/360 generated genomes broke their own budget`)
+
+// ─── Off-register faces are MOVED, not just noted (W7) ────────────────────────
+//
+// The art director can pick a face outside its register (Sonnet put DM Sans on a
+// `warm` genome); cohesion used to note it and change nothing. Every register ×
+// every catalogue face it forbids, as heading and as body: the face must land
+// inside the allow-list, never collide with the other role, and a second pass must
+// find nothing left to repair.
+{
+  let tried = 0, stuck = 0, collide = 0, notIdem = 0
+  const base = PRESET_GENOMES[0]
+  for (const reg of REGISTERS) {
+    const A = REGISTER_RULES[reg]
+    for (const id of FONT_IDS) {
+      for (const role of ['heading', 'body']) {
+        const cats = role === 'heading' ? A.headingCats : A.bodyCats
+        if (cats.includes(font(id).category)) continue
+        tried++
+        const g = structuredClone({ ...base, register: reg })
+        g.type[role] = id
+        const once = applyCohesion(g)
+        if (!cats.includes(font(once.genome.type[role]).category)) stuck++
+        if (once.genome.type.heading === once.genome.type.body) collide++
+        if (applyCohesion(once.genome).repairs.some(r => r.rule.startsWith('register:type.'))) notIdem++
+      }
+    }
+  }
+  ok(tried > 0 && stuck === 0, `${stuck}/${tried} off-register faces were noted but not moved`)
+  ok(collide === 0, `${collide} repairs gave the heading and the body the same face`)
+  ok(notIdem === 0, `${notIdem} repaired faces were repaired again on a second pass`)
+}
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

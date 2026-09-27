@@ -26,7 +26,7 @@ import { collectStylesheets } from '@/lib/grabber-lab/evalRun'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { readEvidence } from '@/lib/design/evidence'
 import { directDeterministic } from '@/lib/design/director'
-import { directWithModel, disagreements, DESIGN_LLM_MODEL, MODEL_PRICE } from '@/lib/design/llm'
+import { directWithModel, disagreements, COST_CEILING, DESIGN_LLM_MODEL, MODEL_PRICE } from '@/lib/design/llm'
 import { validateGenome } from '@/lib/design/validate'
 import { applyCohesion, energyOf, REGISTER_RULES } from '@/lib/design/cohesion'
 import { compileGenome } from '@/lib/design/compile'
@@ -45,6 +45,12 @@ const args = process.argv.slice(2)
 const LIVE = args.includes('--live')
 const N = Number((args.find(a => a.startsWith('--n=')) ?? '').slice(4)) || 10
 const TRACE = (args.find(a => a.startsWith('--trace=')) ?? '').slice(8)
+// PRODUCTION PASSES A BRIEF — the Door's synthesis (what the business IS, in words).
+// W6's first live run omitted it and read Verne as "a design studio" on Haiku AND on
+// Sonnet 5; with the brief, Haiku made the Jules Verne leap 3/3. A gate that tests
+// the model without the brief tests a condition production never runs in.
+const BRIEFS_FILE = path.join(ROOT, 'tests', 'grabber', 'briefs.json')
+const BRIEFS = existsSync(BRIEFS_FILE) ? JSON.parse(readFileSync(BRIEFS_FILE, 'utf8')) : {}
 
 // `.env.local` is Next's file, not Node's — the gate loads it explicitly so a live
 // run works from a plain `npm run` without exporting anything.
@@ -254,7 +260,7 @@ if (!LIVE) {
   for (const c of picked) {
     const t0 = Date.now()
     const w3 = directDeterministic(c.evidence, { siteId: c.id })
-    const w4 = await directWithModel(c.evidence, { siteId: c.id })
+    const w4 = await directWithModel(c.evidence, { siteId: c.id, brief: BRIEFS[c.id] ?? null })
     rows.push({ c, w3, w4, ms: Date.now() - t0 })
     process.stdout.write(`    ${c.id.padEnd(22)} ${w4.source === 'directed' ? '✓' : '→ fell back'} ${String(w4.ms).padStart(6)}ms\n`)
   }
@@ -290,16 +296,23 @@ if (!LIVE) {
     const bCost = p ? (b.tokens.input * p.input + b.tokens.output * p.output) / 1e6 / n : null
     note('W4 baseline', `${b.model} · $${bCost?.toFixed(4)} per call · distinctiveness ${b.distinctiveness.w4SameSites ?? b.distinctiveness.w4}`)
   }
-  ok(perCall === null || DESIGN_LLM_MODEL === 'claude-opus-5' || perCall < 0.01, `a call costs $${perCall?.toFixed(4)} — the crackdown's ceiling is $0.01`)
+  const ceiling = COST_CEILING[DESIGN_LLM_MODEL]
+  ok(perCall === null || ceiling === undefined || perCall < ceiling, `a call costs ${perCall?.toFixed(4)} — the ceiling for ${DESIGN_LLM_MODEL} is ${ceiling}`)
 
   // Every live genome must clear the same bars the deterministic ones do.
-  let liveBad = 0
-  for (const g of w4All) {
-    if (!validateGenome(g, { fallbackSeed: 1 }).ok) liveBad++
-    if (applyCohesion(g).repairs.length) liveBad++
-    if (compileGenome(g).bytes.faces > 4) liveBad++
+  // Named, not counted: a bare number sent the first Sonnet run hunting.
+  const liveBad = []
+  for (const row of directed) for (const v of ['faithful', 'elevated', 'reimagined']) {
+    const g = row.w4[v].genome
+    const val = validateGenome(g, { fallbackSeed: 1 })
+    if (!val.ok) liveBad.push(`${row.c.id}/${v}: invalid — ${val.violations.slice(0, 3).join('; ')}`)
+    const coh = applyCohesion(g).repairs
+    if (coh.length) liveBad.push(`${row.c.id}/${v}: cohesion repaired — ${coh.slice(0, 3).map(x => x.rule).join(', ')}`)
+    const faces = compileGenome(g).bytes.faces
+    if (faces > 4) liveBad.push(`${row.c.id}/${v}: ${faces} faces`)
   }
-  ok(liveBad === 0, `${liveBad} live genomes failed validation, cohesion or the face budget`)
+  for (const b of liveBad) note('  ✗', b)
+  ok(liveBad.length === 0, `${liveBad.length} live genomes failed validation, cohesion or the face budget`)
   ok(dW4 >= 0.6, `live distinctiveness ${dW4} is below the 0.60 floor`)
 
   // WHERE THE MODEL DISAGREED. This is the whole reason it is here.
@@ -322,6 +335,7 @@ if (!LIVE) {
       w3: ['faithful', 'elevated', 'reimagined'].map(v => ({ variant: v, register: r.w3[v].genome.register, heading: font(r.w3[v].genome.type.heading).family, ground: r.w3[v].genome.palette.ground, density: r.w3[v].genome.space.density, rhythm: r.w3[v].genome.feed.rhythm })),
       w4: r.w4.source !== 'directed' ? null : ['faithful', 'elevated', 'reimagined'].map(v => ({ variant: v, register: r.w4[v].genome.register, heading: font(r.w4[v].genome.type.heading).family, ground: r.w4[v].genome.palette.ground, density: r.w4[v].genome.space.density, rhythm: r.w4[v].genome.feed.rhythm })),
       disagreements: r.w4.source !== 'directed' ? [] : disagreements(r.w3, r.w4),
+      genomes: r.w4.source !== 'directed' ? null : { faithful: r.w4.faithful.genome, elevated: r.w4.elevated.genome, reimagined: r.w4.reimagined.genome },
     })),
   }, null, 2))
   note('report', OUT.replace(ROOT + path.sep, ''))
@@ -332,6 +346,7 @@ if (!LIVE) {
       console.log(`\n${'═'.repeat(78)}`)
       console.log(`WHERE THE MODEL OVERRULED THE MATHS — ${one.c.name}  ${one.c.url}`)
       console.log(`${'═'.repeat(78)}`)
+      console.log(`  brief         ${BRIEFS[one.c.id] ? `the Door's synthesis — "${BRIEFS[one.c.id].understanding.slice(0, 90)}…"` : 'none (the model reads the site alone)'}`)
       console.log(`  sourceQuality ${one.c.evidence.sourceQuality.score}/100 → ${one.c.evidence.sourceQuality.verdict}`)
       console.log(`  measured as   ${one.c.evidence.type.heading.family} (${one.c.evidence.type.heading.category}) · brand ${one.c.evidence.palette.brand} · ${one.c.evidence.density.verdict}`)
       for (const v of ['faithful', 'elevated', 'reimagined']) {

@@ -1,0 +1,1979 @@
+{
+  "model": "claude-haiku-4-5",
+  "at": "2026-09-27T23:19:26.003Z",
+  "costPerCall": 0.0058743,
+  "distinctiveness": {
+    "w3SameSites": 0.622,
+    "w4SameSites": 0.625,
+    "w3AllAttempted": 0.622,
+    "sites": 10
+  },
+  "tokens": {
+    "input": 36778,
+    "output": 4393
+  },
+  "sites": [
+    {
+      "id": "dental-cdb",
+      "name": "Clínica Dental Barcelona",
+      "url": "https://www.clinicadentalbarcelona.com/",
+      "source": "directed",
+      "ms": 6780,
+      "violations": [],
+      "rationale": {
+        "faithful": "A well-composed site that earns its 86/100; respect the breathing space and the grotesk clarity patients expect.",
+        "elevated": "Clinical precision deserves serif dignity; paper grounds the trust a dental practice asks patients to place.",
+        "reimagined": "Dark ground signals expertise and competence; a confident clinic unafraid of modern, bold presence."
+      },
+      "usage": {
+        "input": 3671,
+        "output": 440,
+        "costUsd": 0.005871
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Archivo",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Sora",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Source Serif 4",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.414",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "classic"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Archivo",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "Inter"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "title"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "comfortable"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Sora",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "soft"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ]
+    },
+    {
+      "id": "resto-verne",
+      "name": "Verne Barcelona",
+      "url": "https://www.vernebarcelona.com/",
+      "source": "directed",
+      "ms": 6503,
+      "violations": [],
+      "rationale": {
+        "faithful": "La marca azul ya comunica el viaje submarino; refuerza su escala de tipografía y densidad respirada.",
+        "elevated": "Una aventura literaria merece serifas con carácter; tinta sobre papel evoca la tinta de Verne en páginas antiguas.",
+        "reimagined": "Un buceo nocturno bajo el océano: inversión de luz a tinta, energía audaz para familias que buscan lo extraordinario."
+      },
+      "usage": {
+        "input": 3864,
+        "output": 480,
+        "costUsd": 0.006264
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "standard"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "3"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "title"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "pill"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ]
+    },
+    {
+      "id": "gym-colom",
+      "name": "CEM Colom",
+      "url": "https://www.cemcolom.com/",
+      "source": "directed",
+      "ms": 5368,
+      "violations": [],
+      "rationale": {
+        "faithful": "Their site already achieves editorial clarity; respect the 20px rhythm and sans foundation they have chosen.",
+        "elevated": "Their restrained palette and measured spacing deserve a serif counterpart that suggests established expertise.",
+        "reimagined": "A confident firm can own its red fully: ink ground with bold geometry signals clarity and forward momentum."
+      },
+      "usage": {
+        "input": 3645,
+        "output": 436,
+        "costUsd": 0.005825
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Manrope",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Figtree",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Source Serif 4",
+          "ground": "tinted",
+          "density": "comfortable",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "classic"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Inter Tight",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Work Sans",
+          "model": "Inter"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "comfortable"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.ground",
+          "maths": "paper",
+          "model": "tinted"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "muted",
+          "model": "natural"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Manrope",
+          "model": "Jost"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Manrope",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "soft"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        }
+      ]
+    },
+    {
+      "id": "legal-granvia",
+      "name": "Gran Via Advocats",
+      "url": "https://granviaadvocats.com/",
+      "source": "directed",
+      "ms": 5112,
+      "violations": [],
+      "rationale": {
+        "faithful": "Law requires absolute clarity; their flat heading ramp suggests they prioritize consistency over hierarchy.",
+        "elevated": "Legal authority demands restraint; generous breathing room and serif body type convey stability without noise.",
+        "reimagined": "Dark grounds signal authority and trust; they contradict the bright blue but reinforce legal seriousness and distinction."
+      },
+      "usage": {
+        "input": 3757,
+        "output": 430,
+        "costUsd": 0.005907
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "DM Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Space Grotesk",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "EB Garamond",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Archivo",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.heading",
+          "maths": "Jost",
+          "model": "Space Grotesk"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.body",
+          "maths": "Manrope",
+          "model": "Inter"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.25",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "EB Garamond"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Work Sans",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Archivo"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.414",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.dropCap",
+          "maths": "raised",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        }
+      ]
+    },
+    {
+      "id": "beauty-hipolita",
+      "name": "Hipolita",
+      "url": "https://www.hipolita.cat/",
+      "source": "directed",
+      "ms": 6194,
+      "violations": [],
+      "rationale": {
+        "faithful": "A well-composed site that trusts its imagery and editorial rhythm; respect that clarity.",
+        "elevated": "Catalan cultural work deserves the restraint of a serif tradition and generous breathing room.",
+        "reimagined": "Institutional restraint inverted: dark ground and geometric weight for cultural authority that commands attention."
+      },
+      "usage": {
+        "input": 3580,
+        "output": 434,
+        "costUsd": 0.00575
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Work Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Source Serif 4",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Work Sans",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Work Sans",
+          "model": "Inter"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.125"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "muted",
+          "model": "natural"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Plus Jakarta Sans",
+          "model": "Jost"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "title"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "4",
+          "model": "3"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.dropCap",
+          "maths": "raised",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "mask"
+        }
+      ]
+    },
+    {
+      "id": "estate-westside",
+      "name": "West Side",
+      "url": "https://westside.cat/",
+      "source": "directed",
+      "ms": 5324,
+      "violations": [],
+      "rationale": {
+        "faithful": "A rescue's existing audience expects comfort and accessibility; preserve the friendly contemporary voice that works.",
+        "elevated": "Rescue work demands trust and care; serif warmth and generous space signal the thoughtfulness animals deserve.",
+        "reimagined": "Adoption urgency and rescue impact deserve bold visibility; ink ground and heavy sans create unmissable calls that save lives."
+      },
+      "usage": {
+        "input": 3724,
+        "output": 433,
+        "costUsd": 0.005889
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "overlay"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Source Serif 4",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "overlay"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.density",
+          "maths": "compact",
+          "model": "comfortable"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "DM Sans",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "title"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "compact"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "soft"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ]
+    },
+    {
+      "id": "edu-idiomarum",
+      "name": "Idiomarum",
+      "url": "https://idiomarum.com/",
+      "source": "directed",
+      "ms": 5028,
+      "violations": [],
+      "rationale": {
+        "faithful": "Academic language instruction needs clarity and trustworthiness, not novelty.",
+        "elevated": "A language school benefits from the authority of print scholarship and measured restraint.",
+        "reimagined": "Colour systems demand a bold, intentional palette that treats hue as linguistic taxonomy."
+      },
+      "usage": {
+        "input": 3657,
+        "output": 419,
+        "costUsd": 0.005752
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Figtree",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "standard"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "DM Sans",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "EB Garamond",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Figtree",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "gridxl"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.body",
+          "maths": "Jost",
+          "model": "Inter"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.25"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "faithful",
+          "axis": "ornament.corner",
+          "maths": "pill",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "classic"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "EB Garamond"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "PT Serif"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.25",
+          "model": "1.333"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Sora",
+          "model": "Figtree"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.414"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "sentence",
+          "model": "upper"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "single"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "gridxl"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "soft"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.quoteMark",
+          "maths": "none",
+          "model": "rule"
+        }
+      ]
+    },
+    {
+      "id": "physio-fclinics",
+      "name": "FisioClinics BCN",
+      "url": "https://barcelona.fisio-clinics.com/",
+      "source": "directed",
+      "ms": 5157,
+      "violations": [],
+      "rationale": {
+        "faithful": "Clinic's existing design uses warm teal and restrained composition—trustworthy without intimidation.",
+        "elevated": "Clinical authority demands serif gravitas; generous space signals unhurried, attentive care.",
+        "reimagined": "Ink ground and sharp edges convey clinical precision; dark background commands respect and focus."
+      },
+      "usage": {
+        "input": 3623,
+        "output": 433,
+        "costUsd": 0.005788
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Inter",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Work Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "gridxl"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Manrope",
+          "ground": "paper",
+          "density": "compact",
+          "rhythm": "standard"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Libre Baskerville",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Space Grotesk",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.rhythm",
+          "maths": "minimal",
+          "model": "standard"
+        },
+        {
+          "variant": "faithful",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "fade"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "quiet",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Inter",
+          "model": "Libre Baskerville"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Work Sans",
+          "model": "Inter"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.rhythm",
+          "maths": "standard",
+          "model": "editorial"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "elevated",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "rise"
+        },
+        {
+          "variant": "elevated",
+          "axis": "palette.saturation",
+          "maths": "muted",
+          "model": "natural"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Work Sans",
+          "model": "Space Grotesk"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Figtree",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.5",
+          "model": "1.333"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.rhythm",
+          "maths": "gridxl",
+          "model": "minimal"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "feed.columns",
+          "maths": "2",
+          "model": "4"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "cut",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "vivid"
+        }
+      ]
+    },
+    {
+      "id": "florist-herbs",
+      "name": "Herbs",
+      "url": "https://www.herbs.es/",
+      "source": "directed",
+      "ms": 5539,
+      "violations": [],
+      "rationale": {
+        "faithful": "A well-composed site already; respect its breathing rhythm and accessible sans approach for the herbal audience.",
+        "elevated": "Herbalism has deep tradition; a serif foundation signals heritage while breathing space keeps it contemporary and calm.",
+        "reimagined": "Botanical potency deserves confident presentation; dark ground and restrained geometric sans convey efficacy and clarity."
+      },
+      "usage": {
+        "input": 3643,
+        "output": 435,
+        "costUsd": 0.005818
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "classic",
+          "heading": "Instrument Serif",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Plus Jakarta Sans",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "quiet",
+          "heading": "Inter Tight",
+          "ground": "paper",
+          "density": "vast",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "warm",
+          "heading": "Libre Baskerville",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Jost",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.125",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "2"
+        },
+        {
+          "variant": "elevated",
+          "axis": "register",
+          "maths": "classic",
+          "model": "warm"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Instrument Serif",
+          "model": "Libre Baskerville"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Work Sans",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "elevated",
+          "axis": "space.density",
+          "maths": "vast",
+          "model": "generous"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.corner",
+          "maths": "square",
+          "model": "soft"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.dropCap",
+          "maths": "none",
+          "model": "raised"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Plus Jakarta Sans",
+          "model": "Jost"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Manrope",
+          "model": "Inter"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.25",
+          "model": "1.2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.headingCase",
+          "maths": "upper",
+          "model": "sentence"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "content-wide"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "none",
+          "model": "rise"
+        }
+      ]
+    },
+    {
+      "id": "auto-xaus",
+      "name": "Xaus Taller Mecànic",
+      "url": "https://www.xaustm.es/",
+      "source": "directed",
+      "ms": 5739,
+      "violations": [],
+      "rationale": {
+        "faithful": "The site's measured 40px rhythm and geometric Poppins signal comfort with negative space, not maximalism.",
+        "elevated": "The deep maroon demands authority; a serif baseline and generous air elevate it without abandoning the restraint.",
+        "reimagined": "Inverting to ink grounds the maroon's institutional weight; monospace signals technical precision."
+      },
+      "usage": {
+        "input": 3614,
+        "output": 453,
+        "costUsd": 0.005879
+      },
+      "w3": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Outfit",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "bold",
+          "heading": "Bodoni Moda",
+          "ground": "ink",
+          "density": "comfortable",
+          "rhythm": "compact"
+        }
+      ],
+      "w4": [
+        {
+          "variant": "faithful",
+          "register": "contemporary",
+          "heading": "Jost",
+          "ground": "paper",
+          "density": "comfortable",
+          "rhythm": "minimal"
+        },
+        {
+          "variant": "elevated",
+          "register": "quiet",
+          "heading": "Libre Baskerville",
+          "ground": "paper",
+          "density": "generous",
+          "rhythm": "editorial"
+        },
+        {
+          "variant": "reimagined",
+          "register": "severe",
+          "heading": "Space Grotesk",
+          "ground": "ink",
+          "density": "compact",
+          "rhythm": "compact"
+        }
+      ],
+      "disagreements": [
+        {
+          "variant": "faithful",
+          "axis": "type.scale",
+          "maths": "1.333",
+          "model": "1.2"
+        },
+        {
+          "variant": "faithful",
+          "axis": "type.headingCase",
+          "maths": "title",
+          "model": "sentence"
+        },
+        {
+          "variant": "faithful",
+          "axis": "space.lanes",
+          "maths": "single",
+          "model": "content-wide"
+        },
+        {
+          "variant": "faithful",
+          "axis": "palette.saturation",
+          "maths": "vivid",
+          "model": "natural"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.heading",
+          "maths": "Outfit",
+          "model": "Libre Baskerville"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.body",
+          "maths": "Outfit",
+          "model": "Source Serif 4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "type.scale",
+          "maths": "1.2",
+          "model": "1.25"
+        },
+        {
+          "variant": "elevated",
+          "axis": "feed.columns",
+          "maths": "3",
+          "model": "4"
+        },
+        {
+          "variant": "elevated",
+          "axis": "ornament.quoteMark",
+          "maths": "rule",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "register",
+          "maths": "bold",
+          "model": "severe"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.heading",
+          "maths": "Bodoni Moda",
+          "model": "Space Grotesk"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.body",
+          "maths": "Inter Tight",
+          "model": "IBM Plex Mono"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "type.scale",
+          "maths": "1.618",
+          "model": "1.2"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.density",
+          "maths": "comfortable",
+          "model": "compact"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "space.lanes",
+          "maths": "content-wide-full",
+          "model": "single"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "ornament.corner",
+          "maths": "soft",
+          "model": "square"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "motion.entrance",
+          "maths": "fade",
+          "model": "none"
+        },
+        {
+          "variant": "reimagined",
+          "axis": "palette.saturation",
+          "maths": "natural",
+          "model": "muted"
+        }
+      ]
+    }
+  ]
+}

@@ -276,6 +276,38 @@ export function energyOf(g: Genome): number {
  * first — texture before decoration before motion before the structural decisions
  * that carry the brand.
  */
+/** For each category, the others in order of how small a change they are. */
+const NEAR_CATS: Record<FontCategory, readonly FontCategory[]> = {
+  geometric: ['sans', 'grotesk', 'slab', 'serif', 'display-serif', 'mono'],
+  sans: ['grotesk', 'geometric', 'slab', 'serif', 'display-serif', 'mono'],
+  grotesk: ['sans', 'geometric', 'mono', 'slab', 'serif', 'display-serif'],
+  serif: ['display-serif', 'slab', 'sans', 'grotesk', 'geometric', 'mono'],
+  'display-serif': ['serif', 'slab', 'grotesk', 'sans', 'geometric', 'mono'],
+  slab: ['serif', 'grotesk', 'sans', 'display-serif', 'geometric', 'mono'],
+  mono: ['grotesk', 'sans', 'geometric', 'slab', 'serif', 'display-serif'],
+}
+
+/**
+ * The face nearest to `id` that the register allows: the closest category first,
+ * the same stroke contrast within it when there is one, never `avoid` (the other
+ * role's face). Deterministic, but spread by the face asked for — taking the first
+ * entry of a pool is how Inter became the heading of 29% of W3's designs.
+ */
+function nearestAllowedFace(id: FontId, allowed: readonly FontCategory[], avoid: FontId): FontId {
+  const f = font(id)
+  let h = 0
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  for (const cat of NEAR_CATS[f.category]) {
+    if (!allowed.includes(cat)) continue
+    const pool = FONT_IDS.filter(x => font(x).category === cat && x !== avoid)
+    if (!pool.length) continue
+    const same = pool.filter(x => font(x).contrast === f.contrast)
+    const from = same.length ? same : pool
+    return from[h % from.length]!
+  }
+  return id
+}
+
 function quietestFont(cats: readonly FontCategory[]): FontId | null {
   let best: FontId | null = null
   for (const id of FONT_IDS) {
@@ -388,14 +420,30 @@ export function applyCohesion(input: Genome): { genome: Genome; repairs: Repair[
 
   // Typeface category is where a register is most often violated, because a font
   // id looks innocent until you know what it is.
-  const hCat = font(g.type.heading).category
-  if (!A.headingCats.includes(hCat)) {
-    note('register:type.heading', `a ${hCat} heading does not belong to the ${input.register} register`)
+  //
+  // MOVED, not just noted (W7). This used to be a note only, which was harmless
+  // while the only caller was the deterministic director (it never picks outside
+  // the allow-list). The art director can — Sonnet put DM Sans (geometric) on a
+  // `warm` genome, the note fired, nothing changed, and the design shipped out of
+  // its register. Now the face moves to the nearest one the register allows, like
+  // every other axis above, so a second pass finds nothing to repair.
+  const refit = (role: 'heading' | 'body', cats: readonly FontCategory[]) => {
+    const id = g.type[role]
+    const cat = font(id).category
+    if (cats.includes(cat)) return
+    const next = nearestAllowedFace(id, cats, role === 'heading' ? g.type.body : g.type.heading)
+    note(`register:type.${role}`, `a ${cat} ${role} face does not belong to the ${input.register} register — moved to ${font(next).family}`)
+    g.type[role] = next
+    // Explicit weight lists named the OLD face's weights; the new one may not have them.
+    const key = role === 'heading' ? 'headingWeights' : 'bodyWeights'
+    const want = g.type[key]
+    if (want) {
+      const have = want.filter(w => font(next).weights.includes(w))
+      g.type[key] = have.length ? have : undefined
+    }
   }
-  const bCat = font(g.type.body).category
-  if (!A.bodyCats.includes(bCat)) {
-    note('register:type.body', `a ${bCat} body face does not belong to the ${input.register} register`)
-  }
+  refit('heading', A.headingCats)
+  refit('body', A.bodyCats)
 
   // ── 2. Pairwise rules — each one has a reason, not a preference ────────────
 

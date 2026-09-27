@@ -1030,7 +1030,7 @@ Each wave is shippable, each has a gate, and the product is never broken in betw
 | **W3** ✅ | **Rung 3: the deterministic art director.** Evidence → three genomes, no model. The three variants are one derivation at three amplitudes. | **`test:director` 68/68** · 297/297 valid · distinctiveness **0.623** · p99 **0.91ms** | Not yet wired — the engine is done, the surface is W5 |
 | **W4** ✅ | **Rung 1: the LLM art director.** One call, three variants, a closed JSON schema, adaptive thinking. Constrained by the same cohesion engine as the maths; every failure degrades to W3. | **`test:director-llm` mock 233/233** · live A/B recorded in §15.10 | Not yet wired — the surface is W5 |
 | **W5** ✅ | **Door A**: W3 paints three live designs at once, W4 upgrades them in the background and crossfades in place; pitches are the feed; the choice crosses signup in sessionStorage. **Cascade layers** in the blog stylesheet, proven equivalent in Chrome. | **`test:reveal` 56/56** · **`test:cascade` 17/17** (30,408 computed-style comparisons) · `test:landing`/`test:perf` hold | Yes — conversion not yet measured |
-| **W6** ✅ | **Persistence and the full preview**: the art director on Haiku 4.5 and cached per domain; migration 039; the Door's choice adopted on the onboarding capture and served by the render; their header in each variant's rung (keep / harmonise / rebuild) behind a sanitiser, a CSP of our own script hashes and a measured faithful gate. | **`test:reveal` 109/109** · hand-off E2E on the real database · 0 CSP violations in Chrome | Yes |
+| **W6** ✅ | **Persistence and the full preview**: the art director on Sonnet 5 (Haiku measured too literal, §15.13) and cached per domain; migration 039; the Door's choice adopted on the onboarding capture and served by the render; their header in each variant's rung (keep / harmonise / rebuild) behind a sanitiser, a CSP of our own script hashes and a measured faithful gate. | **`test:reveal` 109/109** · hand-off E2E on the real database · 0 CSP violations in Chrome | Yes |
 | **W7** | **Door B**: the open intake, three designs, the six directions, `nudge()`. (No taste test — see §9.2.) | `design:eval` on from-scratch briefs | Yes |
 | **W8** | **Studio on genomes**: partial regeneration, history, undo, `dropped[]` surfaced. | `test:perf` product class holds | Yes |
 | **W9** | The taste loop: log choices and nudges, feed back as priors. Showcase gallery (`038_showcase_optin` already exists) of real generated blogs — which doubles as the Awwwards submission pipeline. | distinctiveness and human-review scores trending up | Yes |
@@ -1466,7 +1466,8 @@ reaches the site after signup, and the preview renders their header in each rung
 
 ### 15.12 W6 — a cent, a memory, and their header
 
-**The art director moved to Haiku 4.5.** One call still returns all three variants
+**The art director moved to Haiku 4.5** — *superseded: measured live in §15.13, it runs on
+Sonnet 5.* One call still returns all three variants
 through the same closed schema and the same validate → sample → cohesion pipeline;
 the schema now asks only for the axes that need judgement (the engine fills motion,
 the header archetype, dividers, columns and texture inside the register the model
@@ -1543,6 +1544,43 @@ the carry and the adoption honours it.
 **Still open.** The live cost and the Haiku Jules Verne run (needs credit). The Door's
 capture is 72% faithful where it shows their markup; the adopted `keep` uses the
 Studio's full capture, which has always been the product's clone path.
+
+---
+
+### 15.13 The intelligence gauge — Haiku understood, Sonnet designed (2026-09-28)
+
+The account was topped up and W6's projection was replaced by measurement. The rule
+the founder set: Haiku unless it is too literal; Sonnet if so; never Opus.
+
+| Verne, 3 samples each | The leap | Cost / call | Latency |
+|---|---|---|---|
+| Haiku 4.5, **no brief** (what the gate first ran) | 0/3 — "a design studio" | $0.0059 | ~6s |
+| Haiku 4.5, no brief, "never invent" line relaxed | 0/3 | $0.0060 | ~6s |
+| Sonnet 5, **no brief**, no thinking | 0/1 gate trace — "a studio" | $0.0166 | ~8s |
+| Sonnet 5, no brief, adaptive thinking | 2/3 name Jules Verne | $0.0525 | 30–65s |
+| Haiku 4.5, **production brief** | 3/3 in words; typefaces copy the maths | $0.0063 | ~6.5s |
+| **Sonnet 5, production brief, no thinking** | **3/3 in words AND design** | **$0.0174** | ~9s |
+
+**What decided it.** The first gate run passed no brief. Production always passes
+the Door's synthesis (what the business is, in words), and without it every tier
+without thinking read Verne as "a design studio". With it, Haiku *understood* —
+"aventura submarina", "profundidad oceánica" — but kept the deterministic director's
+typefaces (Outfit / DM Sans / Jost) and once wrote "serifs" over a DM Sans genome.
+Sonnet 5 *designed* the reading: Elevat moves to `warm` with a literary serif (Lora or
+Fraunces — Opus's own W4 pick) and a raised drop cap; Reimaginat sets a period serif on
+ink, "un aire de expedición". By the founder's rule Haiku is too literal, so **the art
+director runs on Sonnet 5, thinking off: $0.0168 a call measured over 10 sites (worst
+$0.0175) — 83% below Opus — and $0 for every repeat visit to a domain.** The gate now
+passes the brief (`tests/grabber/briefs.json`) and enforces a per-tier ceiling
+($0.01 Haiku, $0.02 Sonnet). Live gate: 238/238, distinctiveness 0.617 (W3 0.622, the
+Opus baseline 0.611).
+
+**The bug it surfaced.** On the first Sonnet run, one genome (physio-fclinics, Elevat)
+shipped a geometric heading on a `warm` genome. Cohesion *noted* off-register faces and
+changed nothing — harmless while the only caller was the deterministic director, which
+never picks outside the allow-list; a model can. Faces now move to the nearest allowed
+one (closest category, same stroke contrast, never the other role's face), and
+`test:genome` tries every forbidden face in every register as heading and as body.
 
 ---
 
