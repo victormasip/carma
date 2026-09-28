@@ -2,6 +2,12 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react'
 import { AlignLeft, AlignCenter, AlignRight, Link2 } from 'lucide-react'
 
+// A control's mousedown must not move the selection: the browser would collapse it
+// into the text, ProseMirror would follow, the node would deselect, React would
+// unmount the controls — and the click would land on nothing. (Found by the W7.0
+// spike's classic-vs-canvas baseline: broken in both.)
+const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     ctaButton: {
@@ -87,7 +93,7 @@ function CtaView({ node, updateAttributes, editor, selected }: NodeViewProps) {
           </div>
           <div className="carma-cta-align">
             {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => (
-              <button
+              <button onMouseDown={keepSelection}
                 key={a}
                 type="button"
                 onClick={() => updateAttributes({ align: a })}

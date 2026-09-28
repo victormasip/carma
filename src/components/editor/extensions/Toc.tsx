@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import { ListTree } from 'lucide-react'
 import { slugify } from './slug'
 
+// A control's mousedown must not move the selection: the browser would collapse it
+// into the text, ProseMirror would follow, the node would deselect, React would
+// unmount the controls — and the click would land on nothing. (Found by the W7.0
+// spike's classic-vs-canvas baseline: broken in both.)
+const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     toc: {
@@ -82,7 +88,7 @@ function TocView({ editor }: NodeViewProps) {
         <ul>
           {items.map((it, i) => (
             <li key={`${it.slug}-${i}`} style={{ paddingLeft: `${(Math.min(it.level, 3) - 1) * 14}px` }}>
-              <button type="button" onClick={() => go(it.slug)}>{it.text}</button>
+              <button onMouseDown={keepSelection} type="button" onClick={() => go(it.slug)}>{it.text}</button>
             </li>
           ))}
         </ul>

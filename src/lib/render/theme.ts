@@ -1179,6 +1179,29 @@ function articleSetup(theme: Theme, siteId: string, link: LinkCtx, post: Post, l
   return articleModuleParts(theme, siteId, link, post, locale, baseContent, extra)
 }
 
+/**
+ * W7 — what the article page gives a WRITER to write on.
+ *
+ * EXACTLY the stylesheet this post's shadow root receives — the same tokens, the
+ * same Genome CSS and the same modules CSS, through the same `buildBlogCss` call
+ * as `renderBlogHost` below — and the same font links as the page's head. The
+ * editor's canvas (components/editor/canvas) renders these, so the page being
+ * written on is the page being read: by construction, never by imitation.
+ */
+export function articleCanvasParts(
+  theme: Parameters<typeof buildArticlePage>[0],
+  siteId: string,
+  post: Parameters<typeof buildArticlePage>[3],
+  locale: Locale,
+): { shadowCss: string; fontLinksHtml: string } {
+  const tokens = tokensOf(theme)
+  const parts = articleSetup(theme, siteId, defaultLink(siteId, theme), post, locale)
+  return {
+    shadowCss: buildBlogCss(tokens, { host: 'page', overrides: articleOverrides(theme, parts.css) }),
+    fontLinksHtml: buildFontLinks(theme),
+  }
+}
+
 function articleBodyHtml(theme: Theme, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts): string {
   const tokens = tokensOf(theme)
   const blog = renderBlogHost(articleBlogInner(theme, link, post, locale, parts), tokens, articleOverrides(theme, parts.css))

@@ -94,6 +94,8 @@ const CLASSES = [
   { name: 'product',   test: r => r.startsWith('/dashboard'),           js: [35, 45],  css: [28, 31] },
   { name: 'admin',     test: r => r.startsWith('/admin'),               js: [32, 42],  css: [28, 31] },
   { name: 'system',    test: r => r.startsWith('/_'),                   js: [18, 28],  css: [28, 31] },
+  // W7: the canvas lab — a test harness (404 unless CARMA_LAB=1); TipTap is lazy there too.
+  { name: 'lab',       test: r => r.startsWith('/lab'),                 js: [40, 60],  css: [28, 31] },
 ]
 
 /* ── The published blog (W1, 2026-09-20) ───────────────────────────────────

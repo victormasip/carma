@@ -17,7 +17,8 @@ import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import { Placeholder, Focus } from '@tiptap/extensions'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/core'
 import {
   Bold, Italic, UnderlineIcon, Strikethrough, Link2, Link2Off,
@@ -40,6 +41,8 @@ import { CtaButton } from './extensions/CtaButton'
 import { Toc } from './extensions/Toc'
 import { SlashCommand } from './extensions/SlashCommand'
 import BlockHandle from './BlockHandle'
+import CanvasOverlay from './canvas/CanvasOverlay'
+import type { CanvasMounts } from './canvas/CanvasFrame'
 import { cn } from '@/lib/cn'
 import { uploadImage } from '@/lib/upload'
 import { useToast } from '@/components/ui/Toast'
@@ -89,9 +92,16 @@ type Props = {
   onAiRewrite?: (text: string, mode: RewriteMode) => Promise<string | null>
   /** Focus mode: dims every block except the one holding the caret. */
   focusMode?: boolean
+  /**
+   * W7 — write ON the blog. The canvas iframe's slots (components/editor/canvas):
+   * the view is created inside it, its root becomes the blog's
+   * `.carma-article-content`, and the menus and block handle live in its UI layer.
+   * Absent → the classic app-styled surface.
+   */
+  canvas?: CanvasMounts | null
 }
 
-export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite, focusMode }: Props) {
+export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite, focusMode, canvas }: Props) {
   const { toast } = useToast()
   const [linkUrl, setLinkUrl] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
@@ -111,8 +121,17 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   // exactly that first empty echo. Real edits — and any later clear — pass through.
   const pendingSeedRef = useRef(!!initialHtml)
 
+  // W7: the view must be BORN inside the canvas document. ProseMirror binds its
+  // selection observer to `view.dom.ownerDocument` when the view is created; a view
+  // built in the parent and moved into the iframe afterwards listens to the wrong
+  // document until its first transaction. A detached element OWNED by the iframe
+  // document gives the view the right owner from birth; EditorContent then moves
+  // it into place.
+  const mountEl = useMemo(() => (canvas ? canvas.doc.createElement('div') : null), [canvas])
+
   const editor = useEditor({
     immediatelyRender: false,
+    ...(mountEl ? { element: mountEl } : {}),
     extensions: [
       StarterKit.configure({ heading: false }),
       HeadingId.configure({ levels: [1, 2, 3] }),
@@ -146,7 +165,9 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     ],
     content: initialHtml || '',
     editorProps: {
-      attributes: { class: 'carma-prose focus:outline-none' },
+      // In the canvas the root IS the blog's content column: its children are the
+      // blocks, exactly as `.carma-article-content > *` expects on the published page.
+      attributes: { class: canvas ? 'carma-article-content' : 'carma-prose focus:outline-none' },
       handlePaste: (_view, event) => {
         const files = event.clipboardData?.files
         if (files && files.length > 0 && editorRef.current && insertImageFiles(editorRef.current, files, siteId, m => toast(m, 'error'))) {
@@ -211,7 +232,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
           .run()
       }
     },
-  })
+  }, [mountEl])
 
   // Seed the initial document EXACTLY ONCE. The old guard (`editor.isEmpty`)
   // re-ran setContent on every parent re-render while the doc was empty —
@@ -315,14 +336,14 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     setShowVideoInput(false)
   }
 
-  return (
-    <div className="relative">
-      {/* Block drag-handle gutter — appears on hover, no permanent UI. */}
-      <BlockHandle editor={editor} />
+  // In the canvas the menus live in its UI layer (#carma-ui), outside the blog.
+  const appendTo = canvas ? () => canvas.ui : undefined
 
-      {/* Floating format menu on text selection — Medium-style. */}
+  /* Floating format menu on text selection — Medium-style. */
+  const bubble = (
       <BubbleMenu
         editor={editor}
+        appendTo={appendTo}
         className="flex items-center gap-0.5 p-1 bg-text rounded-xl shadow-pop ring-1 ring-white/10"
         options={{ placement: 'top' }}
         shouldShow={({ editor, state }) => {
@@ -402,10 +423,13 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
           </>
         )}
       </BubbleMenu>
+  )
 
-      {/* Floating insert menu on empty paragraphs */}
+  /* Floating insert menu on empty paragraphs */
+  const floating = (
       <FloatingMenu
         editor={editor}
+        appendTo={appendTo}
         className="w-52 max-h-[60vh] overflow-y-auto p-1.5 bg-bg-elevated rounded-xl shadow-pop ring-1 ring-border"
         options={{ placement: 'left-start' }}
       >
@@ -461,9 +485,11 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
           <Minus className="w-3.5 h-3.5 text-subtle" /> Separador
         </button>
       </FloatingMenu>
+  )
 
-      {/* Tiny inline link/image/video inputs — anchored above the canvas, only when triggered */}
-      {(showLinkInput || showImageInput || showVideoInput) && (
+  /* Tiny inline link/image/video inputs — anchored above the canvas, only when triggered.
+     App chrome, not part of the page: in the canvas mode they stay in the parent. */
+  const inputs = (showLinkInput || showImageInput || showVideoInput) && (
         <div className="sticky top-0 z-20 -mt-2 mb-3 mx-auto max-w-[44rem] flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated border border-border shadow-pop">
           {showLinkInput && (
             <>
@@ -526,8 +552,32 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
             </>
           )}
         </div>
-      )}
+  )
 
+  if (canvas) {
+    return (
+      <>
+        {inputs}
+        {createPortal(
+          <>
+            {bubble}
+            {floating}
+            <EditorContent editor={editor} className={focusMode ? 'carma-focus-mode' : undefined} />
+          </>,
+          canvas.editor,
+        )}
+        {createPortal(<CanvasOverlay editor={editor}><BlockHandle editor={editor} /></CanvasOverlay>, canvas.ui)}
+      </>
+    )
+  }
+
+  return (
+    <div className="relative">
+      {/* Block drag-handle gutter — appears on hover, no permanent UI. */}
+      <BlockHandle editor={editor} />
+      {bubble}
+      {floating}
+      {inputs}
       {/* The canvas itself — full-bleed, no card border, no toolbar overhead. */}
       <EditorContent editor={editor} className={cn('carma-editor', focusMode && 'carma-focus-mode')} />
     </div>

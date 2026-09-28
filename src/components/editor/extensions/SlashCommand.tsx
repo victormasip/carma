@@ -238,7 +238,10 @@ function makeSuggestion(options: SlashCommandOptions): Omit<SuggestionOptions<Co
             props: { items: props.items, command: (item: CommandItem) => props.command(item) },
             editor: props.editor,
           })
-          el = document.createElement('div')
+          // The editor's OWN document: in the W7 canvas that is an iframe, and a popup
+          // in the parent page would be positioned against the wrong viewport.
+          const host = props.editor.view.dom.ownerDocument
+          el = host.createElement('div')
           el.style.position = 'fixed'
           el.style.top = '0'
           el.style.left = '0'
@@ -247,7 +250,7 @@ function makeSuggestion(options: SlashCommandOptions): Omit<SuggestionOptions<Co
           // at the viewport corner while the caret rect settles.
           el.style.visibility = 'hidden'
           el.appendChild(component.element)
-          document.body.appendChild(el)
+          ;(host.getElementById('carma-ui') ?? host.body).appendChild(el)
           reposition(props.clientRect)
         },
         onUpdate: (props) => {

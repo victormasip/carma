@@ -25,6 +25,12 @@ export default function BlockHandle({ editor }: { editor: Editor }) {
   const [active, setActive] = useState<Active | null>(null)
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  // The handle sits in the gutter, OUTSIDE the editor — so reaching it means leaving
+  // the editor, and hiding on that `mouseleave` made it unreachable (found by the
+  // W7.0 spike's baseline: broken in the classic editor too). Leaving now starts a
+  // short grace period that entering the handle cancels.
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelHide = () => { if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null } }
 
   // Track which top-level block the cursor is hovering. `nodeDOM` gives us the
   // precise DOM rect so the handle aligns to the block's TOP edge regardless of
@@ -58,13 +64,21 @@ export default function BlockHandle({ editor }: { editor: Editor }) {
       })
     }
 
-    const onLeave = () => { if (!open) setActive(null) }
+    const onLeave = () => {
+      if (open) return
+      cancelHide()
+      hideTimer.current = setTimeout(() => setActive(null), 350)
+    }
 
+    const onEnter = () => cancelHide()
     dom.addEventListener('mousemove', onMove)
     dom.addEventListener('mouseleave', onLeave)
+    dom.addEventListener('mouseenter', onEnter)
     return () => {
       dom.removeEventListener('mousemove', onMove)
       dom.removeEventListener('mouseleave', onLeave)
+      dom.removeEventListener('mouseenter', onEnter)
+      cancelHide()
     }
   }, [editor, open])
 
@@ -75,13 +89,15 @@ export default function BlockHandle({ editor }: { editor: Editor }) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
+    // The editor's own document — an iframe in the W7 canvas.
+    const doc = editor.view.dom.ownerDocument
+    doc.addEventListener('mousedown', onDown)
+    doc.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
+      doc.removeEventListener('mousedown', onDown)
+      doc.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, editor])
 
   const insertBelow = () => {
     if (!active) return
@@ -162,6 +178,8 @@ export default function BlockHandle({ editor }: { editor: Editor }) {
       {active && (
         <div
           className="pointer-events-auto absolute"
+          onMouseEnter={cancelHide}
+          onMouseLeave={() => { if (!open) { cancelHide(); hideTimer.current = setTimeout(() => setActive(null), 350) } }}
           style={{
             top: active.top + 4,
             left: -28,

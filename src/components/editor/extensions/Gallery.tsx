@@ -6,6 +6,12 @@ import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2 } from
 import KnotSpinner from '@/components/ui/KnotSpinner'
 import { uploadImages } from '@/lib/upload'
 
+// A control's mousedown must not move the selection: the browser would collapse it
+// into the text, ProseMirror would follow, the node would deselect, React would
+// unmount the controls — and the click would land on nothing. (Found by the W7.0
+// spike's classic-vs-canvas baseline: broken in both.)
+const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     gallery: {
@@ -156,7 +162,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
       {images.length > 0 ? (
         <div className="carma-carousel" contentEditable={false}>
           {images.length > 1 && (
-            <button type="button" onClick={() => page(-1)} className="carma-carousel-arrow prev" title="Anterior">
+            <button onMouseDown={keepSelection} type="button" onClick={() => page(-1)} className="carma-carousel-arrow prev" title="Anterior">
               <ChevronLeft className="w-5 h-5" />
             </button>
           )}
@@ -167,7 +173,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
                 <img src={src} alt="" />
                 <span className="carma-gallery-zoom"><Maximize2 className="w-3.5 h-3.5" /></span>
                 {editable && (
-                  <button
+                  <button onMouseDown={keepSelection}
                     type="button"
                     onClick={(e) => { e.stopPropagation(); removeImage(i) }}
                     className="carma-gallery-remove"
@@ -180,7 +186,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
             ))}
           </div>
           {images.length > 1 && (
-            <button type="button" onClick={() => page(1)} className="carma-carousel-arrow next" title="Següent">
+            <button onMouseDown={keepSelection} type="button" onClick={() => page(1)} className="carma-carousel-arrow next" title="Següent">
               <ChevronRight className="w-5 h-5" />
             </button>
           )}
@@ -201,10 +207,10 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addUrl() } }}
             placeholder="Enganxa la URL d'una imatge i prem Enter…"
           />
-          <button type="button" onClick={addUrl} title="Afegir per URL">
+          <button onMouseDown={keepSelection} type="button" onClick={addUrl} title="Afegir per URL">
             <Plus className="w-4 h-4" />
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload" disabled={uploading}>
+          <button onMouseDown={keepSelection} type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload" disabled={uploading}>
             {uploading ? <KnotSpinner className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
           </button>
           <input
@@ -226,7 +232,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
           onClick={() => setLightbox(null)}
         >
           {images.length > 1 && (
-            <button
+            <button onMouseDown={keepSelection}
               type="button"
               onClick={(e) => { e.stopPropagation(); move(-1) }}
               className="cursor-pointer absolute left-4 sm:left-8 w-11 h-11 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
@@ -242,7 +248,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
             className="max-h-[85vh] max-w-[88vw] rounded-xl shadow-2xl object-contain"
           />
           {images.length > 1 && (
-            <button
+            <button onMouseDown={keepSelection}
               type="button"
               onClick={(e) => { e.stopPropagation(); move(1) }}
               className="cursor-pointer absolute right-4 sm:right-8 w-11 h-11 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
@@ -250,7 +256,7 @@ function GalleryView({ node, updateAttributes, editor, selected, extension }: No
               <ChevronRight className="w-6 h-6" />
             </button>
           )}
-          <button
+          <button onMouseDown={keepSelection}
             type="button"
             onClick={() => setLightbox(null)}
             className="cursor-pointer absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
