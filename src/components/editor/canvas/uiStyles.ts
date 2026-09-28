@@ -19,7 +19,14 @@ const UI_LAYERS = new Set(['base', 'components', 'utilities'])
 /** Unlayered editor-UI rules in globals.css (block controls, not block looks). */
 const EDITOR_UI = /carma-(gallery-(editor|add|empty|remove|zoom)|carousel|cta-(controls|href|align|block)|embed-(editor|fallback|frame)|toc-(editor|empty|head))/
 
-export const UI_SCOPE = '#carma-ui, [data-carma-ui]'
+// Why a control's PARENT is the scope root, and not `[data-carma-ui]` itself:
+// Chrome prefixes every selector inside an @scope with an implicit `:scope `
+// DESCENDANT, so a root never matches its own classes — `@scope ([data-carma-ui])
+// { .absolute {} }` misses the very control it is written on (measured in W7.2;
+// the naive form styled nothing). Rooted at the parent, the control is a
+// descendant, and the limit keeps the parent's other children — the BLOG's
+// content — out. #carma-ui has no limit: everything in it is UI.
+export const UI_SCOPE = '(#carma-ui, :has(> [data-carma-ui])) to (:scope:not(#carma-ui) > :not([data-carma-ui]))'
 
 function collect(rules: CSSRuleList, win: Window, out: { scoped: string[]; global: string[] }): void {
   const w = win as unknown as {
@@ -54,7 +61,7 @@ export function uiStylesheet(from: Document): string {
     try { rules = sheet.cssRules } catch { continue } // a cross-origin sheet: not ours
     collect(rules, win, out)
   }
-  return `${out.global.join('\n')}\n@layer carma-ui{@scope (${UI_SCOPE}){\n${out.scoped.join('\n')}\n}}`
+  return `${out.global.join('\n')}\n@layer carma-ui{@scope ${UI_SCOPE}{\n${out.scoped.join('\n')}\n}}`
 }
 
 /** The app root's custom properties, resolved, onto the canvas root. */

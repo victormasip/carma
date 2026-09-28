@@ -5,19 +5,28 @@
 // route measures what the product route will.
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/core'
 import CanvasFrame from '@/components/editor/canvas/CanvasFrame'
+import { CanvasArticleHeader } from '@/components/editor/canvas/CanvasArticleHeader'
+import type { Locale } from '@/lib/i18n/config'
 import { ToastProvider } from '@/components/ui/Toast'
 import type { CanvasSpec } from '@/lib/render/canvas'
 
 const TipTapEditor = lazy(() => import('@/components/editor/TipTapEditor'))
 
-type LabHooks = { ready: boolean; editor: Editor | null; shortcuts: string[] }
+type LabHooks = { ready: boolean; editor: Editor | null; shortcuts: string[]; header: { title: string; lede: string } }
+type LabHeader = { title: string; lede: string; author: string; date: string; categories: string[] }
 declare global { interface Window { __lab?: LabHooks } }
 
-export default function LabCanvas({ spec, html, classic = false }: { spec: CanvasSpec; html: string; classic?: boolean }) {
+export default function LabCanvas({ spec, html, header, locale, classic = false }: {
+  spec: CanvasSpec; html: string; header: LabHeader; locale: Locale; classic?: boolean
+}) {
   const [width, setWidth] = useState<'desktop' | 'phone'>('desktop')
-  const hooks = useRef<LabHooks>({ ready: false, editor: null, shortcuts: [] })
+  // Editable, as in the post editor — the spike types into them.
+  const [title, setTitle] = useState(header.title)
+  const [lede, setLede] = useState(header.lede)
+  const hooks = useRef<LabHooks>({ ready: false, editor: null, shortcuts: [], header: { title: header.title, lede: header.lede } })
 
   useEffect(() => {
     window.__lab = hooks.current
@@ -30,6 +39,9 @@ export default function LabCanvas({ spec, html, classic = false }: { spec: Canva
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // The header's STATE (not its DOM), so the spike can prove the round trip.
+  useEffect(() => { hooks.current.header = { title, lede } }, [title, lede])
 
   const onEditorReady = useCallback((e: Editor | null) => {
     hooks.current.editor = e
@@ -57,9 +69,17 @@ export default function LabCanvas({ spec, html, classic = false }: { spec: Canva
         ) : (
           <CanvasFrame spec={spec} width={width} title="Canvas lab">
             {m => (
-              <Suspense fallback={null}>
-                <TipTapEditor canvas={m} siteId="lab" initialHtml={html} onChange={() => {}} onEditorReady={onEditorReady} />
-              </Suspense>
+              <>
+                {createPortal(
+                  <CanvasArticleHeader title={title} onTitle={setTitle} lede={lede} onLede={setLede}
+                    onCommit={() => hooks.current.editor?.commands.focus('start')}
+                    author={header.author} date={header.date} categories={header.categories} locale={locale} />,
+                  m.header,
+                )}
+                <Suspense fallback={null}>
+                  <TipTapEditor canvas={m} siteId="lab" initialHtml={html} onChange={() => {}} onEditorReady={onEditorReady} />
+                </Suspense>
+              </>
             )}
           </CanvasFrame>
         )}

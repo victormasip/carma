@@ -37,6 +37,11 @@ export type CanvasMounts = {
 
 export const CANVAS_WIDTHS = { desktop: '100%', phone: '390px' } as const
 
+/** Retag a canvas document's language (a plain DOM write, outside React's state). */
+function tagLanguage(doc: Document | null | undefined, lang: string): void {
+  if (doc) doc.documentElement.lang = lang
+}
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 
 function canvasDocument(spec: CanvasSpec): string {
@@ -50,9 +55,11 @@ function canvasDocument(spec: CanvasSpec): string {
 }
 
 export default function CanvasFrame({
-  spec, width = 'desktop', title = 'Editor', minHeight = 480, children,
+  spec, lang, width = 'desktop', title = 'Editor', minHeight = 480, children,
 }: {
   spec: CanvasSpec
+  /** The locale being edited, when it differs from the spec's (no reload needed). */
+  lang?: string
   width?: keyof typeof CANVAS_WIDTHS
   title?: string
   minHeight?: number
@@ -88,13 +95,21 @@ export default function CanvasFrame({
     if (frameRef.current?.contentDocument?.readyState === 'complete') onLoad()
   }, [onLoad])
 
+  // The Genome's title case (and hyphenation, and quotes) follow the EDITED
+  // language: switching it retags the page instead of rebuilding it.
+  useEffect(() => {
+    if (mounts) tagLanguage(frameRef.current?.contentDocument, lang ?? spec.lang)
+  }, [mounts, lang, spec.lang])
+
   // Height, keys and theme — wired once the document exists, torn down with it.
   useEffect(() => {
     if (!mounts) return
     const { doc } = mounts
+    // The BODY's height, not the root's scrollHeight: that one never drops below the
+    // frame's own height, so a frame that grew could never shrink again.
     const fit = () => {
       const frame = frameRef.current
-      if (frame) frame.style.height = `${Math.max(minHeight, doc.documentElement.scrollHeight)}px`
+      if (frame) frame.style.height = `${Math.max(minHeight, Math.ceil(doc.body.getBoundingClientRect().height))}px`
     }
     const ro = new ResizeObserver(fit)
     ro.observe(doc.documentElement)
@@ -133,7 +148,10 @@ export default function CanvasFrame({
         title={title}
         srcDoc={srcDoc}
         onLoad={onLoad}
-        className="mx-auto block border-0 transition-[width] duration-300"
+        className={width === 'phone'
+          ? // box-content: the border must not eat the 390px the blog's media queries see.
+            'mx-auto box-content block rounded-[1.75rem] border border-border shadow-pop transition-[width] duration-300'
+          : 'mx-auto block border-0 transition-[width] duration-300'}
         style={{ width: CANVAS_WIDTHS[width], minHeight, colorScheme: 'normal' }}
       />
       {mounts && children(mounts)}

@@ -12,15 +12,24 @@
 //     stylesheet sizes with rem, and putting the blog's font size on the root
 //     would rescale every rem in it.
 //   · one more layer, `carma.editor`, AFTER everything the reader gets, holding
-//     only what editing needs: the caret, the selection, placeholders, node
-//     outlines, focus mode, and ProseMirror's own required base CSS (TipTap
+//     only what editing needs: the caret, the selection, placeholders (body,
+//     title, lede), node outlines, the cover's controls, focus mode, and
+//     ProseMirror's own required base CSS (TipTap
 //     injects that into the PARENT document's head, which the iframe cannot see).
 //     `test:editor-fidelity` proves this layer never changes a reader-visible
 //     property of the content.
 //
-// Deliberately NOT carried over from TipTap's base CSS: the ligature switch-off.
-// ProseMirror recommends it for caret placement inside ligatures; the reader sees
-// the ligatures, so the writer does too (the W7.0 spike checked the caret).
+// Deliberately NOT carried over from TipTap's base CSS:
+//   · the ligature switch-off. ProseMirror recommends it for caret placement inside
+//     ligatures; the reader sees the ligatures, so the writer does too (the W7.0
+//     spike checked the caret);
+//   · `pre{white-space:pre-wrap}`. On the blog a long code line scrolls; forcing it
+//     to wrap made the phone canvas's code block 23px taller than the reader's
+//     (caught by test:editor-fidelity). The UA's `pre` preserves whitespace too;
+//   · `white-space:break-spaces`. It gives a space at the end of a line WIDTH, so a
+//     word that fits on the reader's line wrapped on the writer's (a Sonnet genome
+//     at 390px, caught by the gate). `pre-wrap` lets that space hang, as `normal`
+//     does; the only cost is a caret after a line-final space drawn at the line end.
 
 import { articleCanvasParts } from '@/lib/render/theme'
 import type { Locale } from '@/lib/i18n/config'
@@ -38,10 +47,9 @@ export const CANVAS_EDITOR_LAYER = `@layer carma.editor{
 html{background:var(--ct-bg)}
 html,body{margin:0}
 body{padding-bottom:240px}
-.carma-article-content.ProseMirror{outline:none;caret-color:var(--ct-accent);position:relative;word-wrap:break-word;white-space:pre-wrap;white-space:break-spaces}
+.carma-article-content.ProseMirror{outline:none;caret-color:var(--ct-accent);position:relative;word-wrap:break-word;white-space:pre-wrap}
 .ProseMirror [contenteditable="false"]{white-space:normal}
 .ProseMirror [contenteditable="false"] [contenteditable="true"]{white-space:pre-wrap}
-.ProseMirror pre{white-space:pre-wrap}
 .ProseMirror ::selection{background:color-mix(in srgb,var(--ct-accent) 28%,transparent)}
 .ProseMirror .is-empty::before{content:attr(data-placeholder);color:var(--ct-muted);float:left;height:0;pointer-events:none}
 .ProseMirror-selectednode{outline:2px solid var(--ct-accent);outline-offset:2px}
@@ -52,6 +60,13 @@ body{padding-bottom:240px}
 @keyframes carma-gapcursor{to{visibility:hidden}}
 .ProseMirror-focused .ProseMirror-gapcursor{display:block}
 img.ProseMirror-separator{display:inline!important;border:none!important;margin:0!important}
+.carma-article-title[contenteditable],.carma-article-lede[contenteditable]{outline:none;caret-color:var(--ct-accent)}
+.carma-article-title[data-empty],.carma-article-lede[data-empty]{position:relative;min-height:1lh}
+.carma-article-title[data-empty]::before,.carma-article-lede[data-empty]::before{content:attr(data-placeholder);position:absolute;inset-inline:0;color:var(--ct-muted);opacity:.6;pointer-events:none}
+.carma-article-header:not(:hover):not(:focus-within) .carma-article-lede[data-empty]{display:none}
+.carma-article-image-wrap{position:relative}
+.carma-cover-tools{transition:opacity .15s ease}
+.carma-article-image-wrap:not(:hover):not(:focus-within)>.carma-cover-tools{opacity:0}
 .carma-focus-mode .carma-article-content>*{opacity:.3;transition:opacity .25s ease}
 .carma-focus-mode .carma-article-content>.carma-focused{opacity:1}
 #carma-ui{position:absolute;top:0;left:0;width:100%;height:0;z-index:50}
@@ -61,6 +76,12 @@ img.ProseMirror-separator{display:inline!important;border:none!important;margin:
 export function canvasCss(shadowCss: string): string {
   return `${shadowCss.replace(/:host\b(?!\()/g, 'body')}\n${CANVAS_EDITOR_LAYER}`
 }
+
+/** A new article's canvas is built before the post exists: nothing but the design. */
+export const BLANK_POST = {
+  id: 'new', title: '', slug: '', content: { html: '' }, excerpt: null, featured_image: null,
+  categories: [], tags: [], author_name: null, created_at: '1970-01-01T00:00:00.000Z', is_published: false,
+} satisfies Parameters<typeof articleCanvasParts>[2]
 
 /** Everything the client canvas needs to become this post's article page. */
 export function buildCanvasSpec(

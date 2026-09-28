@@ -1,7 +1,7 @@
 // W7.0 — THE IFRAME SPIKE: can TipTap/ProseMirror live inside the canvas iframe?
 //
-//   CARMA_LAB=1 npx next start -p 3107   (after a fresh build), then:
-//   npm run test:canvas
+//   npm run build && npm run test:canvas     (boots the built app with CARMA_LAB=1;
+//                                             LAB_URL=… uses a running server)
 //
 // Drives the REAL editor on /lab/canvas in Chrome through every interaction the
 // plan named as a risk — typing, undo/redo, selection sync from the first click,
@@ -18,8 +18,8 @@
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { labServer } from './lab-server.mjs'
 
-const BASE = process.env.LAB_URL || 'http://localhost:3107'
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PPTR = [
   path.join(process.cwd(), 'node_modules', 'puppeteer-core', 'lib', 'puppeteer', 'puppeteer-core.js'),
@@ -41,6 +41,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const errors = []
 /** A fresh lab page; `page` is reused, the document is new. */
 async function fresh(page, query = 'preset=noir') {
+  // A background tab gets no rendering steps (no rAF, no ResizeObserver) and a
+  // puppeteer click there waits forever — the iPhone section opens a second tab.
+  await page.bringToFront()
   await page.goto(`${BASE}/lab/canvas?${query}`, { waitUntil: 'networkidle0', timeout: 60000 })
   await page.waitForFunction(() => window.__lab?.ready === true, { timeout: 45000 })
   const frame = await (await page.$('iframe')).contentFrame()
@@ -71,6 +74,8 @@ const key = async (page, combo) => {
   for (const k of parts.reverse()) await page.keyboard.up(k)
 }
 
+const server = await labServer()
+const BASE = server.base
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] })
 try {
   const page = await browser.newPage()
@@ -267,6 +272,11 @@ try {
   await sleep(500)
   const phone = await page.evaluate(() => document.querySelector('iframe').contentWindow.innerWidth)
   ok(phone === 390, 'the phone toggle gives the blog a 390px viewport of its own', `${phone}px`)
+  const tall = await page.evaluate(() => document.querySelector('iframe').getBoundingClientRect().height)
+  await page.evaluate(() => window.__lab.editor.chain().focus().selectAll().deleteSelection().run())
+  await sleep(300)
+  const short = await page.evaluate(() => document.querySelector('iframe').getBoundingClientRect().height)
+  ok(short < tall - 400, 'and it SHRINKS when the content does (it measures the body, not the root)', `${Math.round(tall)}px → ${Math.round(short)}px`)
 
   head('9. iPHONE EMULATION — touch focus and typing (Chrome, not WebKit)')
   const phonePage = await browser.newPage()
@@ -285,9 +295,59 @@ try {
   const vw = await phonePage.evaluate(() => document.querySelector('iframe').contentWindow.innerWidth)
   ok(vw <= 402, 'on a phone the canvas is phone-wide', `${vw}px`)
 
+  head('10. THE HEADER (W7.2) — the blog’s own <h1>, lede and meta line, editable')
+  frame = await fresh(page)
+  const hdr = await frame.evaluate(() => {
+    const h = document.querySelector('header.carma-article-header')
+    const t = h?.querySelector('h1.carma-article-title')
+    return { kids: [...(h?.children ?? [])].map(c => c.className).join(' | '), editable: t?.contentEditable, text: t?.textContent }
+  })
+  ok(hdr.kids === 'carma-article-title | carma-article-lede | carma-article-meta', 'the header is the published markup: title, lede, meta line', hdr.kids)
+  ok(hdr.editable === 'plaintext-only', 'the title is plain-text editable in place — no <input> box standing in for the <h1>')
+  const h1 = await el(frame, 'h1.carma-article-title')
+  const h1b = await h1.boundingBox()
+  await h1.click({ offset: { x: h1b.width - 2, y: h1b.height - 6 } })
+  await frame.evaluate(() => { const t = document.querySelector('h1.carma-article-title'); const r = document.createRange(); r.selectNodeContents(t); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r) })
+  await page.keyboard.type(' nou')
+  await sleep(120)
+  const typed = await page.evaluate(() => window.__lab.header.title)
+  ok(typed.endsWith(' nou'), 'typing in the title updates the article’s state', typed)
+  await key(page, 'Control+KeyZ'); await sleep(150)
+  const undone = await page.evaluate(() => window.__lab.header.title)
+  ok(!undone.endsWith(' nou'), 'Ctrl+Z in the title undoes it (and the state follows)', undone)
+  await frame.evaluate(() => {
+    const t = document.querySelector('h1.carma-article-title'); t.focus()
+    const r = document.createRange(); r.selectNodeContents(t); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r)
+    const dt = new DataTransfer(); dt.setData('text/plain', ' — enganxat\ndes d’un document\n')
+    t.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  })
+  await sleep(120)
+  const pastedTitle = await frame.evaluate(() => document.querySelector('h1.carma-article-title').textContent)
+  ok(pastedTitle.includes('enganxat des d’un document') && !/\n/.test(pastedTitle), 'a multi-line paste into the title is flattened to one line', pastedTitle)
+  await page.keyboard.press('Enter')
+  await sleep(150)
+  const afterEnter = await page.evaluate(() => ({ focused: window.__lab.editor.isFocused, title: window.__lab.header.title }))
+  ok(afterEnter.focused && !/\n/.test(afterEnter.title), 'Enter in the title moves to the body instead of breaking the line')
+  // The lede: emptied, it is a writer's affordance — hidden at rest, shown while the header is in use.
+  await frame.evaluate(() => {
+    const l = document.querySelector('p.carma-article-lede'); l.focus()
+    const r = document.createRange(); r.selectNodeContents(l); const s = getSelection(); s.removeAllRanges(); s.addRange(r)
+  })
+  await page.keyboard.press('Backspace')
+  await sleep(120)
+  const emptied = await frame.evaluate(() => { const l = document.querySelector('p.carma-article-lede'); return { empty: l.hasAttribute('data-empty'), display: getComputedStyle(l).display, ph: getComputedStyle(l, '::before').content } })
+  ok(emptied.empty && emptied.display !== 'none' && /Entradeta/.test(emptied.ph), 'an emptied lede keeps a placeholder while it is being edited', emptied.ph)
+  await page.evaluate(() => window.__lab.editor.commands.focus('end'))
+  await page.mouse.move(640, 880)
+  await sleep(150)
+  const atRest = await frame.evaluate(() => getComputedStyle(document.querySelector('p.carma-article-lede')).display)
+  ok(atRest === 'none', 'at rest an empty lede is gone — the page is the reader’s, who gets no lede', atRest)
+  ok((await page.evaluate(() => window.__lab.header.lede)) === '', 'and the state knows it is empty')
+
   ok(errors.length === 0, 'no page errors or console errors in any section', errors.slice(0, 3).join(' | '))
 } finally {
   await browser.close()
+  server.stop()
 }
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'}  ${pass} passed · ${fail} failed`)

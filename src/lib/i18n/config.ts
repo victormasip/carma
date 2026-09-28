@@ -52,6 +52,13 @@ export const LOCALE_META: Record<Locale, LocaleMeta> = {
   nl: { label: 'Dutch', native: 'Nederlands', code: 'NL' },
 }
 
+/** The regional tag each publishing language formats dates with — the published
+ *  article's meta line and the editor canvas's copy of it must agree. */
+export const BCP47: Record<Locale, string> = {
+  ca: 'ca-ES', es: 'es-ES', en: 'en-US', fr: 'fr-FR', de: 'de-DE',
+  it: 'it-IT', pt: 'pt-PT', gl: 'gl-ES', eu: 'eu-ES', nl: 'nl-NL',
+}
+
 export function isLocale(v: unknown): v is Locale {
   return typeof v === 'string' && (LOCALES as readonly string[]).includes(v)
 }

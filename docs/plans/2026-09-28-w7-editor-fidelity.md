@@ -1,6 +1,7 @@
 # W7 — The writing canvas is the blog
 
-**Status:** proposal, awaiting founder approval (2026-09-28).
+**Status:** APPROVED 2026-09-28 (iframe canvas · blog ground · Sonnet 5 live). **W7.0 ✅ · W7.1 ✅ · W7.2 ✅**
+on branch `w7/editor-canvas` — see §8 for what was measured. W7.3–W7.5 open.
 **Scope:** the article editor (`/dashboard/sites/[id]/posts/*`), then the Studio's inline body editor.
 **Premise:** since W6, every blog is dressed by its own Genome — typefaces, accent, ground,
 spacing, drop caps, lanes, ornaments. The person who writes that blog still types into a
@@ -207,3 +208,80 @@ Built on `test:cascade`'s Chrome harness.
 3. **Callouts keep their fixed semantic palette** (blue/green/amber/red, as published today),
    or become Genome-aware — the latter is a design change to live blogs, proposed for W8.
 4. **Order:** the post editor first, the Studio's inline editor in W7.4.
+
+---
+
+## 8. Results (2026-09-28)
+
+### W7.0 — the spike: the iframe survived
+
+`npm run test:canvas` drives the real editor on `/lab/canvas` in Chrome: **46/46**, stable
+across repeated runs. Covered: typing, undo/redo, selection sync before the first transaction,
+the bubble and floating menus (React portals + floating-ui across the frame), the slash menu,
+a React node view's controls, the block handle, focus in/out, ⌘K/⌘S forwarding, a Word paste
+through the sanitiser, IME composition, the caret inside a ligature, the frame's height (grow
+**and** shrink), a 390px phone viewport, touch focus under iPhone emulation, and (W7.2) the
+editable header. **Chrome only** — this machine has no WebKit or Firefox; iPhone emulation is
+Chrome with a touch screen, not Safari. Real Safari/Firefox remain a W7.5 item.
+
+What the spike found, all fixed:
+
+- **The view must be born inside the frame.** ProseMirror binds `selectionchange` to the
+  document the view is created in; TipTap gets an `element` owned by the iframe document.
+- **The hydration race.** The srcdoc can finish loading before React attaches `onLoad`; the
+  frame adopts an already-complete document on mount.
+- **Two bugs the classic editor already had** (an A/B against `?mode=classic` showed them on
+  both): node-view control clicks were lost when the mousedown moved the selection
+  (`keepSelection`), and the block handle hid before the pointer could reach it (grace timer).
+- **`@scope` roots never match their own classes in Chrome** (an implicit `:scope ` descendant
+  is prefixed). UI controls inside a block are scoped from their parent with a limit that keeps
+  the blog's siblings out: `@scope (#carma-ui, :has(> [data-carma-ui])) to (:scope:not(#carma-ui) > :not([data-carma-ui]))`.
+- **A frame that could only grow.** `documentElement.scrollHeight` never drops below the frame's
+  own height; the fit measures the body.
+- **Test harness:** a background tab gets no rendering steps (no rAF, no ResizeObserver) and a
+  puppeteer click there waits forever — every page is brought to the front before use.
+
+### W7.1 — one resolver, one stylesheet, the gate
+
+- `resolveRenderTheme(admin, siteId)` (`blogRender.ts`) — used by the three cached renders and
+  by both editor pages.
+- `articleCanvasParts` (`theme.ts`) returns the post's EXACT shadow stylesheet;
+  `buildCanvasSpec` (`canvas.ts`) re-homes `:host` onto `body` and appends `@layer carma.editor`.
+- `test:editor-fidelity`: 8 presets + 12 live Sonnet 5 genomes (Verne, dental, legal, beauty ×
+  faithful/elevated/reimagined) + 3 in English = **23 designs × desktop and 390px**, 54
+  properties per element plus `::before/::after/::first-letter/::marker` and the box.
+
+| | classic editor (today) | the canvas |
+|---|---|---|
+| prose (460 block pairs) | 29,035 differing properties | **0** |
+| header — title · lede · meta (46) | not on the page | **0** |
+| callout · columns · toggle (converged) | 12,511 | **0** |
+| **gate** | **FAIL — 41,546** | **PASS — 0** |
+| CTA · figure (node views, W7.3) | reported | reported: 236 · 46 |
+
+The gate caught two editor-layer rules copied from TipTap's base CSS that changed what the
+reader sees: `pre{white-space:pre-wrap}` (a long code line wrapped instead of scrolling —
+23px taller at 390px) and `white-space:break-spaces` (a line-final space took width, so a
+Sonnet genome's paragraph broke at a different word at 390px). Both removed; the root keeps
+`pre-wrap`, which lets that space hang as `normal` does.
+
+### W7.2 — the post editor on the canvas
+
+- `/posts/new` and `/posts/[id]/edit` build the canvas from the site's render theme.
+- The title is the blog's `<h1 class="carma-article-title">`, plain-text editable (Enter →
+  body, paste flattened, native undo); the excerpt is the `.carma-article-lede` (an empty lede
+  shows only while the header is in use — at rest the page is the reader's); the meta line is
+  the published one; the cover is `figure.carma-article-image-wrap` with its controls on top.
+- Desktop / Mòbil toggle: the frame width IS the blog's viewport (`box-content`, so the border
+  does not eat the 390px).
+- The canvas's `lang` follows the language being edited (title case, hyphenation, spelling).
+- The link/image/video URL bar is pinned to the viewport in canvas mode (rendered in place it
+  sat below the whole article).
+- `TitleInput.tsx` deleted — the `<textarea>` could never be the blog's `<h1>`.
+- **Logged-in QA on the built app** (throwaway user + site with Verne-elevated tokens, created
+  and deleted in the run): 12/12 — Lora title, Work Sans body, the blog's ground under app dark
+  mode, title and body autosave from the canvas, a new article is created from the canvas
+  title, the 390px toggle, no console errors.
+- **Deviation from §5:** the `globals.css` prose copy is NOT deleted yet — the Studio's inline
+  body editor still uses the classic surface until W7.4. It goes with W7.4.
+- `test:perf` holds: the post editor routes are 33.8KB gzip of critical-path JS (budget 66KB).

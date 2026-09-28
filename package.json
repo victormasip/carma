@@ -28,7 +28,8 @@
     "test:director-llm": "node --experimental-strip-types --import ./tests/register.mjs tests/director-llm.mjs",
     "test:cascade": "node --experimental-strip-types --import ./tests/register.mjs tests/cascade.mjs",
     "test:reveal": "node --experimental-strip-types --import ./tests/register.mjs tests/reveal.mjs",
-    "test:canvas": "node tests/canvas-spike.mjs"
+    "test:canvas": "node tests/canvas-spike.mjs",
+    "test:editor-fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-fidelity.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

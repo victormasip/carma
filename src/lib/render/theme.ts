@@ -37,7 +37,7 @@ import { buildBlogCss, UNLAYER_JS } from '@/lib/render/blogCss'
 import { scopeChromeCss } from '@/lib/render/scopeCss'
 import { contrastRatio, parseColor } from '@/lib/scrape/chromeContrast'
 import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
-import { DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
+import { BCP47, DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
 import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } from './image'
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
@@ -130,11 +130,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 const escapeAttr = escapeHtml
-
-const BCP47: Record<Locale, string> = {
-  ca: 'ca-ES', es: 'es-ES', en: 'en-US', fr: 'fr-FR', de: 'de-DE',
-  it: 'it-IT', pt: 'pt-PT', gl: 'gl-ES', eu: 'eu-ES', nl: 'nl-NL',
-}
 
 function formatDate(iso: string, locale: Locale = DEFAULT_LOCALE): string {
   try {

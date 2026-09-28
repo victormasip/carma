@@ -488,9 +488,14 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   )
 
   /* Tiny inline link/image/video inputs — anchored above the canvas, only when triggered.
-     App chrome, not part of the page: in the canvas mode they stay in the parent. */
+     App chrome, not part of the page: in the canvas mode they stay in the parent,
+     pinned to the VIEWPORT — rendered in place they would sit after the whole
+     article, below the fold of any real post. */
   const inputs = (showLinkInput || showImageInput || showVideoInput) && (
-        <div className="sticky top-0 z-20 -mt-2 mb-3 mx-auto max-w-[44rem] flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated border border-border shadow-pop">
+        <div className={cn(
+          'z-20 flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated border border-border shadow-pop',
+          canvas ? 'fixed left-1/2 top-20 w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2' : 'sticky top-0 -mt-2 mb-3 mx-auto max-w-[44rem]',
+        )}>
           {showLinkInput && (
             <>
               <Link2 className="w-3.5 h-3.5 text-subtle shrink-0" />

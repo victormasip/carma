@@ -11,6 +11,7 @@
 //     canvas reclaims the viewport when the drawer is closed.
 
 import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Save, Eye, EyeOff, Tag, X, ImageIcon,
@@ -18,13 +19,16 @@ import {
   CheckCircle2, AlertCircle, ExternalLink, Sparkles, Crown,
   RefreshCw, PanelRight, Bot, Languages, Upload,
   Heading1, Heading2, Heading3, List, ListOrdered, Quote, Info, Images, Columns2, Minus, Type, Focus,
+  Monitor, Smartphone,
 } from 'lucide-react'
 import type { Editor } from '@tiptap/core'
 import { uploadImage } from '@/lib/upload'
 import { createPost, updatePost, translateArticle, analyzeArticleWriting, generateSeoArticle, rewriteArticleSelection, type PostData, type LocalizedContent } from '@/lib/actions/posts'
 import type { RewriteMode } from '@/lib/writing/rewrite'
 import CommandPalette, { type Command } from '@/components/editor/CommandPalette'
-import TitleInput from '@/components/editor/TitleInput'
+import CanvasFrame from '@/components/editor/canvas/CanvasFrame'
+import { CanvasArticleHeader, CanvasFeaturedImage } from '@/components/editor/canvas/CanvasArticleHeader'
+import type { CanvasSpec } from '@/lib/render/canvas'
 import LanguageMenu from '@/components/editor/LanguageMenu'
 import CostBadge, { CostLine } from '@/components/ui/CostBadge'
 import type { WritingAnalysis } from '@/lib/writing/coach'
@@ -98,6 +102,8 @@ type Props = {
   /** Punts balance, so every AI control can state its price BEFORE it is pressed
    *  (Fase 2). `available: false` = migration 028 pending → prices stay hidden. */
   karma?: { balance: number | null; available: boolean; superadmin: boolean }
+  /** W7 — the blog's article page to write on (lib/render/canvas.ts). */
+  canvasSpec: CanvasSpec
 }
 
 type DrawerTab = 'settings' | 'seo' | 'ai'
@@ -345,7 +351,7 @@ function writeDrawerOpen(next: boolean): void {
   for (const fn of drawerListeners) fn()
 }
 
-export default function PostEditorClient({ siteId, siteName, subdomain = null, post, siteDefaultLocale, canTranslate = false, karma }: Props) {
+export default function PostEditorClient({ siteId, siteName, subdomain = null, post, siteDefaultLocale, canTranslate = false, karma, canvasSpec }: Props) {
   const isNew = !post
   const router = useRouter()
   const { toast } = useToast()
@@ -1127,6 +1133,7 @@ export default function PostEditorClient({ siteId, siteName, subdomain = null, p
 
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [canvasWidth, setCanvasWidth] = useState<'desktop' | 'phone'>('desktop')
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -1339,60 +1346,21 @@ export default function PostEditorClient({ siteId, siteName, subdomain = null, p
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas — scrolls independently */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[800px] mx-auto px-5 sm:px-10 py-10">
+          {/* THE DOCUMENT BAR — app chrome ABOUT the article (its language, its
+              address, its cover, the device it is previewed on), above the page.
+              Everything under it is the blog. */}
+          <div className="max-w-[800px] mx-auto px-5 sm:px-10 pt-6 pb-5">
             {error && (
               <div className="mb-6 p-3 text-sm rounded-xl bg-danger-soft border border-danger/20 text-danger font-medium">
                 {error}
               </div>
             )}
 
-            {/* Cover image — the article's visual anchor, at the top of the canvas. */}
-            {featuredImage ? (
-              <div className="group relative mb-6 aspect-[2.5/1] overflow-hidden rounded-2xl bg-surface-hover">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={featuredImage} alt="" className="h-full w-full object-cover" />
-                <div className="absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => coverFileRef.current?.click()}
-                    disabled={uploadingCover}
-                    className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition-colors hover:bg-black/75 disabled:opacity-60"
-                  >
-                    {uploadingCover ? 'Pujant…' : 'Canviar'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFeaturedImage('')}
-                    className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition-colors hover:bg-black/75"
-                  >
-                    Treure
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => coverFileRef.current?.click()}
-                disabled={uploadingCover}
-                className="mb-4 -ml-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-subtle transition-colors hover:bg-surface-hover hover:text-muted disabled:opacity-60"
-              >
-                {uploadingCover ? <KnotSpinner className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                Afegeix una portada
-              </button>
-            )}
-            <input
-              ref={coverFileRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={e => { void uploadCover(e.target.files?.[0]); e.target.value = '' }}
-            />
-
             {/* Language — a real, labelled control at the head of the canvas
                 (Fase 5). Spelled-out language name, completion as a number, and
                 every destructive action behind a per-row ⋯ menu instead of a
                 hover-only ✕ that a touch device could never reach. */}
-            <div className="mb-5 flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <LanguageMenu
                 shown={shownLocales}
                 active={activeLocale}
@@ -1413,15 +1381,46 @@ export default function PostEditorClient({ siteId, siteName, subdomain = null, p
                   <CostBadge action="article_revision" balance={cost.balance} available={cost.available} />
                 </span>
               )}
+              <div className="ml-auto flex items-center gap-1.5">
+                {!featuredImage && (
+                  <button
+                    type="button"
+                    onClick={() => coverFileRef.current?.click()}
+                    disabled={uploadingCover}
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-subtle transition-colors hover:bg-surface-hover hover:text-muted disabled:opacity-60"
+                  >
+                    {uploadingCover ? <KnotSpinner className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                    Afegeix una portada
+                  </button>
+                )}
+                {/* Desktop / Phone: the frame's width IS the viewport the blog's
+                    media queries see, so this is the real phone layout, not a
+                    scaled-down picture of the desktop one. */}
+                <div role="group" aria-label="Previsualització" className="hidden sm:flex items-center gap-0.5 rounded-lg border border-border p-0.5">
+                  {(['desktop', 'phone'] as const).map(w => (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => setCanvasWidth(w)}
+                      aria-pressed={canvasWidth === w}
+                      title={w === 'desktop' ? 'Escriptori' : 'Mòbil (390 px)'}
+                      className={cn(
+                        'cursor-pointer flex h-6 w-7 items-center justify-center rounded-md transition-colors',
+                        canvasWidth === w ? 'bg-surface text-text shadow-card' : 'text-subtle hover:text-text',
+                      )}
+                    >
+                      {w === 'desktop' ? <Monitor className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-
-            {/* Title — borderless, oversized, prosey, and now AUTO-EXPANDING: it
-                was a single-line <input>, so a long headline scrolled sideways and
-                the writer could never see the whole thing. */}
-            <TitleInput
-              value={cur.title}
-              onChange={handleTitleChange}
-              onCommit={() => editorInstanceRef.current?.commands.focus("start")}
+            <input
+              ref={coverFileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={e => { void uploadCover(e.target.files?.[0]); e.target.value = '' }}
             />
 
             {/* Slug — ALWAYS visible (Fase 5). It used to appear only once a title
@@ -1500,32 +1499,59 @@ export default function PostEditorClient({ siteId, siteName, subdomain = null, p
                 </button>
               </div>
             )}
+          </div>
 
-            {/* Editor — full-bleed, no border. Margin to clear the slug strip. */}
-            <div className="mt-8">
-              <ErrorBoundary label="L'editor ha tingut un error">
-                <Suspense fallback={
-                  <div className="space-y-3">
-                    <div className="h-5 w-2/3 bg-surface-hover rounded animate-pulse" />
-                    <div className="h-5 w-1/2 bg-surface-hover rounded animate-pulse" />
-                    <div className="h-5 w-5/6 bg-surface-hover rounded animate-pulse" />
-                  </div>
-                }>
-                  <TipTapEditor
-                    key={`${activeLocale}-${editorNonce}`}
-                    initialHtml={cur.contentHtml}
-                    onChange={handleContentChange}
-                    placeholder="Comença a escriure, o prem '/' per inserir blocs…"
-                    siteId={siteId}
-                    selectionRef={editorSelectionRef}
-                    restoreCaretRef={restoreCaretRef}
-                    onEditorReady={onEditorReady}
-                    onAiRewrite={onAiRewrite}
-                    focusMode={focusMode}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-            </div>
+          {/* THE PAGE (W7) — the blog's own article page: its stylesheet, its type,
+              its ground (paper or ink, whatever the app's theme). The title, the
+              lede, the cover and the body are written where, and as, the reader
+              will see them; test:editor-fidelity holds that to the computed style. */}
+          <div className={cn('pb-16', canvasWidth === 'phone' ? 'px-4 pt-1' : 'border-t border-border')}>
+            <ErrorBoundary label="L'editor ha tingut un error">
+              <CanvasFrame spec={canvasSpec} lang={activeLocale} width={canvasWidth} title="Article">
+                {(mounts) => (
+                  <>
+                    {createPortal(
+                      <CanvasArticleHeader
+                        title={cur.title}
+                        onTitle={handleTitleChange}
+                        lede={cur.excerpt}
+                        onLede={v => patchLocale(activeLocale, { excerpt: v })}
+                        onCommit={() => editorInstanceRef.current?.commands.focus('start')}
+                        author={authorName}
+                        date={date}
+                        categories={categories}
+                        locale={activeLocale}
+                      />,
+                      mounts.header,
+                    )}
+                    {featuredImage && createPortal(
+                      <CanvasFeaturedImage
+                        src={featuredImage}
+                        busy={uploadingCover}
+                        onReplace={() => coverFileRef.current?.click()}
+                        onRemove={() => setFeaturedImage('')}
+                      />,
+                      mounts.featured,
+                    )}
+                    <Suspense fallback={null}>
+                      <TipTapEditor
+                        key={`${activeLocale}-${editorNonce}`}
+                        initialHtml={cur.contentHtml}
+                        onChange={handleContentChange}
+                        placeholder="Comença a escriure, o prem '/' per inserir blocs…"
+                        siteId={siteId}
+                        selectionRef={editorSelectionRef}
+                        restoreCaretRef={restoreCaretRef}
+                        onEditorReady={onEditorReady}
+                        onAiRewrite={onAiRewrite}
+                        focusMode={focusMode}
+                        canvas={mounts}
+                      />
+                    </Suspense>
+                  </>
+                )}
+              </CanvasFrame>
+            </ErrorBoundary>
           </div>
         </main>
 

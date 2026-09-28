@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
-import { labCanvasSpec, labDesign, LAB_FIXTURE_HTML } from '@/lib/render/canvasLab'
+import { labCanvasSpec, labDesign, LAB_FIXTURE_HTML, LAB_HEADER, LAB_TITLE } from '@/lib/render/canvasLab'
 import LabCanvas from './LabCanvas'
 
 /**
@@ -28,5 +28,8 @@ async function Lab({ searchParams }: { searchParams: SP }) {
   const { genome, locale } = labDesign({ g: one(sp.g), preset: one(sp.preset), l: one(sp.l) })
   // `?mode=classic` — the same editor WITHOUT the canvas: the spike's baseline, so a
   // behaviour is only called a canvas regression if the classic editor has it right.
-  return <LabCanvas spec={labCanvasSpec(genome, locale)} html={LAB_FIXTURE_HTML} classic={one(sp.mode) === 'classic'} />
+  return (
+    <LabCanvas spec={labCanvasSpec(genome, locale)} html={LAB_FIXTURE_HTML} locale={locale}
+      header={{ title: LAB_TITLE, ...LAB_HEADER }} classic={one(sp.mode) === 'classic'} />
+  )
 }

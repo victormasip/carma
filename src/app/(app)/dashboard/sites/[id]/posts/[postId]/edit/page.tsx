@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import PostEditorClient from '@/components/editor/PostEditorClient'
 import { getSiteLocaleConfig } from '@/lib/actions/locales'
 import { getKarma } from '@/lib/karma/karma'
+import { resolveRenderTheme } from '@/lib/render/blogRender'
+import { buildCanvasSpec } from '@/lib/render/canvas'
 
 export default async function EditPostPage({
   params,
@@ -24,7 +26,7 @@ export default async function EditPostPage({
 
   // Site (authz: RLS-scoped for clients), post and locale config are independent
   // given the route params — resolve them in one parallel round trip.
-  const [{ data: site }, postRes, localeConfig, karma] = await Promise.all([
+  const [{ data: site }, postRes, localeConfig, karma, theme] = await Promise.all([
     (isSuperAdmin ? admin : supabase).from('sites').select('id, name, subdomain').eq('id', siteId).single(),
     // Prefer the i18n columns, but fall back gracefully if migration 008 hasn't run.
     admin.from('posts').select(COLS_FULL).eq('id', postId).eq('site_id', siteId).single(),
@@ -32,6 +34,8 @@ export default async function EditPostPage({
     // Fase 2: every AI control shows its price BEFORE it is pressed, so a refusal
     // is never the first time the owner learns what something costs.
     getKarma(user.id, admin),
+    // W7: the article is written on the blog's own page — the render's theme.
+    resolveRenderTheme(admin, siteId),
   ])
 
   if (!site) redirect('/dashboard')
@@ -54,6 +58,7 @@ export default async function EditPostPage({
       post={post}
       siteLocales={localeConfig.locales}
       siteDefaultLocale={localeConfig.defaultLocale}
+      canvasSpec={buildCanvasSpec(theme, siteId, post as unknown as Parameters<typeof buildCanvasSpec>[2], localeConfig.defaultLocale)}
       canTranslate={isSuperAdmin}
       karma={{ balance: karma.balance, available: karma.available, superadmin: karma.superadmin || isSuperAdmin }}
     />

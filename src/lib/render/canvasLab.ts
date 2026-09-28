@@ -43,6 +43,14 @@ export const LAB_FIXTURE_HTML = [
 
 export const LAB_TITLE = 'Títol de l’article de prova'
 
+/** The rest of the header: a lede, and a meta line with all three parts. */
+export const LAB_HEADER = {
+  lede: 'Una entradeta de prova, de dues frases. Diu de què va l’article abans que comenci.',
+  author: 'Redacció',
+  date: '2026-09-28T00:00:00.000Z',
+  categories: ['Guia'],
+}
+
 /** A design → the theme the render resolves for it (tokens, faces, Genome CSS). */
 export function labTheme(genome: Genome, locale: Locale): Theme {
   const compiled = compileGenome(genome)
@@ -56,8 +64,8 @@ export function labTheme(genome: Genome, locale: Locale): Theme {
 
 export function labPost(html: string, locale: Locale): Post {
   return {
-    id: 'lab', title: LAB_TITLE, slug: 'lab', content: { html }, excerpt: null, featured_image: null,
-    categories: [], tags: [], author_name: null, created_at: '2026-09-28T00:00:00.000Z', is_published: true,
+    id: 'lab', title: LAB_TITLE, slug: 'lab', content: { html }, excerpt: LAB_HEADER.lede, featured_image: null,
+    categories: LAB_HEADER.categories, tags: [], author_name: LAB_HEADER.author, created_at: LAB_HEADER.date, is_published: true,
     default_locale: locale,
   } as Post
 }

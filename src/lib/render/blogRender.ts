@@ -180,6 +180,17 @@ export async function resolveRedirect(admin: Admin, siteId: string, slug: string
 
 // ─── Cached renders ───────────────────────────────────────────────────────────
 
+/**
+ * W7 — THE one answer to "which theme does this site render in": the stored
+ * theme, the active genome's own stylesheet joined (W6), the tokens completed with
+ * the defaults. The published render AND the editor's canvas (the post editor's
+ * page, via lib/render/canvas.ts) call this, so the page being written on and the
+ * page being read cannot resolve two different themes.
+ */
+export async function resolveRenderTheme(admin: Admin, siteId: string): Promise<ThemeRow> {
+  return themeWithTokens(await loadTheme(admin, siteId))
+}
+
 function themeWithTokens(theme: ThemeRow) {
   const base: DesignTokens = {
     ...DEFAULT_TOKENS,
@@ -211,12 +222,12 @@ export async function renderListingCached(
   cacheTag(siteTag(site.siteId))
 
   const [theme, posts] = await Promise.all([
-    loadTheme(admin, site.siteId),
+    resolveRenderTheme(admin, site.siteId),
     loadListingPosts(admin, site.siteId),
   ])
 
   const effective = locale ?? normalizeLocale((theme as { default_locale?: string } | null)?.default_locale)
-  const themeForRender = themeWithTokens(theme)
+  const themeForRender = theme
   const link = linkCtxFor(param, site.siteId, themeForRender)
 
   const html = buildListingPage(themeForRender, site.siteName, site.siteId, posts, effective, link)
@@ -259,7 +270,7 @@ export async function renderArticleCached(
   cacheTag(siteTag(site.siteId))
 
   const [theme, resolution] = await Promise.all([
-    loadTheme(admin, site.siteId),
+    resolveRenderTheme(admin, site.siteId),
     resolveBySlug(admin, site.siteId, slug),
   ])
 
@@ -293,7 +304,7 @@ export async function renderArticleCached(
     siblings = rows as unknown as ListingRows
   }
 
-  const themeForRender = themeWithTokens(theme)
+  const themeForRender = theme
   const link = linkCtxFor(param, site.siteId, themeForRender)
   const html = buildArticlePage(
     themeForRender, site.siteName, site.siteId, resolution.post, effective,
@@ -335,12 +346,12 @@ export async function renderFeedCached(
   cacheTag(siteTag(site.siteId))
 
   const [theme, posts] = await Promise.all([
-    loadTheme(admin, site.siteId),
+    resolveRenderTheme(admin, site.siteId),
     loadListingPosts(admin, site.siteId),
   ])
 
   const effective = locale ?? normalizeLocale((theme as { default_locale?: string } | null)?.default_locale)
-  const themeForRender = themeWithTokens(theme)
+  const themeForRender = theme
   const link = linkCtxFor(param, site.siteId, themeForRender)
 
   // A feed is read in someone else's app, days later. 50 is the number every
