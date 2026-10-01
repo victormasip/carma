@@ -1,25 +1,29 @@
 // test:editor-fidelity — W7: the page being written on IS the page being read.
 //
-//   npm run build && npm run test:editor-fidelity                 # the canvas
-//   npm run test:editor-fidelity -- --editor=classic              # today's editor: must FAIL
+//   npm run build && npm run test:editor-fidelity
+//   npm run test:editor-fidelity -- --only=verne                  # a subset
+//
+// (Before W7 the classic editor scored 41,546 differences on this gate; it and
+// its imitation CSS were deleted in W7.4.)
 //
 // For each design — the eight shipped presets and live Sonnet 5 genomes (Verne's
 // literary serifs and drop cap among them) — and at a desktop and a phone width:
 //
-//   1. the REAL editor is loaded with the fixture article (every block and mark)
+//   1. the REAL editor is loaded with the fixture article (every block, every mark,
+//      a cover)
 //      on /lab/canvas, and `editor.getHTML()` is taken — exactly what gets saved;
 //   2. that HTML is rendered through the REAL `buildArticlePage` at the same
 //      viewport width — exactly what a reader gets;
-//   3. every element of the article header (title, lede, meta line) and of the
-//      content column is compared, pair by pair: its computed style (face, size, weight, leading, tracking,
+//   3. every element of the article header (title, lede, meta line), of the cover
+//      and of the content column is compared, pair by pair: its computed style (face, size, weight, leading, tracking,
 //      case, colours, decoration, margins, padding, borders, radius, list style,
 //      numerals, ligatures, grid lane), its ::before / ::after / ::first-letter /
-//      ::marker, and its box (width, height, horizontal offset).
+//      ::marker, and its box (width, height, and its offset from the content column).
 //
-// THE GATE: prose (paragraphs, headings, lists, quotes, code, rules, inline marks)
-// and the header must be IDENTICAL. Blocks rendered by a node view (whose editing
-// DOM is not the saved markup) are reported per block, and fail only once listed
-// as converged. Not compared, because editing itself requires them: `white-space`
+// THE GATE: everything must be IDENTICAL — prose (paragraphs, headings, lists,
+// quotes, code, rules, inline marks), the header, the cover, and every block
+// (callout, columns, toggle, CTA, figure, gallery, embed, table of contents). Not
+// compared, because editing itself requires them: `white-space`
 // (ProseMirror needs pre-wrap — its CONSEQUENCE, where lines break, is compared
 // through every box), `caret-color`, outlines, and elements marked `data-carma-ui`.
 
@@ -29,9 +33,8 @@ import { pathToFileURL } from 'node:url'
 import { PRESET_GENOMES } from '@/lib/design/presets'
 import { buildArticlePage } from '@/lib/render/theme'
 import { labPost, labTheme } from '@/lib/render/canvasLab'
-import { labServer } from './lab-server.mjs'
+import { labServer, stubVideo } from './lab-server.mjs'
 
-const EDITOR = (process.argv.find(a => a.startsWith('--editor=')) ?? '--editor=canvas').slice(9)
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PPTR = [
   path.join(process.cwd(), 'node_modules', 'puppeteer-core', 'lib', 'puppeteer', 'puppeteer-core.js'),
@@ -41,8 +44,6 @@ if (!PPTR || !existsSync(CHROME)) { console.log('SKIP  no Chrome / puppeteer-cor
 const mod = await import(pathToFileURL(PPTR).href)
 const puppeteer = mod.default ?? mod
 
-/** Block types whose node view already renders the saved markup (W7.3 grows this). */
-const CONVERGED = new Set(['callout', 'columns', 'toggle'])
 
 // ── The designs ─────────────────────────────────────────────────────────────
 const designs = PRESET_GENOMES.map(g => ({ id: `preset:${g.id}`, genome: g, locale: 'ca' }))
@@ -71,6 +72,8 @@ const PROPS = [
   'list-style-type', 'list-style-position', 'font-variant-numeric', 'font-variant-ligatures', 'font-feature-settings',
   'font-optical-sizing', 'box-shadow', 'vertical-align', 'max-width', 'grid-column-start', 'grid-column-end', 'justify-self',
   '-webkit-initial-letter', 'float',
+  // What decides WHERE a line breaks (W7.5: a box can match while its lines differ).
+  'overflow-wrap', 'word-break', 'line-break', 'hyphens', 'text-wrap-style', 'text-wrap-mode',
 ]
 const PSEUDO_PROPS = ['content', 'color', 'font-family', 'font-size', 'font-weight', 'display', 'opacity', 'margin-right', 'float', '-webkit-initial-letter', 'background-image']
 
@@ -80,6 +83,7 @@ function collect(where, props, pseudoProps) {
   const scope = where.shadow ? doc.querySelector(where.shadow).shadowRoot : doc
   const root = scope.querySelector(where.root)
   const header = scope.querySelector('.carma-article-header')
+  const cover = scope.querySelector('.carma-article-image-wrap')
   if (!root) return null
   const view = doc.defaultView
   const r0 = root.getBoundingClientRect()
@@ -95,11 +99,16 @@ function collect(where, props, pseudoProps) {
       out.p[pe] = Object.fromEntries(pseudoProps.map(k => [k, ps.getPropertyValue(k)]))
     }
     const b = e.getBoundingClientRect()
-    out.box = { w: Math.round(b.width), h: Math.round(b.height), x: Math.round(b.left - r0.left) }
+    // x AND y from the content column's corner: a spacing difference BETWEEN elements
+    // (a margin that collapses differently) moves everything after it (W7.5).
+    // An element that is not rendered (a gallery's closed lightbox) has an all-zero
+    // rect: its "offset" would only measure where the column sits on each page.
+    const shown = e.getClientRects().length > 0
+    out.box = { w: Math.round(b.width), h: Math.round(b.height), x: shown ? Math.round(b.left - r0.left) : 0, y: shown ? Math.round(b.top - r0.top) : 0 }
     if (withKids) for (const c of e.children) if (!skip(c)) out.kids.push(read(c, true))
     return out
   }
-  return { width: doc.documentElement.clientWidth, root: read(root, true), header: header && header.children.length ? read(header, true) : null }
+  return { width: doc.documentElement.clientWidth, root: read(root, true), header: header && header.children.length ? read(header, true) : null, cover: cover ? read(cover, true) : null }
 }
 
 const blockType = n => {
@@ -123,19 +132,21 @@ function diff(a, b, where, out) {
     if (!x || !y) { out.push({ where: `${where}${pe}`, prop: '<exists>', ed: !!x, pub: !!y }); continue }
     for (const k of Object.keys(x)) if (x[k] !== y[k]) out.push({ where: `${where}${pe}`, prop: k, ed: x[k], pub: y[k] })
   }
-  for (const k of ['w', 'h', 'x']) if (Math.abs(a.box[k] - b.box[k]) > 1) out.push({ where, prop: `box.${k}`, ed: a.box[k], pub: b.box[k] })
+  for (const k of ['w', 'h', 'x', 'y']) if (Math.abs(a.box[k] - b.box[k]) > 1) out.push({ where, prop: `box.${k}`, ed: a.box[k], pub: b.box[k] })
   if (a.kids.length !== b.kids.length) out.push({ where, prop: '<children>', ed: a.kids.length, pub: b.kids.length })
   const n = Math.min(a.kids.length, b.kids.length)
   for (let i = 0; i < n; i++) diff(a.kids[i], b.kids[i], `${where}>${a.kids[i].tag}[${i}]`, out)
 }
 
 // ── Run ─────────────────────────────────────────────────────────────────────
-console.log(`EDITOR FIDELITY — ${EDITOR === 'classic' ? 'TODAY’S EDITOR (expected to fail)' : 'the canvas'} vs the published article`)
+console.log('EDITOR FIDELITY — the canvas vs the published article')
 const server = await labServer()
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'], protocolTimeout: 90000 })
 const edPage = await browser.newPage(); await edPage.setViewport({ width: 1280, height: 900 })
 const pubPage = await browser.newPage()
-const tally = { prose: { pairs: 0, diffs: 0 }, header: { pairs: 0, diffs: 0 } }
+await stubVideo(edPage)
+await stubVideo(pubPage)
+const tally = { prose: { pairs: 0, diffs: 0 }, header: { pairs: 0, diffs: 0 }, cover: { pairs: 0, diffs: 0 } }
 const byBlock = new Map()
 const samples = []
 try {
@@ -146,18 +157,18 @@ try {
       // canvas's height) and a puppeteer click that waits forever. Front first.
       await edPage.bringToFront()
       const g = Buffer.from(JSON.stringify(d.genome)).toString('base64url')
-      await edPage.goto(`${server.base}/lab/canvas?g=${g}&l=${d.locale}${EDITOR === 'classic' ? '&mode=classic' : ''}`, { waitUntil: 'networkidle0', timeout: 60000 })
+      await edPage.goto(`${server.base}/lab/canvas?g=${g}&l=${d.locale}`, { waitUntil: 'networkidle0', timeout: 60000 })
       await edPage.waitForFunction(() => window.__lab?.ready === true, { timeout: 45000 })
       step('ready')
-      if (width === 'phone' && EDITOR !== 'classic') { await edPage.click('[data-lab-width="phone"]'); await new Promise(r => setTimeout(r, 500)) }
-      if (EDITOR !== 'classic') await edPage.evaluate(() => document.querySelector('iframe').contentDocument.fonts.ready.then(() => true))
+      if (width === 'phone') { await edPage.click('[data-lab-width="phone"]'); await new Promise(r => setTimeout(r, 500)) }
+      await edPage.evaluate(() => document.querySelector('iframe').contentDocument.fonts.ready.then(() => true))
       await edPage.evaluate(() => document.fonts.ready.then(() => true))
       step('fonts')
       const saved = await edPage.evaluate(() => window.__lab.editor.getHTML())
-      const ed = await edPage.evaluate(collect, EDITOR === 'classic' ? { root: '.ProseMirror' } : { frame: true, root: '.carma-article-content' }, PROPS, PSEUDO_PROPS)
+      const ed = await edPage.evaluate(collect, { frame: true, root: '.carma-article-content' }, PROPS, PSEUDO_PROPS)
 
       step('collected editor')
-      const vw = EDITOR === 'classic' ? (width === 'phone' ? 390 : 1232) : ed.width
+      const vw = ed.width
       await pubPage.bringToFront()
       await pubPage.setViewport({ width: vw, height: 900 })
       await pubPage.setContent(buildArticlePage(labTheme(d.genome, d.locale), 'Lab', 'lab', labPost(saved, d.locale), d.locale), { waitUntil: 'load', timeout: 60000 })
@@ -177,13 +188,14 @@ try {
           for (const o of out) t.props.set(o.prop, (t.props.get(o.prop) ?? 0) + 1)
           byBlock.set(type, t)
         }
-        if (type === 'prose' || CONVERGED.has(type)) for (const o of out) samples.push({ design: d.id, width, type, ...o })
+        for (const o of out) samples.push({ design: d.id, width, type, ...o })
       }
       if (ed.root.kids.length !== pub.root.kids.length) samples.push({ design: d.id, width, type: 'structure', where: 'content', prop: '<blocks>', ed: ed.root.kids.length, pub: pub.root.kids.length })
-      if (ed.header && pub.header) {
-        const out = []; diff(ed.header, pub.header, 'header', out)
-        tally.header.pairs++; tally.header.diffs += out.length
-        for (const o of out) samples.push({ design: d.id, width, type: 'header', ...o })
+      for (const part of ['header', 'cover']) {
+        if (!ed[part] || !pub[part]) { if (ed[part] !== pub[part]) samples.push({ design: d.id, width, type: 'structure', where: part, prop: '<exists>', ed: !!ed[part], pub: !!pub[part] }); continue }
+        const out = []; diff(ed[part], pub[part], part, out)
+        tally[part].pairs++; tally[part].diffs += out.length
+        for (const o of out) samples.push({ design: d.id, width, type: part, ...o })
       }
       process.stdout.write(`  ${d.id.padEnd(30)} ${width.padEnd(8)} ${vw}px\n`)
     }
@@ -195,9 +207,10 @@ try {
 
 console.log(`\n  prose  ${tally.prose.pairs} block pairs · ${tally.prose.diffs} differing properties`)
 console.log(`  header ${tally.header.pairs ? `${tally.header.pairs} pairs · ${tally.header.diffs} differing properties  (title · lede · meta line)` : 'not on the canvas'}`)
+console.log(`  cover  ${tally.cover.pairs ? `${tally.cover.pairs} pairs · ${tally.cover.diffs} differing properties` : 'not on the canvas'}`)
 for (const [type, t] of [...byBlock.entries()].sort()) {
   const top = [...t.props.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, v]) => `${k}×${v}`).join(' ')
-  console.log(`  ${type.padEnd(8)} ${String(t.pairs).padStart(3)} pairs · ${String(t.diffs).padStart(4)} differing${CONVERGED.has(type) ? ' (converged)' : ' (node view — W7.3)'}${top ? `  ${top}` : ''}`)
+  console.log(`  ${type.padEnd(8)} ${String(t.pairs).padStart(3)} pairs · ${String(t.diffs).padStart(4)} differing${top ? `  ${top}` : ''}`)
 }
 const structural = samples.filter(s => s.type === 'structure')
 const hard = samples.filter(s => s.type !== 'structure')
@@ -213,8 +226,8 @@ for (const [k, g] of [...kinds.entries()].sort((x, y) => y[1].n - x[1].n).slice(
   const s = g.first
   console.log(`    ✗ ${String(g.n).padStart(4)}× ${k} — e.g. ${s.design} ${s.width}: editor ${JSON.stringify(s.ed)} · published ${JSON.stringify(s.pub)} (${g.designs.size} design×width)`)
 }
-const convergedDiffs = [...byBlock.entries()].filter(([t]) => CONVERGED.has(t)).reduce((a, [, t]) => a + t.diffs, 0)
-const failed = tally.prose.diffs + tally.header.diffs + convergedDiffs + structural.length
-  + (EDITOR !== 'classic' && tally.header.pairs === 0 ? 1 : 0) // the canvas must HAVE a header
+const blockDiffs = [...byBlock.values()].reduce((a, t) => a + t.diffs, 0)
+const failed = tally.prose.diffs + tally.header.diffs + tally.cover.diffs + blockDiffs + structural.length
+  + (tally.header.pairs === 0 ? 1 : 0) + (tally.cover.pairs === 0 ? 1 : 0) // the canvas must HAVE both
 console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'}  ${RUN.length} designs × ${WIDTHS.length} widths · ${failed} differences where there must be none`)
 process.exit(failed === 0 ? 0 : 1)

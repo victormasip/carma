@@ -6,19 +6,19 @@
 // Drives the REAL editor on /lab/canvas in Chrome through every interaction the
 // plan named as a risk — typing, undo/redo, selection sync from the first click,
 // the bubble and floating menus (React portals + floating-ui across the frame),
-// the slash menu, a React node view's controls, the block handle, focus, shortcut
+// the slash menu, every block in its published markup with its controls in the UI
+// layer (W7.3), the block handle, focus, shortcut
 // forwarding, paste, IME composition, a caret inside a ligature — and again under
 // iPhone emulation with touch. Every section starts from a FRESH page, so a
 // failure belongs to the section that reports it.
 //
-// Chrome only: this machine has no WebKit or Firefox, so Safari's own behaviour is
-// NOT covered (iPhone emulation is Chrome with a touch screen and a phone
-// viewport, not WebKit).
+// Chrome. Its "iPhone" is Chrome with a touch screen and a phone viewport; the
+// same interactions in WebKit — Safari's engine — are test:canvas-webkit (W7.5).
 
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { labServer } from './lab-server.mjs'
+import { labServer, stubVideo } from './lab-server.mjs'
 
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PPTR = [
@@ -80,8 +80,9 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
 try {
   const page = await browser.newPage()
   await page.setViewport({ width: 1280, height: 900 })
+  await stubVideo(page, { images: true })
   page.on('pageerror', e => errors.push(String(e).slice(0, 200)))
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 200)) })
+  page.on('console', m => { if (m.type() === 'error') errors.push(`${m.text().slice(0, 120)}${m.location()?.url ? ` — ${m.location().url.slice(0, 120)}` : ''}`) })
 
   head('1. THE PAGE — the editor is born inside the blog')
   let frame = await fresh(page)
@@ -96,7 +97,7 @@ try {
     }
   })
   ok(shape.isContent && shape.inArticle, 'the ProseMirror root IS .carma-article-content, inside the article page skeleton')
-  ok(shape.kids.startsWith('P,H2'), 'blocks are its direct children, as `.carma-article-content > *` expects', shape.kids)
+  ok(shape.kids === 'NAV,P,H2', 'blocks are its direct children, as `.carma-article-content > *` expects', shape.kids)
   ok(shape.uiOutside, 'the UI layer (#carma-ui) lives outside .carma-root — no blog rule reaches it')
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
   await sleep(150)
@@ -186,16 +187,87 @@ try {
   await sleep(200)
   ok(((await html(page)).match(/<blockquote>/g) ?? []).length === 2, 'filtering and Enter insert the block (a second quote)')
 
-  head('5. A REACT NODE VIEW — the CTA block’s controls')
+  head('5. THE BLOCKS (W7.3) — the published markup, controls outside it')
   frame = await fresh(page)
+  const blocks = await frame.evaluate(() => {
+    const pm = document.querySelector('.ProseMirror')
+    const q = s => pm.querySelector(s)
+    return {
+      wrappers: pm.querySelectorAll('.react-renderer, [data-node-view-wrapper], [data-node-view-content-react]').length,
+      cta: !!q(':scope > div.carma-button-wrap[data-align] > a.carma-button'),
+      figure: !!q(':scope > figure.carma-figure > img + figcaption'),
+      gallery: !!q(':scope > div.carma-gallery > div.carma-gallery-track > div.carma-slide > a.carma-gallery-item > img'),
+      embed: !!q(':scope > div.carma-embed > iframe[sandbox]'),
+      toc: [...pm.querySelectorAll(':scope > nav.carma-toc li a')].map(a => a.getAttribute('href')).join(' '),
+    }
+  })
+  ok(blocks.wrappers === 0, 'no React node-view wrappers left anywhere in the page', `${blocks.wrappers}`)
+  ok(blocks.cta && blocks.figure && blocks.gallery && blocks.embed, 'CTA, figure, gallery and embed are the published markup, element for element')
+  ok(/#un-encapcalament-de-seccio/.test(blocks.toc) && /#un-subtitol/.test(blocks.toc), 'the table of contents is filled from the headings, as the render fills it', blocks.toc)
+
+  // The CTA's label is typed straight into its <a> — the text must stay inside it.
   const ctaPos = await page.evaluate(() => { let at = -1; window.__lab.editor.state.doc.descendants((n, p) => { if (n.type.name === 'ctaButton' && at < 0) at = p }); return at })
-  await page.evaluate(p => window.__lab.editor.chain().focus().setNodeSelection(p).run(), ctaPos)
-  await sleep(300)
-  const center = await el(frame, '.carma-cta-controls button[title="center"]')
-  ok(!!center, 'selecting the CTA shows its React controls, inside the frame')
-  if (center) await center.click()
+  await page.evaluate(p => window.__lab.editor.chain().focus().setTextSelection(p + 1 + 'Reserva'.length).run(), ctaPos)
+  await sleep(120)
+  await page.keyboard.type(' ara')
+  await sleep(150)
+  const ctaHtml = await html(page)
+  ok(/<a class="carma-button"[^>]*>Reserva ara<\/a>/.test(ctaHtml), 'typing at the end of the CTA label stays inside the button', (ctaHtml.match(/<div class="carma-button-wrap".*?<\/div>/) ?? [''])[0])
+  const ctaUi = await frame.$('[data-carma-block-controls="ctaButton"]')
+  ok(!!ctaUi && await ctaUi.evaluate(n => !!n.closest('#carma-ui')), 'a caret in the CTA shows its controls — in the UI layer, not in the block')
+  await (await frame.$('[data-carma-block-controls="ctaButton"] button[data-align="center"]')).click()
   await sleep(200)
-  ok(/data-align="center"/.test(await html(page)), 'its “center” button updates the node — React events reach node views in the frame')
+  ok(/class="carma-button-wrap" data-align="center"/.test(await html(page)), 'its “centre” control re-aligns the block (and the page shows it: rebuilt from renderHTML)')
+  const hrefIn = await frame.$('[data-carma-block-controls="ctaButton"] input[type="url"]')
+  await hrefIn.click({ count: 3 })
+  await page.keyboard.type('https://example.org/reserva')
+  await sleep(200)
+  ok((await html(page)).includes('href="https://example.org/reserva"'), 'its URL field sets the link the reader will follow')
+
+  // The gallery: images added and removed from the controls, the slide arrows page it.
+  const galPos = await page.evaluate(() => { let at = -1; window.__lab.editor.state.doc.descendants((n, p) => { if (n.type.name === 'gallery' && at < 0) at = p }); return at })
+  await page.evaluate(p => window.__lab.editor.chain().focus().setNodeSelection(p).run(), galPos)
+  await sleep(250)
+  const galIn = await frame.$('[data-carma-block-controls="gallery"] input[type="url"]')
+  ok(!!galIn, 'selecting the gallery shows its controls')
+  await galIn.click()
+  await page.keyboard.type(`${BASE}/apple-icon.png`) // real, so the controls' thumbnail loads
+  await page.keyboard.press('Enter')
+  await sleep(250)
+  const galCount = await frame.evaluate(() => document.querySelector('.ProseMirror .carma-gallery')?.getAttribute('data-count'))
+  ok(galCount === '3', 'a URL + Enter adds a slide — and the gallery stays selected for the next one', `data-count=${galCount}`)
+  const pictured = await frame.evaluate(() => !!document.querySelector('.ProseMirror .carma-gallery picture img[src^="/api/img"]'))
+  ok(pictured, 'the new slide is the render’s responsive <picture> (through /api/img), as the reader will get it')
+  await (await frame.$('[data-carma-block-controls="gallery"] button[aria-label="Treure la imatge 3"]')).click()
+  await sleep(250)
+  ok((await frame.evaluate(() => document.querySelector('.ProseMirror .carma-gallery')?.getAttribute('data-count'))) === '2', 'its × removes that slide')
+  const track = await el(frame, '.ProseMirror .carma-gallery-track')
+  const before = await track.evaluate(t => t.scrollLeft)
+  await (await frame.$('.ProseMirror .carma-slide .carma-slide-arrow.next')).click()
+  await sleep(700)
+  const after = await track.evaluate(t => t.scrollLeft)
+  const stillHere = await page.evaluate(() => document.querySelector('iframe').contentDocument.querySelector('.ProseMirror') !== null)
+  ok(after > before && stillHere, 'the slide arrow pages the carousel, as on the blog — and no link ever navigates the canvas away', `scrollLeft ${before} → ${after}`)
+  const sideways = await page.evaluate(() => window.scrollX + document.scrollingElement.scrollLeft)
+  ok(sideways === 0, 'and only the carousel moves — the app page around the canvas never scrolls sideways', `page scrollX ${sideways}`)
+
+  // A heading typed now appears in the TOC, live.
+  await page.evaluate(() => window.__lab.editor.chain().focus('end').insertContent('<h2>Secció afegida ara</h2>').run())
+  await sleep(250)
+  ok(await frame.evaluate(() => [...document.querySelectorAll('.ProseMirror nav.carma-toc a')].some(a => a.textContent === 'Secció afegida ara')), 'a new heading joins the table of contents as it is typed')
+
+  // A writer clicking a link places the caret; the link is never followed.
+  const tabs = (await browser.pages()).length
+  await (await el(frame, '.ProseMirror > p a[href]')).click()
+  await sleep(400)
+  const painting = await page.evaluate(() => new Promise(r => { requestAnimationFrame(() => r(true)); setTimeout(() => r(false), 1000) }))
+  ok((await browser.pages()).length === tabs && painting, 'clicking a link in the text opens no tab and the editor keeps painting', `${(await browser.pages()).length - tabs} new tab(s)`)
+
+  // The embed's shield: a click selects the block, not the video.
+  const shield = await el(frame, '.ProseMirror .carma-embed > .carma-embed-shield')
+  await shield.click()
+  await sleep(200)
+  ok(await page.evaluate(() => window.__lab.editor.state.selection.node?.type.name === 'embed'), 'clicking a video selects its block (the shield is above the player)')
 
   head('6. THE BLOCK HANDLE')
   frame = await fresh(page)
@@ -281,6 +353,7 @@ try {
   head('9. iPHONE EMULATION — touch focus and typing (Chrome, not WebKit)')
   const phonePage = await browser.newPage()
   await phonePage.emulate((mod.KnownDevices ?? puppeteer.KnownDevices)['iPhone 17 Pro'])
+  await stubVideo(phonePage)
   phonePage.on('pageerror', e => errors.push(String(e).slice(0, 200)))
   const pf = await fresh(phonePage)
   const tap = await el(pf, '.ProseMirror > p:nth-of-type(2)')

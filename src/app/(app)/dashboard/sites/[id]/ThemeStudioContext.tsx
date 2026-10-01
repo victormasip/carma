@@ -12,7 +12,7 @@ import {
 import { saveTheme, deleteTheme, incrementThemeRegen, translateChrome as translateChromeAction, type ThemeData } from '@/lib/actions/theme'
 import { setSiteDefaultLocale } from '@/lib/actions/locales'
 import { enableModules, applyArchetype } from '@/lib/actions/modules'
-import { getStudioArticle, getPostContent, updatePostFields, seedSamplePosts } from '@/lib/actions/posts'
+import { getStudioArticle, updatePostFields, seedSamplePosts } from '@/lib/actions/posts'
 import { DEFAULT_LOCALE, LOCALES, normalizeLocale, type Locale } from '@/lib/i18n/config'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
@@ -160,9 +160,9 @@ type ThemeStudio = {
   // id (the render tags each real card with `data-carma-post`). The card already
   // shows the edit live, so this is a silent persist — no preview reload.
   saveCardField: (postId: string, field: 'title' | 'excerpt', value: string) => Promise<void>
-  // Body editing (TipTap): load the article's content HTML on entering edit mode,
-  // and persist the serialized+sanitized HTML on save (bumps savedAt → preview reload).
-  loadArticleBody: () => Promise<string>
+  // Body editing (TipTap, on the writing canvas — StudioBodyEditor loads the body
+  // with its canvas): persist the serialized+sanitized HTML on save (bumps savedAt →
+  // preview reload).
   saveArticleBody: (html: string) => Promise<boolean>
   // tokens
   tokens: DesignTokens
@@ -270,12 +270,6 @@ export function ThemeStudioProvider({
     const fields = field === 'title' ? { title: value } : { excerpt: value }
     await updatePostFields(postId, siteId, fields)
   }, [siteId])
-  const loadArticleBody = useCallback(async (): Promise<string> => {
-    const art = editableArticle
-    if (!art) return ''
-    const res = await getPostContent(art.id, siteId)
-    return res?.html ?? ''
-  }, [editableArticle, siteId])
   const saveArticleBody = useCallback(async (html: string): Promise<boolean> => {
     const art = editableArticle
     if (!art) return false
@@ -861,7 +855,7 @@ export function ThemeStudioProvider({
     premiumBlocked, clearPremiumBlock: () => setPremiumBlocked(false),
     applyTemplate,
     capture, closeCapture, cancelCapture, proceedFromCapture,
-    view, setView, editableArticle, saveArticleField, saveCardField, loadArticleBody, saveArticleBody,
+    view, setView, editableArticle, saveArticleField, saveCardField, saveArticleBody,
     tokens, setToken,
     sectionTitle: sectionForLocale, setSectionTitle: setSectionForLocale,
     extractedHeader: headerForLocale, setExtractedHeader: setHeaderForLocale,

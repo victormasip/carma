@@ -16,9 +16,6 @@
 /** Tailwind's layers the UI needs: preflight (scoped), components, utilities. */
 const UI_LAYERS = new Set(['base', 'components', 'utilities'])
 
-/** Unlayered editor-UI rules in globals.css (block controls, not block looks). */
-const EDITOR_UI = /carma-(gallery-(editor|add|empty|remove|zoom)|carousel|cta-(controls|href|align|block)|embed-(editor|fallback|frame)|toc-(editor|empty|head))/
-
 // Why a control's PARENT is the scope root, and not `[data-carma-ui]` itself:
 // Chrome prefixes every selector inside an @scope with an implicit `:scope `
 // DESCENDANT, so a root never matches its own classes — `@scope ([data-carma-ui])
@@ -31,7 +28,6 @@ export const UI_SCOPE = '(#carma-ui, :has(> [data-carma-ui])) to (:scope:not(#ca
 function collect(rules: CSSRuleList, win: Window, out: { scoped: string[]; global: string[] }): void {
   const w = win as unknown as {
     CSSLayerBlockRule: typeof CSSLayerBlockRule
-    CSSStyleRule: typeof CSSStyleRule
     CSSKeyframesRule: typeof CSSKeyframesRule
     CSSFontFaceRule: typeof CSSFontFaceRule
     CSSPropertyRule?: { new (): CSSRule; prototype: CSSRule }
@@ -43,11 +39,9 @@ function collect(rules: CSSRuleList, win: Window, out: { scoped: string[]; globa
     }
     if (r instanceof w.CSSKeyframesRule || r instanceof w.CSSFontFaceRule || (w.CSSPropertyRule && r instanceof w.CSSPropertyRule)) {
       out.global.push(r.cssText)
-      continue
     }
-    if (r instanceof w.CSSStyleRule && EDITOR_UI.test(r.selectorText) && !/\[data-theme/.test(r.selectorText)) {
-      out.scoped.push(r.cssText)
-    }
+    // Unlayered app rules are NOT copied: the editor's UI is written in Tailwind
+    // classes only (W7.4 deleted the hand-written editor rules from globals.css).
   }
 }
 

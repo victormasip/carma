@@ -1,14 +1,20 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
-import { useEffect, useState } from 'react'
-import { ListTree } from 'lucide-react'
+import type { Node as PMNode } from '@tiptap/pm/model'
+import { tocInnerHtml, type TocHeading } from '@/lib/render/blockMarkup'
+import { readerNodeView } from '../canvas/readerView'
 import { slugify } from './slug'
 
-// A control's mousedown must not move the selection: the browser would collapse it
-// into the text, ProseMirror would follow, the node would deselect, React would
-// unmount the controls — and the click would land on nothing. (Found by the W7.0
-// spike's classic-vs-canvas baseline: broken in both.)
-const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+/** The headings the render lists — the ids HeadingId serializes, in document order. */
+function tocHeadings(doc: PMNode): TocHeading[] {
+  const out: TocHeading[] = []
+  doc.descendants((n) => {
+    if (n.type.name === 'heading') out.push({ level: Number(n.attrs.level) || 2, id: slugify(n.textContent || ''), text: n.textContent.trim() })
+  })
+  return out
+}
+
+// What each TOC view last wrote, so a keystroke that changes no heading writes nothing.
+const written = new WeakMap<HTMLElement, string>()
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -22,8 +28,8 @@ declare module '@tiptap/core' {
  * Table of Contents / index. Serializes to an empty `<nav class="carma-toc"
  * data-carma-toc>` marker that the server fills from the article's headings at
  * render time, so the public TOC is always in sync (and links to the heading
- * ids emitted by the HeadingId extension). In the editor it shows a live,
- * clickable preview.
+ * ids emitted by the HeadingId extension). On the canvas it is filled by the same
+ * function, live on every change; its links scroll to the heading.
  */
 export const Toc = Node.create({
   name: 'toc',
@@ -40,7 +46,15 @@ export const Toc = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(TocView)
+    return readerNodeView({
+      live: true,
+      fill: (dom, _node, view) => {
+        const html = tocInnerHtml(tocHeadings(view.state.doc))
+        if (written.get(dom) === html) return
+        written.set(dom, html)
+        dom.innerHTML = html
+      },
+    })
   },
 
   addCommands() {
@@ -53,46 +67,3 @@ export const Toc = Node.create({
   },
 })
 
-function TocView({ editor }: NodeViewProps) {
-  const [, force] = useState(0)
-
-  useEffect(() => {
-    const cb = () => force((n) => n + 1)
-    editor.on('update', cb)
-    return () => { editor.off('update', cb) }
-  }, [editor])
-
-  const items: { level: number; text: string; slug: string }[] = []
-  editor.state.doc.descendants((n) => {
-    if (n.type.name === 'heading') {
-      const text = n.textContent.trim()
-      if (text) items.push({ level: n.attrs.level as number, text, slug: slugify(text) })
-    }
-  })
-
-  const go = (slug: string) => {
-    // slug is already [a-z0-9-], so it's a valid id selector as-is.
-    const el = editor.view.dom.querySelector(`#${slug}`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  return (
-    <NodeViewWrapper className="carma-toc-editor not-prose" data-drag-handle contentEditable={false}>
-      <div className="carma-toc-head">
-        <ListTree className="w-3.5 h-3.5" />
-        <span>Índex</span>
-      </div>
-      {items.length === 0 ? (
-        <p className="carma-toc-empty">Afegeix encapçalaments (Títol 1/2/3) i apareixeran aquí automàticament.</p>
-      ) : (
-        <ul>
-          {items.map((it, i) => (
-            <li key={`${it.slug}-${i}`} style={{ paddingLeft: `${(Math.min(it.level, 3) - 1) * 14}px` }}>
-              <button onMouseDown={keepSelection} type="button" onClick={() => go(it.slug)}>{it.text}</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </NodeViewWrapper>
-  )
-}

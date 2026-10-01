@@ -29,7 +29,14 @@
 //   · `white-space:break-spaces`. It gives a space at the end of a line WIDTH, so a
 //     word that fits on the reader's line wrapped on the writer's (a Sonnet genome
 //     at 390px, caught by the gate). `pre-wrap` lets that space hang, as `normal`
-//     does; the only cost is a caret after a line-final space drawn at the line end.
+//     does; the only cost is a caret after a line-final space drawn at the line end;
+//   · `word-wrap:break-word` — AND the browsers' own editing defaults, which both
+//     Chrome's and WebKit's UA sheets put on every contenteditable:
+//     `overflow-wrap: break-word`, `line-break: after-white-space` (and WebKit's
+//     `-webkit-nbsp-mode: space`). Each moves where a tight line breaks: the lede,
+//     the first paragraph and a list item broke at a different word than the
+//     reader's (caught by test:editor-pixels — every box still matched). The
+//     editable elements `inherit` these from the page instead: the reader's values.
 
 import { articleCanvasParts } from '@/lib/render/theme'
 import type { Locale } from '@/lib/i18n/config'
@@ -47,7 +54,8 @@ export const CANVAS_EDITOR_LAYER = `@layer carma.editor{
 html{background:var(--ct-bg)}
 html,body{margin:0}
 body{padding-bottom:240px}
-.carma-article-content.ProseMirror{outline:none;caret-color:var(--ct-accent);position:relative;word-wrap:break-word;white-space:pre-wrap}
+.carma-article-content.ProseMirror{outline:none;caret-color:var(--ct-accent);position:relative;white-space:pre-wrap}
+[contenteditable]{overflow-wrap:inherit;line-break:inherit;-webkit-line-break:inherit;-webkit-nbsp-mode:inherit}
 .ProseMirror [contenteditable="false"]{white-space:normal}
 .ProseMirror [contenteditable="false"] [contenteditable="true"]{white-space:pre-wrap}
 .ProseMirror ::selection{background:color-mix(in srgb,var(--ct-accent) 28%,transparent)}
@@ -67,6 +75,12 @@ img.ProseMirror-separator{display:inline!important;border:none!important;margin:
 .carma-article-image-wrap{position:relative}
 .carma-cover-tools{transition:opacity .15s ease}
 .carma-article-image-wrap:not(:hover):not(:focus-within)>.carma-cover-tools{opacity:0}
+.ProseMirror a.carma-button{cursor:text}
+.ProseMirror .carma-embed>.carma-embed-shield{position:absolute;inset:0;z-index:1;cursor:pointer}
+.ProseMirror nav.carma-toc:empty::before{content:"Índex — s’omplirà amb els encapçalaments de l’article";color:var(--ct-muted);font-size:.9rem}
+.ProseMirror .carma-gallery[data-count="0"]::before{content:"Galeria buida — selecciona-la per afegir-hi imatges";display:block;padding:1.5rem;border:1px dashed var(--ct-border);border-radius:var(--ct-radius-lg);color:var(--ct-muted);font-size:.9rem;text-align:center}
+.ProseMirror figure.carma-figure>figcaption:has(>br.ProseMirror-trailingBreak:only-child){position:relative}
+.ProseMirror figure.carma-figure>figcaption:has(>br.ProseMirror-trailingBreak:only-child)::before{content:"Afegeix un peu de foto…";position:absolute;inset-inline:0;opacity:.6;pointer-events:none}
 .carma-focus-mode .carma-article-content>*{opacity:.3;transition:opacity .25s ease}
 .carma-focus-mode .carma-article-content>.carma-focused{opacity:1}
 #carma-ui{position:absolute;top:0;left:0;width:100%;height:0;z-index:50}

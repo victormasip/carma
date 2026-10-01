@@ -1527,6 +1527,7 @@ export default function PostEditorClient({ siteId, siteName, subdomain = null, p
                     {featuredImage && createPortal(
                       <CanvasFeaturedImage
                         src={featuredImage}
+                        alt={cur.title}
                         busy={uploadingCover}
                         onReplace={() => coverFileRef.current?.click()}
                         onRemove={() => setFeaturedImage('')}

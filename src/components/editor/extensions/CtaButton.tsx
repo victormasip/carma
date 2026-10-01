@@ -1,12 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react'
-import { AlignLeft, AlignCenter, AlignRight, Link2 } from 'lucide-react'
-
-// A control's mousedown must not move the selection: the browser would collapse it
-// into the text, ProseMirror would follow, the node would deselect, React would
-// unmount the controls — and the click would land on nothing. (Found by the W7.0
-// spike's classic-vs-canvas baseline: broken in both.)
-const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+import { Plugin } from '@tiptap/pm/state'
+import { readerNodeView } from '../canvas/readerView'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -16,12 +10,13 @@ declare module '@tiptap/core' {
   }
 }
 
-type Align = 'left' | 'center' | 'right'
+export type Align = 'left' | 'center' | 'right'
 
 /**
  * Call-to-action button — a styled link with an editable label, target URL and
  * alignment. Serializes to a real `<a class="carma-button">` so it's a working
- * button on the public blog.
+ * button on the public blog. On the canvas it IS that markup (the label is typed
+ * straight into the <a>); its URL and alignment controls live in BlockControls.
  */
 export const CtaButton = Node.create({
   name: 'ctaButton',
@@ -57,7 +52,32 @@ export const CtaButton = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(CtaView)
+    return readerNodeView()
+  },
+
+  // The label is typed straight into the published <a> — and a browser never
+  // extends a link past its end: a character typed after "Reserva" landed OUTSIDE
+  // the <a>, where ProseMirror (whose editable hole is the <a>) never saw it, and
+  // it was lost (found by the W7.3 spike). So typing inside a CTA label goes
+  // through ProseMirror itself; IME composition keeps the browser's own path.
+  addProseMirrorPlugins() {
+    const name = this.name
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            beforeinput: (view, event) => {
+              const e = event as InputEvent
+              if (e.inputType !== 'insertText' || !e.data || e.isComposing) return false
+              if (view.state.selection.$from.parent.type.name !== name) return false
+              e.preventDefault()
+              view.dispatch(view.state.tr.insertText(e.data))
+              return true
+            },
+          },
+        },
+      }),
+    ]
   },
 
   addCommands() {
@@ -74,38 +94,3 @@ export const CtaButton = Node.create({
   },
 })
 
-function CtaView({ node, updateAttributes, editor, selected }: NodeViewProps) {
-  const align: Align = node.attrs.align ?? 'left'
-  const editable = editor.isEditable
-  return (
-    <NodeViewWrapper className="carma-cta-block" style={{ textAlign: align }}>
-      <NodeViewContent className="carma-button" />
-      {editable && selected && (
-        <div className="carma-cta-controls" contentEditable={false} style={{ textAlign: 'left' }}>
-          <div className="carma-cta-href">
-            <Link2 className="w-3.5 h-3.5 text-subtle" />
-            <input
-              type="url"
-              value={node.attrs.href === '#' ? '' : node.attrs.href}
-              onChange={(e) => updateAttributes({ href: e.target.value || '#' })}
-              placeholder="https://… (destí del botó)"
-            />
-          </div>
-          <div className="carma-cta-align">
-            {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => (
-              <button onMouseDown={keepSelection}
-                key={a}
-                type="button"
-                onClick={() => updateAttributes({ align: a })}
-                className={align === a ? 'is-active' : ''}
-                title={a}
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </NodeViewWrapper>
-  )
-}

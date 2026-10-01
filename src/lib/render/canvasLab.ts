@@ -17,13 +17,17 @@ import type { Genome } from '@/lib/design/genome'
 type Theme = Parameters<typeof buildArticlePage>[0]
 type Post = Parameters<typeof buildArticlePage>[3]
 
-const FIGURE_SRC = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#8aa"/><circle cx="800" cy="450" r="300" fill="#244"/></svg>')}`
+const svg = (fill: string, ink: string) =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="${fill}"/><circle cx="800" cy="450" r="300" fill="${ink}"/></svg>`)}`
+const FIGURE_SRC = svg('#8aa', '#244')
+const slide = (src: string) => `<div class="carma-slide"><a class="carma-gallery-item" href="#"><img src="${src}" alt=""></a></div>`
 
 /**
  * Every block and mark the editor can produce, in the markup its extensions parse.
  * The first paragraph carries the drop cap; the ligature words exercise `fi`/`fl`.
  */
 export const LAB_FIXTURE_HTML = [
+  '<nav class="carma-toc" data-carma-toc="true"></nav>',
   '<p>Un paràgraf amb <strong>negreta</strong>, <em>cursiva</em>, <u>subratllat</u>, <s>barrat</s>, <code>codi</code> i un <a href="https://example.com">enllaç</a>. Paraules amb lligadures: office, fluent, affine.</p>',
   '<h2>Un encapçalament de secció</h2>',
   '<p>Un segon paràgraf, perquè el primer és el que rep la caplletra i aquest no.</p>',
@@ -37,6 +41,8 @@ export const LAB_FIXTURE_HTML = [
   '<div class="carma-callout" data-variant="info"><p>Una targeta destacada.</p></div>',
   '<div class="carma-button-wrap" data-align="left"><a class="carma-button" href="https://example.com">Reserva</a></div>',
   '<div class="carma-columns"><div class="carma-column"><p>Columna A</p></div><div class="carma-column"><p>Columna B</p></div></div>',
+  `<div class="carma-gallery"><div class="carma-gallery-track">${slide(svg('#c9a', '#513'))}${slide(svg('#ac9', '#351'))}</div></div>`,
+  '<div data-carma-embed="" class="carma-embed" data-provider="youtube" data-embed-id="aqz-KE-bpKQ"></div>',
   '<details class="carma-toggle"><summary class="carma-toggle-summary">Desplegable</summary><p>Contingut del desplegable</p></details>',
   '<p>Un paràgraf final per tancar l’article.</p>',
 ].join('')
@@ -49,6 +55,7 @@ export const LAB_HEADER = {
   author: 'Redacció',
   date: '2026-09-28T00:00:00.000Z',
   categories: ['Guia'],
+  featured: svg('#dcb', '#654'),
 }
 
 /** A design → the theme the render resolves for it (tokens, faces, Genome CSS). */
@@ -64,7 +71,7 @@ export function labTheme(genome: Genome, locale: Locale): Theme {
 
 export function labPost(html: string, locale: Locale): Post {
   return {
-    id: 'lab', title: LAB_TITLE, slug: 'lab', content: { html }, excerpt: LAB_HEADER.lede, featured_image: null,
+    id: 'lab', title: LAB_TITLE, slug: 'lab', content: { html }, excerpt: LAB_HEADER.lede, featured_image: LAB_HEADER.featured,
     categories: LAB_HEADER.categories, tags: [], author_name: LAB_HEADER.author, created_at: LAB_HEADER.date, is_published: true,
     default_locale: locale,
   } as Post

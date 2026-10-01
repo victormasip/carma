@@ -1,6 +1,8 @@
 'use client'
 
-// "Notion-tier" writing canvas:
+// "Notion-tier" writing canvas — ON the blog (W7): the view lives in the canvas
+// iframe (components/editor/canvas), its root IS the article's content column,
+// and every block renders its published markup (canvas/readerView.ts).
 //   · Full-bleed surface with no chrome around it — just text.
 //   · Bubble menu on selection (Medium-style) for inline formatting.
 //   · Floating "+" insert menu on empty lines.
@@ -20,6 +22,7 @@ import { Placeholder, Focus } from '@tiptap/extensions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/core'
+import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import {
   Bold, Italic, UnderlineIcon, Strikethrough, Link2, Link2Off,
   Heading2, Heading3, Heading1, List, ListOrdered, Quote, Code, Minus,
@@ -41,6 +44,7 @@ import { CtaButton } from './extensions/CtaButton'
 import { Toc } from './extensions/Toc'
 import { SlashCommand } from './extensions/SlashCommand'
 import BlockHandle from './BlockHandle'
+import BlockControls from './canvas/BlockControls'
 import CanvasOverlay from './canvas/CanvasOverlay'
 import type { CanvasMounts } from './canvas/CanvasFrame'
 import { cn } from '@/lib/cn'
@@ -72,6 +76,21 @@ function insertImageFiles(
   return true
 }
 
+/**
+ * An article that OPENS with an atom block (a table of contents, a gallery, a
+ * video) starts with a hidden node selection on it — and in that state the
+ * writer's first click elsewhere was swallowed: the caret stayed on the atom and
+ * the next keys went nowhere (found by the W7.3 spike; a focused node selection,
+ * or an unfocused caret, both behave). Start at the first text position instead,
+ * outside the undo history. A document with no text at all keeps its selection.
+ */
+function placeInitialCaret(editor: Editor): void {
+  const { state } = editor
+  if (editor.isFocused || !(state.selection instanceof NodeSelection)) return
+  const caret = TextSelection.findFrom(state.doc.resolve(0), 1, true)
+  if (caret) editor.view.dispatch(state.tr.setSelection(caret).setMeta('addToHistory', false))
+}
+
 type CaretPos = { from: number; to: number }
 
 type Props = {
@@ -95,10 +114,11 @@ type Props = {
   /**
    * W7 — write ON the blog. The canvas iframe's slots (components/editor/canvas):
    * the view is created inside it, its root becomes the blog's
-   * `.carma-article-content`, and the menus and block handle live in its UI layer.
-   * Absent → the classic app-styled surface.
+   * `.carma-article-content`, and the menus, the block handle and the block
+   * controls live in its UI layer. There is no other surface: the app-styled
+   * "classic" editor, and the CSS that imitated the blog for it, are gone (W7.4).
    */
-  canvas?: CanvasMounts | null
+  canvas: CanvasMounts
 }
 
 export default function TipTapEditor({ initialHtml = '', onChange, placeholder, siteId, selectionRef, restoreCaretRef, onEditorReady, onAiRewrite, focusMode, canvas }: Props) {
@@ -127,13 +147,17 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
   // document until its first transaction. A detached element OWNED by the iframe
   // document gives the view the right owner from birth; EditorContent then moves
   // it into place.
-  const mountEl = useMemo(() => (canvas ? canvas.doc.createElement('div') : null), [canvas])
+  const mountEl = useMemo(() => canvas.doc.createElement('div'), [canvas])
 
   const editor = useEditor({
     immediatelyRender: false,
-    ...(mountEl ? { element: mountEl } : {}),
+    element: mountEl,
     extensions: [
-      StarterKit.configure({ heading: false }),
+      // StarterKit 3 BUNDLES Link and Underline. Configured again below, both
+      // registered — and the bundled Link's `openOnClick: true` opened every link
+      // a writer clicked in a NEW TAB, leaving the editor behind (found by the W7.3
+      // spike). One of each, ours.
+      StarterKit.configure({ heading: false, link: false, underline: false }),
       HeadingId.configure({ levels: [1, 2, 3] }),
       Placeholder.configure({
         showOnlyCurrent: true,
@@ -158,16 +182,16 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       Toc,
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
       Callout,
-      Gallery.configure({ siteId }),
+      Gallery,
       SlashCommand.configure({
         requestImage: () => { setShowImageInput(true); setShowLinkInput(false) },
       }),
     ],
     content: initialHtml || '',
     editorProps: {
-      // In the canvas the root IS the blog's content column: its children are the
-      // blocks, exactly as `.carma-article-content > *` expects on the published page.
-      attributes: { class: canvas ? 'carma-article-content' : 'carma-prose focus:outline-none' },
+      // The root IS the blog's content column: its children are the blocks,
+      // exactly as `.carma-article-content > *` expects on the published page.
+      attributes: { class: 'carma-article-content' },
       handlePaste: (_view, event) => {
         const files = event.clipboardData?.files
         if (files && files.length > 0 && editorRef.current && insertImageFiles(editorRef.current, files, siteId, m => toast(m, 'error'))) {
@@ -219,6 +243,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       }
     },
     onCreate: ({ editor }) => {
+      placeInitialCaret(editor)
       // Auto language relabel remounts this component with IDENTICAL content;
       // restoring the stashed caret makes the switch invisible to the writer.
       const caret = restoreCaretRef?.current
@@ -245,6 +270,7 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     if (editor && initialHtml && !seededRef.current && editor.isEmpty) {
       seededRef.current = true
       editor.commands.setContent(initialHtml)
+      placeInitialCaret(editor)
     }
   }, [editor, initialHtml])
 
@@ -336,8 +362,8 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
     setShowVideoInput(false)
   }
 
-  // In the canvas the menus live in its UI layer (#carma-ui), outside the blog.
-  const appendTo = canvas ? () => canvas.ui : undefined
+  // The menus live in the canvas's UI layer (#carma-ui), outside the blog.
+  const appendTo = () => canvas.ui
 
   /* Floating format menu on text selection — Medium-style. */
   const bubble = (
@@ -487,15 +513,11 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
       </FloatingMenu>
   )
 
-  /* Tiny inline link/image/video inputs — anchored above the canvas, only when triggered.
-     App chrome, not part of the page: in the canvas mode they stay in the parent,
-     pinned to the VIEWPORT — rendered in place they would sit after the whole
-     article, below the fold of any real post. */
+  /* Tiny inline link/image/video inputs — only when triggered. App chrome, not part
+     of the page: they stay in the parent, pinned to the VIEWPORT — rendered in
+     place they would sit after the whole article, below the fold of any real post. */
   const inputs = (showLinkInput || showImageInput || showVideoInput) && (
-        <div className={cn(
-          'z-20 flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated border border-border shadow-pop',
-          canvas ? 'fixed left-1/2 top-20 w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2' : 'sticky top-0 -mt-2 mb-3 mx-auto max-w-[44rem]',
-        )}>
+        <div className="fixed left-1/2 top-20 z-20 flex w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-2 rounded-xl border border-border bg-bg-elevated px-3 py-2 shadow-pop">
           {showLinkInput && (
             <>
               <Link2 className="w-3.5 h-3.5 text-subtle shrink-0" />
@@ -559,32 +581,24 @@ export default function TipTapEditor({ initialHtml = '', onChange, placeholder, 
         </div>
   )
 
-  if (canvas) {
-    return (
-      <>
-        {inputs}
-        {createPortal(
-          <>
-            {bubble}
-            {floating}
-            <EditorContent editor={editor} className={focusMode ? 'carma-focus-mode' : undefined} />
-          </>,
-          canvas.editor,
-        )}
-        {createPortal(<CanvasOverlay editor={editor}><BlockHandle editor={editor} /></CanvasOverlay>, canvas.ui)}
-      </>
-    )
-  }
-
   return (
-    <div className="relative">
-      {/* Block drag-handle gutter — appears on hover, no permanent UI. */}
-      <BlockHandle editor={editor} />
-      {bubble}
-      {floating}
+    <>
       {inputs}
-      {/* The canvas itself — full-bleed, no card border, no toolbar overhead. */}
-      <EditorContent editor={editor} className={cn('carma-editor', focusMode && 'carma-focus-mode')} />
-    </div>
+      {createPortal(
+        <>
+          {bubble}
+          {floating}
+          <EditorContent editor={editor} className={focusMode ? 'carma-focus-mode' : undefined} />
+        </>,
+        canvas.editor,
+      )}
+      {createPortal(
+        <CanvasOverlay editor={editor}>
+          <BlockHandle editor={editor} />
+          <BlockControls editor={editor} siteId={siteId} />
+        </CanvasOverlay>,
+        canvas.ui,
+      )}
+    </>
   )
 }

@@ -1,16 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { DOMOutputSpec } from '@tiptap/pm/model'
-import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
-import { useRef, useState } from 'react'
-import { Plus, X, ImageIcon, ChevronLeft, ChevronRight, Upload, Maximize2 } from 'lucide-react'
-import KnotSpinner from '@/components/ui/KnotSpinner'
-import { uploadImages } from '@/lib/upload'
-
-// A control's mousedown must not move the selection: the browser would collapse it
-// into the text, ProseMirror would follow, the node would deselect, React would
-// unmount the controls — and the click would land on nothing. (Found by the W7.0
-// spike's classic-vs-canvas baseline: broken in both.)
-const keepSelection = (e: { preventDefault: () => void }) => e.preventDefault()
+import { transformContentImagesIn } from '@/lib/render/imageMarkup'
+import { readerNodeView } from '../canvas/readerView'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -20,8 +11,6 @@ declare module '@tiptap/core' {
   }
 }
 
-export type GalleryOptions = { siteId: string }
-
 // Stable-ish id base for a gallery's CSS slides + `:target` lightboxes.
 function hashStr(s: string): string {
   let h = 0
@@ -30,23 +19,18 @@ function hashStr(s: string): string {
 }
 
 /**
- * Image gallery — a horizontal carousel that is visually identical in the
- * editor and on the public blog (1:1). Side arrows page through the slides, and
- * clicking an image opens a lightbox. The public render is 100% JS-free:
+ * Image gallery — a horizontal carousel. The public render is 100% JS-free:
  * scroll-snap track + per-slide anchor arrows (`#slide-id`) + a `:target`
- * lightbox with prev/next. The editor mirrors it with JS controls. Accepts both
- * image URLs and uploads (stored as data URLs).
+ * lightbox with prev/next. On the canvas it IS that markup (W7.3): the slide
+ * arrows page it exactly as on the blog (the canvas turns in-page anchors into
+ * scrolls), and adding / removing images lives in BlockControls.
  */
-export const Gallery = Node.create<GalleryOptions>({
+export const Gallery = Node.create({
   name: 'gallery',
   group: 'block',
   atom: true,
   draggable: true,
   selectable: true,
-
-  addOptions() {
-    return { siteId: '' }
-  },
 
   addAttributes() {
     return {
@@ -109,7 +93,7 @@ export const Gallery = Node.create<GalleryOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(GalleryView)
+    return readerNodeView({ fill: dom => transformContentImagesIn(dom) })
   },
 
   addCommands() {
@@ -122,149 +106,3 @@ export const Gallery = Node.create<GalleryOptions>({
   },
 })
 
-function GalleryView({ node, updateAttributes, editor, selected, extension }: NodeViewProps) {
-  const images: string[] = Array.isArray(node.attrs.images) ? node.attrs.images : []
-  const [url, setUrl] = useState('')
-  const [lightbox, setLightbox] = useState<number | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const editable = editor.isEditable
-  const siteId: string = extension.options.siteId
-
-  const addUrl = () => {
-    const t = url.trim()
-    if (!t) return
-    updateAttributes({ images: [...images, t] })
-    setUrl('')
-  }
-  // Upload to storage (clean URLs), never base64 — matches the rest of the editor.
-  const addFiles = async (files: FileList | null) => {
-    const list = files ? Array.from(files).filter(f => f.type.startsWith('image/')) : []
-    if (list.length === 0 || !siteId) return
-    setUploading(true)
-    try {
-      const urls = await uploadImages(list, siteId)
-      if (urls.length) updateAttributes({ images: [...images, ...urls] })
-    } finally {
-      setUploading(false)
-    }
-  }
-  const removeImage = (i: number) => updateAttributes({ images: images.filter((_, idx) => idx !== i) })
-  const page = (dir: -1 | 1) => {
-    const el = trackRef.current
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: 'smooth' })
-  }
-  const move = (dir: -1 | 1) => setLightbox((c) => (c === null ? c : (c + dir + images.length) % images.length))
-
-  return (
-    <NodeViewWrapper className={`carma-gallery-editor not-prose ${selected ? 'is-selected' : ''}`} data-drag-handle>
-      {images.length > 0 ? (
-        <div className="carma-carousel" contentEditable={false}>
-          {images.length > 1 && (
-            <button onMouseDown={keepSelection} type="button" onClick={() => page(-1)} className="carma-carousel-arrow prev" title="Anterior">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-          )}
-          <div ref={trackRef} className="carma-carousel-track">
-            {images.map((src, i) => (
-              <div key={`${src}-${i}`} className="carma-carousel-slide" onClick={() => setLightbox(i)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" />
-                <span className="carma-gallery-zoom"><Maximize2 className="w-3.5 h-3.5" /></span>
-                {editable && (
-                  <button onMouseDown={keepSelection}
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); removeImage(i) }}
-                    className="carma-gallery-remove"
-                    title="Treure imatge"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {images.length > 1 && (
-            <button onMouseDown={keepSelection} type="button" onClick={() => page(1)} className="carma-carousel-arrow next" title="Següent">
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="carma-gallery-empty">
-          <ImageIcon className="w-5 h-5" />
-          <span>Galeria buida — afegeix imatges per URL o puja-les</span>
-        </div>
-      )}
-
-      {editable && (
-        <div className="carma-gallery-add" contentEditable={false}>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addUrl() } }}
-            placeholder="Enganxa la URL d'una imatge i prem Enter…"
-          />
-          <button onMouseDown={keepSelection} type="button" onClick={addUrl} title="Afegir per URL">
-            <Plus className="w-4 h-4" />
-          </button>
-          <button onMouseDown={keepSelection} type="button" onClick={() => fileRef.current?.click()} title="Pujar imatges" className="upload" disabled={uploading}>
-            {uploading ? <KnotSpinner className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(e) => { addFiles(e.target.files); e.target.value = '' }}
-          />
-        </div>
-      )}
-
-      {/* Editor lightbox preview */}
-      {lightbox !== null && images[lightbox] && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          contentEditable={false}
-          onClick={() => setLightbox(null)}
-        >
-          {images.length > 1 && (
-            <button onMouseDown={keepSelection}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); move(-1) }}
-              className="cursor-pointer absolute left-4 sm:left-8 w-11 h-11 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-          )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={images[lightbox]}
-            alt=""
-            onClick={(e) => e.stopPropagation()}
-            className="max-h-[85vh] max-w-[88vw] rounded-xl shadow-2xl object-contain"
-          />
-          {images.length > 1 && (
-            <button onMouseDown={keepSelection}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); move(1) }}
-              className="cursor-pointer absolute right-4 sm:right-8 w-11 h-11 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          )}
-          <button onMouseDown={keepSelection}
-            type="button"
-            onClick={() => setLightbox(null)}
-            className="cursor-pointer absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-    </NodeViewWrapper>
-  )
-}

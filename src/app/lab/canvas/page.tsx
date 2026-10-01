@@ -26,10 +26,8 @@ async function Lab({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams
   const one = (v: string | string[] | undefined) => (typeof v === 'string' ? v : null)
   const { genome, locale } = labDesign({ g: one(sp.g), preset: one(sp.preset), l: one(sp.l) })
-  // `?mode=classic` — the same editor WITHOUT the canvas: the spike's baseline, so a
-  // behaviour is only called a canvas regression if the classic editor has it right.
   return (
     <LabCanvas spec={labCanvasSpec(genome, locale)} html={LAB_FIXTURE_HTML} locale={locale}
-      header={{ title: LAB_TITLE, ...LAB_HEADER }} classic={one(sp.mode) === 'classic'} />
+      header={{ title: LAB_TITLE, ...LAB_HEADER }} />
   )
 }

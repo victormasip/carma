@@ -9,6 +9,9 @@ import { translateFieldsWithClaude, type TranslatableFields } from '@/lib/i18n/t
 import { analyzeWriting, type WritingAnalysis } from '@/lib/writing/coach'
 import { rewriteSelection, type RewriteMode } from '@/lib/writing/rewrite'
 import { harvestSiteBrief, generateArticle, sanitizeHtml, type GeneratedArticle } from '@/lib/writing/generate'
+import { ARTICLE_POST_COLS, resolveRenderTheme } from '@/lib/render/blogRender'
+import { buildCanvasSpec, type CanvasSpec } from '@/lib/render/canvas'
+import type { DesignTokens } from '@/lib/scrape/tokens'
 
 type ActionResult = { error?: string }
 type CreateResult = ActionResult & { id?: string }
@@ -555,14 +558,28 @@ export async function getStudioArticle(
   }
 }
 
-/** The article body HTML, loaded on demand when the Studio enters TipTap edit mode. */
-export async function getPostContent(postId: string, siteId: string): Promise<{ html: string } | null> {
+/**
+ * W7.4 — the Studio's inline body editor: the post's body AND the canvas to edit it
+ * on, in one round trip. The canvas is the post's published article page dressed
+ * in the Studio's LIVE (unsaved) tokens and faces, so the body is written on the
+ * design being edited — through the same resolver the render uses.
+ */
+export async function getStudioBodyCanvas(
+  siteId: string,
+  postId: string,
+  live: { tokens?: Partial<DesignTokens> | null; fontLinks?: string[] | null },
+): Promise<{ html: string; spec: CanvasSpec } | null> {
   try {
     const admin = await assertSiteAccess(siteId)
-    const { data } = await admin.from('posts').select('content').eq('id', postId).eq('site_id', siteId).maybeSingle()
-    if (!data) return null
-    const c = data.content as { html?: unknown } | null
-    return { html: c && typeof c === 'object' && typeof c.html === 'string' ? c.html : '' }
+    const [{ data: post }, theme] = await Promise.all([
+      admin.from('posts').select(ARTICLE_POST_COLS).eq('id', postId).eq('site_id', siteId).maybeSingle(),
+      resolveRenderTheme(admin, siteId, live),
+    ])
+    if (!post) return null
+    const c = post.content as { html?: unknown } | null
+    const html = c && typeof c === 'object' && typeof c.html === 'string' ? c.html : ''
+    const locale = normalizeLocale((theme as { default_locale?: string | null } | null)?.default_locale ?? DEFAULT_LOCALE)
+    return { html, spec: buildCanvasSpec(theme, siteId, post as unknown as Parameters<typeof buildCanvasSpec>[2], locale) }
   } catch {
     return null
   }

@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react'
+import { transformContentImagesIn } from '@/lib/render/imageMarkup'
+import { readerNodeView } from '../canvas/readerView'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -13,9 +14,10 @@ declare module '@tiptap/core' {
  * Image with an editable caption. Serializes to semantic
  * `<figure class="carma-figure"><img><figcaption>…</figcaption></figure>` so the
  * caption renders identically on the public blog. The caption is the node's
- * inline content (a content hole inside `<figcaption>`); the React node view
- * makes it an obvious, always-visible field in the editor. A bare legacy
- * `<img>` is also parsed so old posts upgrade transparently.
+ * inline content (a content hole inside `<figcaption>`). On the canvas the image
+ * is the render's own responsive markup (W7.3); an empty caption shows a
+ * placeholder from the editor layer. A bare legacy `<img>` is also parsed so old
+ * posts upgrade transparently.
  */
 export const Figure = Node.create({
   name: 'figure',
@@ -56,7 +58,7 @@ export const Figure = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(FigureView)
+    return readerNodeView({ fill: dom => transformContentImagesIn(dom) })
   },
 
   addCommands() {
@@ -69,15 +71,3 @@ export const Figure = Node.create({
   },
 })
 
-function FigureView({ node, selected }: NodeViewProps) {
-  return (
-    <NodeViewWrapper
-      as="figure"
-      className={`carma-figure carma-figure-editor ${selected ? 'is-selected' : ''}`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={node.attrs.src ?? ''} alt={node.attrs.alt ?? ''} contentEditable={false} draggable={false} />
-      <NodeViewContent<'figcaption'> as="figcaption" className="carma-figcaption" />
-    </NodeViewWrapper>
-  )
-}

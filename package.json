@@ -29,7 +29,9 @@
     "test:cascade": "node --experimental-strip-types --import ./tests/register.mjs tests/cascade.mjs",
     "test:reveal": "node --experimental-strip-types --import ./tests/register.mjs tests/reveal.mjs",
     "test:canvas": "node tests/canvas-spike.mjs",
-    "test:editor-fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-fidelity.mjs"
+    "test:editor-fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-fidelity.mjs",
+    "test:canvas-webkit": "node tests/canvas-webkit.mjs",
+    "test:editor-pixels": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-pixels.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
@@ -70,6 +72,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "typescript": "^5"

@@ -25,7 +25,6 @@
 //   the pre-pivot `{ html, css, mode:'shadow' }` JSON (degraded to its raw .html).
 
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
-import { embedSrc } from '@/lib/embed'
 import { feedLayoutCss } from '@/lib/render/feedLayouts'
 import {
   buildListingModuleParts, buildArticleModuleParts, modulesRuntimeScript,
@@ -40,6 +39,7 @@ import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
 import { BCP47, DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
 import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } from './image'
+import { embedInnerHtml, tocInnerHtml } from './blockMarkup'
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
 import { normalizeFragment } from '@/lib/scrape/headerFooter'
 import { FEED_PATH, type FeedPost } from '@/lib/render/feed'
@@ -392,11 +392,7 @@ function fillTableOfContents(html: string): string {
       }))
       .filter(h => h.text && h.id)
 
-    const inner = headings.length
-      ? `<div class="carma-toc-title">Índex</div><ol>${headings
-          .map(h => `<li class="lvl-${h.level}"><a href="#${escapeAttr(h.id)}">${escapeHtml(h.text)}</a></li>`)
-          .join('')}</ol>`
-      : ''
+    const inner = tocInnerHtml(headings)
 
     for (const nav of navs) nav.set_content(inner)
     return root.toString()
@@ -416,16 +412,7 @@ function fillEmbeds(html: string): string {
     const nodes = root.querySelectorAll('[data-carma-embed]')
     if (nodes.length === 0) return html
     for (const el of nodes) {
-      const provider = el.getAttribute('data-provider') ?? ''
-      const id = (el.getAttribute('data-embed-id') ?? '').trim()
-      const src = embedSrc(provider, id)
-      if (!src) { el.set_content(''); continue }
-      el.set_content(
-        `<iframe src="${escapeAttr(src)}" title="Vídeo ${escapeAttr(provider)}" loading="lazy" ` +
-        `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ` +
-        `referrerpolicy="strict-origin-when-cross-origin" ` +
-        `sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowfullscreen></iframe>`,
-      )
+      el.set_content(embedInnerHtml(el.getAttribute('data-provider') ?? '', el.getAttribute('data-embed-id') ?? ''))
     }
     return root.toString()
   } catch {

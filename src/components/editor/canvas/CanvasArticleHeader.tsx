@@ -19,6 +19,7 @@
 
 import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react'
 import { BCP47, type Locale } from '@/lib/i18n/config'
+import { responsiveFeaturedImage } from '@/lib/render/imageMarkup'
 
 const flat = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ')
 
@@ -116,17 +117,32 @@ export function CanvasArticleHeader({
   )
 }
 
-/** The cover, as the reader gets it, with its two controls on top. */
-export function CanvasFeaturedImage({ src, busy, onReplace, onRemove }: {
+/**
+ * The cover, as the reader gets it — the render's own `responsiveFeaturedImage`
+ * markup (a <picture> through /api/img, or the plain <img> it keeps for data URIs)
+ * — with its two controls on top, in a `data-carma-ui` element.
+ */
+export function CanvasFeaturedImage({ src, alt = '', busy, onReplace, onRemove }: {
   src: string
+  /** The published page uses the article's title. */
+  alt?: string
   busy?: boolean
   onReplace: () => void
   onRemove: () => void
 }) {
+  const figRef = useRef<HTMLElement>(null)
+  // The picture is the render's markup STRING; React keeps only the controls.
+  useLayoutEffect(() => {
+    const fig = figRef.current
+    if (!fig) return
+    const frag = fig.ownerDocument.createRange().createContextualFragment(responsiveFeaturedImage(src, alt))
+    const nodes = Array.from(frag.childNodes)
+    fig.prepend(frag)
+    return () => { for (const n of nodes) n.remove() }
+  }, [src, alt])
+
   return (
-    <figure className="carma-article-image-wrap">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="carma-article-image" src={src} alt="" />
+    <figure ref={figRef} className="carma-article-image-wrap">
       <div data-carma-ui className="carma-cover-tools absolute right-2 top-2 flex gap-1.5">
         <button type="button" onClick={onReplace} disabled={busy}
           className="cursor-pointer rounded-md bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition-colors hover:bg-black/75 disabled:opacity-60">

@@ -8,7 +8,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/core'
 import CanvasFrame from '@/components/editor/canvas/CanvasFrame'
-import { CanvasArticleHeader } from '@/components/editor/canvas/CanvasArticleHeader'
+import { CanvasArticleHeader, CanvasFeaturedImage } from '@/components/editor/canvas/CanvasArticleHeader'
 import type { Locale } from '@/lib/i18n/config'
 import { ToastProvider } from '@/components/ui/Toast'
 import type { CanvasSpec } from '@/lib/render/canvas'
@@ -16,11 +16,11 @@ import type { CanvasSpec } from '@/lib/render/canvas'
 const TipTapEditor = lazy(() => import('@/components/editor/TipTapEditor'))
 
 type LabHooks = { ready: boolean; editor: Editor | null; shortcuts: string[]; header: { title: string; lede: string } }
-type LabHeader = { title: string; lede: string; author: string; date: string; categories: string[] }
+type LabHeader = { title: string; lede: string; author: string; date: string; categories: string[]; featured: string }
 declare global { interface Window { __lab?: LabHooks } }
 
-export default function LabCanvas({ spec, html, header, locale, classic = false }: {
-  spec: CanvasSpec; html: string; header: LabHeader; locale: Locale; classic?: boolean
+export default function LabCanvas({ spec, html, header, locale }: {
+  spec: CanvasSpec; html: string; header: LabHeader; locale: Locale
 }) {
   const [width, setWidth] = useState<'desktop' | 'phone'>('desktop')
   // Editable, as in the post editor — the spike types into them.
@@ -60,14 +60,7 @@ export default function LabCanvas({ spec, html, header, locale, classic = false 
             </button>
           ))}
         </div>
-        {classic ? (
-          <div className="mx-auto max-w-3xl pl-10">
-            <Suspense fallback={null}>
-              <TipTapEditor siteId="lab" initialHtml={html} onChange={() => {}} onEditorReady={onEditorReady} />
-            </Suspense>
-          </div>
-        ) : (
-          <CanvasFrame spec={spec} width={width} title="Canvas lab">
+        <CanvasFrame spec={spec} width={width} title="Canvas lab">
             {m => (
               <>
                 {createPortal(
@@ -76,13 +69,13 @@ export default function LabCanvas({ spec, html, header, locale, classic = false 
                     author={header.author} date={header.date} categories={header.categories} locale={locale} />,
                   m.header,
                 )}
+                {createPortal(<CanvasFeaturedImage src={header.featured} alt={title} onReplace={() => {}} onRemove={() => {}} />, m.featured)}
                 <Suspense fallback={null}>
                   <TipTapEditor canvas={m} siteId="lab" initialHtml={html} onChange={() => {}} onEditorReady={onEditorReady} />
                 </Suspense>
               </>
             )}
-          </CanvasFrame>
-        )}
+        </CanvasFrame>
       </div>
     </ToastProvider>
   )

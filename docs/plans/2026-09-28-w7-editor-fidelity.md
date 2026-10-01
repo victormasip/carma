@@ -1,7 +1,7 @@
 # W7 — The writing canvas is the blog
 
-**Status:** APPROVED 2026-09-28 (iframe canvas · blog ground · Sonnet 5 live). **W7.0 ✅ · W7.1 ✅ · W7.2 ✅**
-on branch `w7/editor-canvas` — see §8 for what was measured. W7.3–W7.5 open.
+**Status:** APPROVED 2026-09-28 (iframe canvas · blog ground · Sonnet 5 live). **W7.0 ✅ · W7.1 ✅ · W7.2 ✅ ·
+W7.3 ✅ · W7.4 ✅ · W7.5 ✅ (WebKit; a real iOS device test remains)** on branch `w7/editor-canvas` — see §8.
 **Scope:** the article editor (`/dashboard/sites/[id]/posts/*`), then the Studio's inline body editor.
 **Premise:** since W6, every blog is dressed by its own Genome — typefaces, accent, ground,
 spacing, drop caps, lanes, ornaments. The person who writes that blog still types into a
@@ -285,3 +285,102 @@ Sonnet genome's paragraph broke at a different word at 390px). Both removed; the
 - **Deviation from §5:** the `globals.css` prose copy is NOT deleted yet — the Studio's inline
   body editor still uses the classic surface until W7.4. It goes with W7.4.
 - `test:perf` holds: the post editor routes are 33.8KB gzip of critical-path JS (budget 66KB).
+
+### W7.3 — every block is its published markup
+
+React node views wrapped each block in TipTap's renderer `<div>` and put its text in another
+inner `<div>` — the writer edited a different tree from the reader's, dressed by editor-only CSS.
+`canvas/readerView.ts` builds a block's DOM from its own `renderHTML`
+(`DOMSerializer.renderSpec(node.type.spec.toDOM(node))`, the serializer `getHTML()` uses) and
+applies the render's server-side fill with the SAME functions, now client-safe:
+
+- images → `lib/render/imageMarkup.ts` (`responsiveImage`, and `transformContentImagesIn`, the
+  DOM twin of the render's string walker; one shared `contentImageOptions` decision);
+- the TOC and the embed → `lib/render/blockMarkup.ts` (`tocInnerHtml`, `embedInnerHtml`); the TOC
+  refills live on every change.
+
+CTA, figure, gallery, embed and TOC moved; callout, columns and toggle already were. Controls left
+the blocks: `canvas/BlockControls.tsx` (the CTA's URL and alignment, the gallery's add / upload /
+remove) lives in the UI layer, under the selected block; the embed's click shield is a
+`data-carma-ui` element. In-page links scroll (a gallery's arrows page its track exactly as on
+the JS-free blog); no link is ever followed.
+
+**Gate: 0 differences for every block** — 23 designs × 2 widths: prose 460 pairs, header 46,
+cover 46, callout / columns / CTA / embed / figure / gallery / TOC / toggle 46 each.
+
+Found by the suites on the way, all fixed:
+- **Text typed at the end of a CTA label was lost** — a browser never extends a link past its
+  end, so it landed outside the `<a>` (the editable hole). Typing in a CTA label goes through
+  ProseMirror (`beforeinput`).
+- **Every link a writer clicked opened in a new tab** — StarterKit 3 bundles Link (with
+  `openOnClick: true`) and the editor registered a second one; both ran. Pre-existing; now one each.
+- **An article that opens with an atom (a TOC) swallowed the writer's first click** — the hidden
+  initial node selection. The editor starts at the first text position.
+- A gallery arrow scrolled the whole app page sideways (`scrollIntoView` with an inline
+  alignment); only the track scrolls now.
+- `@scope` roots never match their own classes in Chrome (W7.2 finding) — controls scope from
+  their parent.
+
+### W7.4 — the Studio on the same canvas, the imitation deleted
+
+- The Studio's inline body editor is the same canvas: `getStudioBodyCanvas` returns the post's
+  body and its article page dressed in the Studio's LIVE (unsaved) tokens and faces, through the
+  same resolver (`resolveRenderTheme(admin, siteId, live)`). Desktop / Tablet / Mobile map to
+  the canvas widths (834px added).
+- `TipTapEditor` has no other mode: the classic surface, the lab's `?mode=classic` and
+  `loadArticleBody`/`getPostContent` are gone.
+- **`globals.css`: 212 lines deleted** — the 48 `.carma-editor` prose rules, every block's
+  editor look (19 hard-coded colours), the editor-UI rules, the dark-mode flips. `grep` finds no
+  `.carma-editor`, `.carma-prose`, `ProseMirror` or block selector left. What remains: the
+  callout tints, scoped to `.review-prose` (the peer-review page and the agent chat's draft
+  preview render an article's HTML in the app). App CSS: 26.9KB → 25.3KB gzip on every route.
+- Logged-in QA on the built app (throwaway user + site, deleted in the run): 6/6 — the Studio
+  edits the body on the canvas in Verne's Lora / Work Sans, blocks as published, “Desa i tanca”
+  saves, the editor closes.
+
+### W7.5 — WebKit and pixels
+
+**`test:canvas-webkit`** — Playwright WebKit 26.6 (Safari's engine; not iOS Safari): **26/26** on
+desktop and under iPhone emulation (touch, mobile viewport). Focus from the first click and the
+first tap, keyboard selection, typing, undo/redo, the bubble menu (above the selection, a React
+handler — and a TAP on it), the slash menu beside the caret, the header's plain-text `<h1>`, the
+CTA label, links, the embed shield. **The iframe survived WebKit; no polyfill was needed.**
+Known: WebKit rejects the embed's `sandbox="… allow-presentation"` token — that is the PUBLISHED
+markup, so every Safari reader's console shows it today; harmless (ignored), left for a decision.
+
+Not covered, and cannot be from this machine: iOS Safari on a device — the virtual keyboard,
+selection handles, and iOS's rule that only a focus inside a user gesture raises the keyboard
+(three focus calls run after async work: a figure inserted after its upload, the caret restored
+after a language switch, the AI rewrite). Needs a real iPhone or the iOS Simulator (macOS).
+
+**`test:editor-pixels`** — the canvas screenshot vs the published article's, same viewport,
+cropped from the header to the end of the content, Chrome and WebKit, 4 designs × 2 widths:
+
+| | Chrome desktop | Chrome 390px | WebKit desktop | WebKit 390px |
+|---|---|---|---|---|
+| preset:carma | **0** | **0** | **0** (0 px differ at all) | **0** (0 at all) |
+| preset:noir | **0** | **0** | **0** (0 at all) | **0** (0 at all) |
+| resto-verne:elevated (Sonnet) | **0** | 0.38% — KNOWN, below | **0** (0 at all) | **0** (0 at all) |
+| legal-granvia:reimagined (Sonnet) | **0** | **0** | **0** (0 at all) | **0** (0 at all) |
+
+(Pixels differing after the anti-aliasing tolerance: > 48 levels on a channel AND still > 32 after a
+3×3 box filter. Sub-pixel glyph noise in Chrome leaves < 0.07%; the same screenshots offset by 2px —
+the control — leave ~4.7%. WebKit is pixel-identical: not one pixel differs.)
+
+**KNOWN, unresolved — Chrome, Verne, 390px:** one list item whose first line fits the reader's
+column with 0.11px to spare breaks one word earlier on the canvas. Only inside the pixel harness:
+an isolated page, warm or cold font caches, a forced re-layout and each of the harness's
+preparation steps all reproduce the READER's break; only switching the canvas to
+`white-space: break-spaces` reproduces the canvas's. It reads as Chrome's `pre-wrap` line breaking
+(ProseMirror requires `pre-wrap`) depending on layout history. The test prints it with its numbers
+(`PIXELS_STRICT=1` fails on it); any other difference fails the run.
+
+What the pixels caught that 54 computed properties per element could not — every box matched:
+- **Line breaks.** Both engines' UA sheets put `overflow-wrap: break-word` and
+  `line-break: after-white-space` (WebKit also `-webkit-nbsp-mode: space`) on every
+  contenteditable; with the blog's `text-wrap: pretty`, a tight line (269.891px of 270) broke at a
+  different word on the phone. Editable elements now `inherit` those from the page.
+- Text a fraction of a pixel apart in Chrome (pre-wrap vs normal) — the anti-aliasing tolerance.
+- The pixel harness's own traps: an iframe's content is painted at a whole-pixel origin; the
+  published page must be fed the editor's `getHTML()` (headings need their ids for the TOC).
+- The gate now also compares vertical offsets and the line-breaking properties (still 0).

@@ -1,6 +1,6 @@
 import { Node, mergeAttributes, nodePasteRule } from '@tiptap/core'
-import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
-import { embedSrc } from '@/lib/embed'
+import { embedInnerHtml } from '@/lib/render/blockMarkup'
+import { readerNodeView } from '../canvas/readerView'
 
 // Video embed (YouTube / Vimeo).
 //
@@ -57,7 +57,15 @@ export const Embed = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(EmbedView)
+    // The render's own iframe, plus a click shield (data-carma-ui, invisible to the
+    // reader and to the fidelity gate): a click selects the block instead of
+    // starting the video inside the writer's page.
+    return readerNodeView({
+      fill: (dom, node) => {
+        dom.innerHTML = embedInnerHtml(String(node.attrs.provider ?? ''), String(node.attrs.embedId ?? ''))
+          + '<div data-carma-ui class="carma-embed-shield" aria-hidden="true"></div>'
+      },
+    })
   },
 
   addCommands() {
@@ -89,25 +97,3 @@ export const Embed = Node.create({
   },
 })
 
-function EmbedView({ node, selected }: NodeViewProps) {
-  const provider = String(node.attrs.provider ?? '')
-  const id = String(node.attrs.embedId ?? '')
-  const src = embedSrc(provider, id)
-  return (
-    <NodeViewWrapper className={`carma-embed carma-embed-editor ${selected ? 'is-selected' : ''}`} data-provider={provider}>
-      <div className="carma-embed-frame" contentEditable={false}>
-        {src ? (
-          <iframe
-            src={src}
-            title={`Vídeo ${provider}`}
-            loading="lazy"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          />
-        ) : (
-          <div className="carma-embed-fallback">No s’ha pogut incrustar el vídeo</div>
-        )}
-      </div>
-    </NodeViewWrapper>
-  )
-}

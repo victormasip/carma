@@ -16,6 +16,25 @@ async function up(base) {
   return false
 }
 
+/**
+ * Video hosts answered with an empty page (puppeteer page, request interception).
+ * The embed's BOX is what the gates look at; they must not depend on the network
+ * or on a video player's scripts.
+ */
+const VIDEO = /(^|\.)(youtube-nocookie\.com|youtube\.com|vimeo\.com|ytimg\.com)$/
+// A 1×1 PNG, for `images: true` — the image transform endpoint answered offline.
+const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+export async function stubVideo(page, { images = false } = {}) {
+  await page.setRequestInterception(true)
+  page.on('request', r => {
+    let url = null
+    try { url = new URL(r.url()) } catch { /* data: etc. */ }
+    if (url && VIDEO.test(url.hostname)) r.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' })
+    else if (url && images && url.pathname === '/api/img') r.respond({ status: 200, contentType: 'image/png', body: PIXEL })
+    else r.continue()
+  })
+}
+
 export async function labServer() {
   if (process.env.LAB_URL) return { base: process.env.LAB_URL, stop: () => {} }
   const root = process.cwd()

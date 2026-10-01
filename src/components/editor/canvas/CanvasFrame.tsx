@@ -35,7 +35,7 @@ export type CanvasMounts = {
   ui: HTMLElement
 }
 
-export const CANVAS_WIDTHS = { desktop: '100%', phone: '390px' } as const
+export const CANVAS_WIDTHS = { desktop: '100%', tablet: '834px', phone: '390px' } as const
 
 /** Retag a canvas document's language (a plain DOM write, outside React's state). */
 function tagLanguage(doc: Document | null | undefined, lang: string): void {
@@ -127,6 +127,31 @@ export default function CanvasFrame({
     }
     doc.addEventListener('keydown', forward)
 
+    // LINKS. The page is the reader's markup, links and all — and a followed link
+    // would navigate the frame away from the editor. None is followed; an in-page
+    // one (a TOC entry, a gallery's slide arrow) scrolls to its target, which is
+    // exactly what the JS-free blog does with it.
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.('a[href]')
+      if (!a || a.closest('#carma-ui, [data-carma-ui]')) return
+      e.preventDefault()
+      const href = a.getAttribute('href') ?? ''
+      if (href.length < 2 || !href.startsWith('#')) return
+      const target = doc.getElementById(decodeURIComponent(href.slice(1)))
+      if (!target) return
+      // A gallery's slide arrow pages ITS TRACK — and only its track. scrollIntoView
+      // with an inline alignment scrolls every ancestor too, the app page around
+      // the canvas included: the editor slid sideways and stopped painting (found
+      // by the W7.3 spike).
+      const track = target.closest<HTMLElement>('.carma-gallery-track')
+      if (track) {
+        track.scrollTo({ left: track.scrollLeft + target.getBoundingClientRect().left - track.getBoundingClientRect().left, behavior: 'smooth' })
+      } else {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+    doc.addEventListener('click', onClick)
+
     const retheme = () => copyUiVariables(document, doc)
     const mo = new MutationObserver(retheme)
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
@@ -136,6 +161,7 @@ export default function CanvasFrame({
     return () => {
       ro.disconnect()
       doc.removeEventListener('keydown', forward)
+      doc.removeEventListener('click', onClick)
       mo.disconnect()
       mq.removeEventListener('change', retheme)
     }
@@ -148,7 +174,7 @@ export default function CanvasFrame({
         title={title}
         srcDoc={srcDoc}
         onLoad={onLoad}
-        className={width === 'phone'
+        className={width !== 'desktop'
           ? // box-content: the border must not eat the 390px the blog's media queries see.
             'mx-auto box-content block rounded-[1.75rem] border border-border shadow-pop transition-[width] duration-300'
           : 'mx-auto block border-0 transition-[width] duration-300'}

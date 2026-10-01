@@ -186,9 +186,23 @@ export async function resolveRedirect(admin: Admin, siteId: string, slug: string
  * the defaults. The published render AND the editor's canvas (the post editor's
  * page, via lib/render/canvas.ts) call this, so the page being written on and the
  * page being read cannot resolve two different themes.
+ *
+ * `live` — the Studio's UNSAVED tokens and faces (W7.4): its inline body editor
+ * writes on the design being edited, not the one last saved. Applied to the
+ * stored theme BEFORE the defaults, exactly where a save would put them.
  */
-export async function resolveRenderTheme(admin: Admin, siteId: string): Promise<ThemeRow> {
-  return themeWithTokens(await loadTheme(admin, siteId))
+export async function resolveRenderTheme(
+  admin: Admin,
+  siteId: string,
+  live?: { tokens?: Partial<DesignTokens> | null; fontLinks?: string[] | null },
+): Promise<ThemeRow> {
+  const stored = await loadTheme(admin, siteId)
+  if (!live) return themeWithTokens(stored)
+  return themeWithTokens({
+    ...(stored ?? {}),
+    design_tokens: { ...((stored?.design_tokens as Partial<DesignTokens>) ?? {}), ...(live.tokens ?? {}) },
+    ...(live.fontLinks?.length ? { font_links: live.fontLinks } : {}),
+  } as ThemeRow)
 }
 
 function themeWithTokens(theme: ThemeRow) {

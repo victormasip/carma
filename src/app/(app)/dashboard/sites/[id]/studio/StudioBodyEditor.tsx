@@ -1,43 +1,56 @@
 'use client'
 
-// Carma Studio — the inline ARTICLE BODY editor.
+// Carma Studio — the inline ARTICLE BODY editor, ON the canvas (W7.4).
 //
 // Editing the article body inside the render iframe is impossible (it lives in a
 // Declarative Shadow DOM) and unsafe (round-tripping transformed HTML through
-// contenteditable corrupts it). So body editing swaps the preview for a real TipTap
-// (ProseMirror) canvas mounted in the parent tree: the stored HTML is parsed into a
-// structured doc on load, edited safely, and serialized back to clean HTML on save —
-// no contenteditable cruft, no lost markup. The surface is styled with the live brand
-// tokens (font + colours + width) so the transition reads as the same article.
+// contenteditable corrupts it). So body editing swaps the preview for the writing
+// canvas: the same iframe, stylesheet and TipTap as the post editor
+// (components/editor/canvas), built from the article page the reader gets —
+// dressed in the Studio's LIVE, unsaved tokens and faces. It used to be a card
+// painted with three of those tokens (a face, a ground, a colour) over the app's
+// imitation of the blog's prose; that card and that CSS are gone. The stored HTML
+// is parsed into a structured doc on load and serialized back to clean HTML on save.
 
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Check, X, PenLine } from 'lucide-react'
-import TipTapEditor from '@/components/editor/TipTapEditor'
 import Button from '@/components/ui/Button'
 import KnotLoader from '@/components/ui/KnotLoader'
+import CanvasFrame from '@/components/editor/canvas/CanvasFrame'
+import { getStudioBodyCanvas } from '@/lib/actions/posts'
+import type { CanvasSpec } from '@/lib/render/canvas'
 import { useThemeStudio } from '../ThemeStudioContext'
 import type { Device } from './types'
 
+// Already split from the route by StudioStage's lazy import of this file.
+const TipTapEditor = lazy(() => import('@/components/editor/TipTapEditor'))
+
+const WIDTH = { desktop: 'desktop', tablet: 'tablet', mobile: 'phone' } as const
+
+type Loaded = { html: string; spec: CanvasSpec } | 'missing' | null
+
 export default function StudioBodyEditor({ device, onClose }: { device: Device; onClose: () => void }) {
-  const { siteId, tokens, editableArticle, loadArticleBody, saveArticleBody } = useThemeStudio()
-  // Mounted fresh per editing session (parent renders it conditionally), so
-  // "loading" is simply "the HTML hasn't arrived yet" (initialHtml === null) —
-  // no separate state to keep in sync.
-  const [initialHtml, setInitialHtml] = useState<string | null>(null)
+  const { siteId, tokens, fontLinks, editableArticle, saveArticleBody } = useThemeStudio()
+  // Mounted fresh per editing session (the parent renders it conditionally), and
+  // the Studio's controls sit behind this overlay while it is open — so the live
+  // tokens are read ONCE, when the session starts.
+  const [loaded, setLoaded] = useState<Loaded>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   // Live HTML kept in a ref (TipTap fires onChange per keystroke; no re-render needed).
   const liveRef = useRef('')
+  const start = useRef({ tokens, fontLinks })
 
   useEffect(() => {
     let alive = true
-    void loadArticleBody().then((h) => {
+    if (!editableArticle) return
+    void getStudioBodyCanvas(siteId, editableArticle.id, start.current).then((r) => {
       if (!alive) return
-      liveRef.current = h
-      setInitialHtml(h)
-    }).catch(() => { if (alive) setInitialHtml('') })
+      if (r) liveRef.current = r.html
+      setLoaded(r ?? 'missing')
+    })
     return () => { alive = false }
-  }, [loadArticleBody])
+  }, [siteId, editableArticle])
 
   const save = async () => {
     setError('')
@@ -48,7 +61,7 @@ export default function StudioBodyEditor({ device, onClose }: { device: Device; 
     else setError('No s’ha pogut desar. Torna-ho a provar.')
   }
 
-  const frameWidth = device === 'mobile' ? 390 : device === 'tablet' ? 720 : 860
+  const state: Loaded | 'no-article' = editableArticle ? loaded : 'no-article'
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-surface">
@@ -71,32 +84,37 @@ export default function StudioBodyEditor({ device, onClose }: { device: Device; 
           >
             <X className="h-3.5 w-3.5" /> Cancel·la
           </button>
-          <Button size="sm" glow onClick={save} loading={saving} iconLeft={<Check className="h-3.5 w-3.5" />}>
+          <Button size="sm" glow onClick={save} loading={saving} disabled={typeof state !== 'object' || state === null} iconLeft={<Check className="h-3.5 w-3.5" />}>
             Desa i tanca
           </Button>
         </div>
       </div>
 
-      {/* Editing surface — styled with the live brand tokens so it reads as the article. */}
-      <div className="min-h-0 flex-1 overflow-auto bg-surface-subtle py-8">
-        {initialHtml === null ? (
+      {/* The page — the article as the reader gets it, in the design being edited. */}
+      <div className="min-h-0 flex-1 overflow-auto bg-surface-subtle">
+        {state === null ? (
           <div className="flex h-full items-center justify-center"><KnotLoader size={56} label="Carregant el contingut…" /></div>
+        ) : typeof state === 'string' ? (
+          <p className="mx-auto max-w-md px-6 py-16 text-center text-sm text-muted">
+            {state === 'no-article'
+              ? 'Aquest blog encara no té cap article: la vista d’article és una mostra. Escriu el primer article des del panell i el podràs editar aquí.'
+              : 'No s’ha pogut carregar el contingut d’aquest article.'}
+          </p>
         ) : (
-          <div
-            className="mx-auto rounded-2xl border border-border px-7 py-9 shadow-card sm:px-10"
-            style={{
-              maxWidth: frameWidth,
-              background: String(tokens.colorBg ?? '#ffffff'),
-              color: String(tokens.colorText ?? '#111111'),
-              fontFamily: String(tokens.fontBody ?? 'inherit'),
-            }}
-          >
-            <TipTapEditor
-              initialHtml={initialHtml}
-              siteId={siteId}
-              onChange={(h) => { liveRef.current = h }}
-              placeholder="Escriu el contingut de l’article…"
-            />
+          <div className={device === 'desktop' ? 'pb-10' : 'px-4 py-6'}>
+            <CanvasFrame spec={state.spec} width={WIDTH[device]} title="Contingut de l’article">
+              {(mounts) => (
+                <Suspense fallback={null}>
+                  <TipTapEditor
+                    canvas={mounts}
+                    initialHtml={state.html}
+                    siteId={siteId}
+                    onChange={(h) => { liveRef.current = h }}
+                    placeholder="Escriu el contingut de l’article…"
+                  />
+                </Suspense>
+              )}
+            </CanvasFrame>
           </div>
         )}
       </div>
