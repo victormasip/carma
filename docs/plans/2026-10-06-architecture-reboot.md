@@ -647,9 +647,11 @@ Mirror of a bank's header on `bank.carma.cat` is a better phishing kit than a br
    is ours. Blog pages answer with `Content-Security-Policy: script-src 'sha256-…'
    (ours only); object-src 'none'; base-uri 'none'; form-action <their origin> + allowlist`.
    The preview route already does this.
-2. **Ownership before publication.** A Mirror is *published* only for a domain the account
-   has verified (DNS TXT, meta tag, file upload, the WordPress plugin, or an e-mail at the
-   domain). Anonymous Door previews stay previews (no-index, watermarked, short-lived).
+2. ~~**Ownership before publication.**~~ **Overruled by the founder, 2026-10-09:** no
+   ownership gate on the Free tier — growth first; a Mirror publishes to `<nom>.carma.blog`
+   at once and abuse is handled reactively (report link, one-flag takedown, automated
+   capture signals → review). See `2026-10-09-onboarding-mirror-and-domains.md` Stage 4.
+   Anonymous Door previews stay previews (no-index, watermarked, short-lived).
 3. **A tenant domain on the Public Suffix List.** Move blogs from `<sub>.carma.cat` to a
    dedicated registrable domain (e.g. `<sub>.carma.blog` — name to be chosen), submitted to
    the PSL's private section; 301 every old URL. Until then: app cookies `__Host-`-prefixed,
@@ -697,7 +699,7 @@ Mirror of a bank's header on `bank.carma.cat` is a better phishing kit than a br
 | **Per-breakpoint variants** duplicate header HTML and ids | ~1 site in 4 (10 of 41, I5) | Low | Hidden variants are `display:none` (out of the accessibility tree); our runtime addresses `data-mx`, never ids | Duplicate ids in hidden markup (validator noise) |
 | **Font licences** | Low–medium | Legal | Licence flags per face; Adobe kits need the domain added; owner informed | Owner's responsibility, recorded |
 | **New production dependency** — headless Chromium | Certain | Ops | Version pinning, a canary capture of 5 corpus sites on every deploy, Cloudflare fallback | One more moving part |
-| **Phishing with a perfect clone** | Low | Severe | Ownership verification before publish (§3.9.2), PSL domain, takedown process | — |
+| **Phishing with a perfect clone** | Low | Severe | ~~Ownership verification before publish~~ (overruled 2026-10-09: risk accepted for growth); PSL domain, zero third-party JS, takedown process, automated capture signals | — |
 | **Inside (A1) couples their TTFB to our API on a miss** | Medium | Low | Transients, stale-if-error, 2s timeout → client-side fallback | First view after purge may be slower |
 | **Engineering size** | Certain | Schedule | Waves with exit gates (§6); W0 needs no new infra | ~11–14 weeks total |
 
@@ -966,7 +968,7 @@ cannot see a planted bug is not a gate.
 | **W2 — EL MIRALL capture** | Browser capture service (queue, egress guard, pinning); interior-page choice; boundary on the built DOM + template validation; snapshot; coverage harvest; behaviour recording; `mirall.js`; assets; variants; migration 040; render integration; progressive onboarding | §5.2 ship criteria on the frozen corpus | 4–5 weeks |
 | **W3 — the validation engine** | Barcelona-100 v2 bundles; `test:mirror`; the mutation suite; weekly live run; research scripts promoted into `tests/` | Mutation kill rate 100% | 2 weeks (overlaps W2) |
 | **W4 — INSIDE** | WordPress plugin v1.0 (server-side, routing, head, sitemap, purge webhook, fallback); `/blog` proxy recipes | 10 real WordPress installs (Elementor, Divi, WPBakery, Astra, Gutenberg) pass V3/V5 natively and V13 | 2–3 weeks |
-| **W5 — domains & ownership** | Tenant domain + PSL submission; 301s; `__Host-` cookies; ownership verification before publish; blog CSP | Old URLs 301; app cookies unreadable from tenant pages | 1–2 weeks (+ PSL lead time, outside our control) |
+| **W5 — domains & ownership** | Tenant domain + PSL submission; 301s; `__Host-` cookies; report link + takedown (no ownership gate on Free, 2026-10-09); blog CSP | Old URLs 301; app cookies unreadable from tenant pages | 1–2 weeks (+ PSL lead time, outside our control) |
 | **W6 — optional escalation** | Native-JS minimal sets (ddmin) for owner-domain blogs whose replay fails | Opt-in only | 2 weeks |
 
 ---

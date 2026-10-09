@@ -1,6 +1,6 @@
 # THE DOOR, MIRRORED — onboarding, the Premium hand-off, and the two domains
 
-**Date:** 2026-10-09 · **Status:** DIRECTION LOCKED (founder decisions of 2026-10-09) — structure below, build order in §7
+**Date:** 2026-10-09 · **Status:** APPROVED by the founder (2026-10-09), with one change: **no ownership gate on the Free tier** (Stage 4) — structure below, build order in §7
 **Implements:** `2026-10-06-architecture-reboot.md` decisions 1–6, as the founder settled them
 **Owner:** Lead Architect + Lead UX PM
 
@@ -111,23 +111,34 @@ something they already saw. The revision:
 3. Only if the carried capture is missing or older than 24 h does the onboarding capture
    again — and then as a background task, never a blocking modal.
 
-### Stage 4 — Live, and the ownership gate
+### Stage 4 — Live, at once (no ownership gate on Free)
 
-**Publishing a Mirror requires proof that the account owns the domain** (reboot plan
-§3.9.2 — the line between a product and a phishing kit). Designed to cost nothing in the
-common case:
+**Founder decision, 2026-10-09: anyone can publish a MIRROR to `nom.carma.blog` the
+moment their account exists — no DNS record, no e-mail match, no waiting.** Growth and a
+zero-friction funnel come first; asking a small-business owner for a TXT record at the
+moment of the Wow would kill the conversion this whole flow exists for. The theoretical
+risk — someone mirroring a site that is not theirs, a phishing page with our name on it
+(reboot plan §3.9.2) — is **accepted for now** and handled after the fact, at scale.
 
-| Proof | Friction | When |
-|---|---|---|
-| Signed up with an e-mail **at that domain** (`info@elteudomini.com`) | none | instant, automatic |
-| WordPress plugin installed (Premium path) | none extra | instant |
-| DNS TXT record or `<meta>` tag | one guided step | dashboard checklist |
+What still stands, because it costs the visitor nothing:
 
-Until ownership is proven the blog is live at `nom.carma.blog` with the **honest floor**
-chrome (SAFE PANEL: their logo, their links, our neutral bar) — on-brand and complete,
-never a pixel clone of a site we haven't verified. *Recommendation for the founder's
-sign-off: this is the one place security costs some Wow for some users; the e-mail-domain
-rule makes it invisible for most SMBs, who sign up with their business address.*
+| Control | Why it stays |
+|---|---|
+| `carma.blog` on the Public Suffix List; the app on `carma.cat` only | a mirror can never read or set the app's cookies |
+| Zero third-party JavaScript on every blog (stripped + hash-only CSP, W0) | a mirrored page cannot run the copied site's scripts — or anyone's |
+| Previews on `preview.carma.blog`: signed, 1 h, `noindex` | nothing is indexed or shareable before an account exists |
+| Capture through the egress guard (W2) | a capture can never be pointed at our own network |
+
+Abuse, later and reactively (W5+, no friction added to the honest path): a "report this
+page" link in every blog footer and a takedown runbook (unpublish = one flag, purges the
+edge by tag); automated signals on capture — a password field or a login form in the
+captured chrome, a brand far bigger than the account, a domain on a phishing feed — that
+route the site to review and to the SAFE PANEL until a human clears it; rate limits per
+account and per IP on captures and publications.
+
+Ownership still matters in the **Premium** paths, but as plumbing, not as a gate: a custom
+domain only serves once its CNAME points at us (that record is the proof), and the
+WordPress plugin can only be installed by the site's admin.
 
 ### Stage 5 — The upgrade, later
 
@@ -215,11 +226,11 @@ create table site_domains (
 );
 alter table sites add column residency text not null default 'mirror'
   check (residency in ('mirror', 'safe_panel', 'inside_wp', 'custom_domain', 'no_site'));
-alter table sites add column domain_verified_at timestamptz;  -- ownership proof (Stage 4)
 ```
 
 `residency` is what the dashboard shows ("El teu blog viu a…") and what the render reads
-to choose canonical + chrome; it is *derived* from proofs, never typed by hand.
+to choose canonical + chrome; it is *derived* (capture certificate, a serving custom
+domain, an installed plugin), never typed by hand. Free MIRRORs need no proof (Stage 4).
 
 ### 3.5 What every host shares
 
@@ -235,7 +246,7 @@ purge webhook) in one invalidation.
 | Stage | Gate |
 |---|---|
 | Preview | Sandbox host, signed 1 h token, `noindex`, hash-only CSP, chrome sanitised over a spec parse, SSRF-guarded capture (DNS-resolved, every redirect re-checked — W1 hardened `/api/img` the same way) |
-| Publish | Ownership proof before a Mirror is shown on any domain (Stage 4); SAFE PANEL until then |
+| Publish | **No ownership gate on Free** (founder, 2026-10-09). Abuse handled after the fact: report link, one-flag takedown with edge purge, automated capture signals → review (Stage 4) |
 | Every blog page | Zero third-party script (stripped + CSP); host-only app cookies; PSL tenant domain |
 | Premium custom domain | Domain attached only after DNS proof; same CSP |
 | INSIDE (WordPress) | Origin allow-list + HMAC-signed fragments, size cap, 2 s timeout → client-side fallback |
@@ -250,7 +261,7 @@ purge webhook) in one invalidation.
 | Preview → account created | (to instrument) | +30% vs the 3-designs preview |
 | Account → blog live (no second capture) | ~ 60–90 s incl. a second capture | **≤ 10 s** |
 | Free → Premium within 30 days | — | 8% (WordPress sites: 15%) |
-| Mirrors published without ownership proof | n/a (no gate) | **0** |
+| Abuse reports → takedown (p95) | — (no reports yet) | **< 24 h**, edge purged with it |
 
 ---
 
@@ -270,4 +281,4 @@ a price before the Wow.
 | **W1 — this release** | L'INSTANT: image policy (preview + blog + dashboard), streamed dashboard, keyset lists, rollups — the "dashboard opens instantly" half of Stage 3 |
 | **W2** | Browser MIRROR capture + certificate → Stage 1's third layer; `chrome_captures`; capture id in the carry; Stage 3 adopts without re-capture |
 | **W4** | WordPress plugin v1.0 (INSIDE) → the Premium card's primary path |
-| **W5** | `carma.blog` + PSL + legacy 301s; `site_domains` + custom domains; ownership proofs (Stage 4); `preview.carma.blog` |
+| **W5** | `carma.blog` + PSL + legacy 301s; `site_domains` + custom domains; the report link + takedown runbook (Stage 4); `preview.carma.blog` |

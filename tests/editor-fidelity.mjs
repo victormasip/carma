@@ -77,6 +77,18 @@ const PROPS = [
 ]
 const PSEUDO_PROPS = ['content', 'color', 'font-family', 'font-size', 'font-weight', 'display', 'opacity', 'margin-right', 'float', '-webkit-initial-letter', 'background-image']
 
+// SUB-PIXEL IS NOT A DIFFERENCE — for layout extents only (2026-10-09). A `ch`-based
+// measure resolves to 894.65px in the canvas iframe and 894.138px in the published
+// page on the same font and width (Chrome 154; the gate was at 0 on Chrome of
+// 2026-09-28), and boxes were already compared at ±1px. Typography stays EXACT: a
+// font-size or tracking that drifts a fraction of a pixel moves line breaks, and
+// every box below would say so anyway.
+const SUBPIXEL_PROPS = new Set(['max-width', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'padding-top', 'padding-right', 'padding-bottom', 'padding-left'])
+const PX = /^-?\d+(?:\.\d+)?px$/
+const sameValue = (prop, a, b) => a === b
+  || (SUBPIXEL_PROPS.has(prop) && PX.test(a) && PX.test(b) && Math.abs(parseFloat(a) - parseFloat(b)) < 1)
+
 // Runs INSIDE the page: the element tree under a root, with styles and boxes.
 function collect(where, props, pseudoProps) {
   const doc = where.frame ? document.querySelector('iframe').contentDocument : document
@@ -126,7 +138,7 @@ const blockType = n => {
 
 function diff(a, b, where, out) {
   if (a.tag !== b.tag) { out.push({ where, prop: '<tag>', ed: a.tag, pub: b.tag }); return }
-  for (const k of Object.keys(a.s)) if (a.s[k] !== b.s[k]) out.push({ where, prop: k, ed: a.s[k], pub: b.s[k] })
+  for (const k of Object.keys(a.s)) if (!sameValue(k, a.s[k], b.s[k])) out.push({ where, prop: k, ed: a.s[k], pub: b.s[k] })
   for (const pe of new Set([...Object.keys(a.p), ...Object.keys(b.p)])) {
     const x = a.p[pe], y = b.p[pe]
     if (!x || !y) { out.push({ where: `${where}${pe}`, prop: '<exists>', ed: !!x, pub: !!y }); continue }
@@ -146,6 +158,12 @@ const edPage = await browser.newPage(); await edPage.setViewport({ width: 1280, 
 const pubPage = await browser.newPage()
 await stubVideo(edPage)
 await stubVideo(pubPage)
+// MOTION IS NOT THE CANVAS'S CONTRACT. The editor never animates; the published
+// page reveals its h2s on scroll (`rise`: from opacity 0, +18px), so a heading
+// below the fold is — correctly — still at its first keyframe when measured. The
+// gate compares the STATIC design: both pages get reduced motion, which the
+// genome's motion layer honours (@media (prefers-reduced-motion:no-preference)).
+for (const p of [edPage, pubPage]) await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }])
 const tally = { prose: { pairs: 0, diffs: 0 }, header: { pairs: 0, diffs: 0 }, cover: { pairs: 0, diffs: 0 } }
 const byBlock = new Map()
 const samples = []
