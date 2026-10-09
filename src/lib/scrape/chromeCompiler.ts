@@ -54,6 +54,18 @@ export type ChromeCompileStats = {
   unparseable: number
 }
 
+/**
+ * What the capture records about its own fidelity (W0), next to the compile stats
+ * in `site_themes.chrome_compile_stats`. `faithful: false` makes the render show
+ * SAFE PANEL (their logo + every link) instead of markup it cannot reproduce.
+ */
+export type ChromeFidelity = {
+  faithful?: boolean
+  /** Why not, in one word: 'unstyled' | 'sheets' | 'unread' | 'identity' | 'no-chrome'. */
+  reason?: string | null
+  sheets?: { declared: number; read: number }
+}
+
 export type ChromeCompileResult = { css: string; stats: ChromeCompileStats }
 
 // ─── Brace-aware rule walker ──────────────────────────────────────────────────

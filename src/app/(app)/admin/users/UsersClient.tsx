@@ -510,6 +510,7 @@ function UserRow({ row, isSelf, expanded, isSelected, onToggleSelect, onToggleEx
                       <Link
                         key={s.id}
                         href={`/dashboard/sites/${s.id}`}
+                        prefetch={false}
                         className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg-elevated px-2.5 py-1 text-xs font-semibold text-muted no-underline transition-colors hover:border-accent/40 hover:text-text"
                       >
                         <Globe className="h-3 w-3 text-subtle" />

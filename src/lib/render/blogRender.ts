@@ -13,7 +13,7 @@
 
 import { cacheLife, cacheTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildListingPage, buildArticlePage, buildFeedItems, feedUrlFor, listingUrlFor } from '@/lib/render/theme'
+import { buildListingPage, buildArticlePage, buildFeedItems, feedUrlFor, listingUrlFor, pageCsp } from '@/lib/render/theme'
 import { buildRssFeed } from '@/lib/render/feed'
 import { adminEditBarScript } from '@/lib/render/adminBar'
 import { DEFAULT_TOKENS, type DesignTokens } from '@/lib/scrape/tokens'
@@ -213,7 +213,13 @@ function themeWithTokens(theme: ThemeRow) {
   return { ...(theme ?? {}), design_tokens: base } as ThemeRow
 }
 
-export type CachedDoc = { html: string; siteId: string }
+/** A rendered page and its Content-Security-Policy (W0: our scripts by hash, cached with it). */
+export type CachedDoc = { html: string; siteId: string; csp: string }
+
+function withAdminBar(html: string, siteId: string, appHost: string): CachedDoc {
+  const doc = html.replace('</body>', `${adminEditBarScript(siteId, appOrigin(appHost))}\n</body>`)
+  return { html: doc, siteId, csp: pageCsp(doc) }
+}
 
 /**
  * The listing, cached and tagged `site:<id>`.
@@ -245,10 +251,7 @@ export async function renderListingCached(
   const link = linkCtxFor(param, site.siteId, themeForRender)
 
   const html = buildListingPage(themeForRender, site.siteName, site.siteId, posts, effective, link)
-  return {
-    html: html.replace('</body>', `${adminEditBarScript(site.siteId, appOrigin(appHost))}\n</body>`),
-    siteId: site.siteId,
-  }
+  return withAdminBar(html, site.siteId, appHost)
 }
 
 export type ArticleOutcome =
@@ -324,13 +327,7 @@ export async function renderArticleCached(
     themeForRender, site.siteName, site.siteId, resolution.post, effective,
     { siblings: siblings as never, unlocked: true }, link,
   )
-  return {
-    kind: 'ok',
-    doc: {
-      html: html.replace('</body>', `${adminEditBarScript(site.siteId, appOrigin(appHost))}\n</body>`),
-      siteId: site.siteId,
-    },
-  }
+  return { kind: 'ok', doc: withAdminBar(html, site.siteId, appHost) }
 }
 
 // ─── The feed ─────────────────────────────────────────────────────────────────

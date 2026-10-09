@@ -18,9 +18,10 @@
 //   5. THE HAND-OFF. The chosen design crosses into signup through sessionStorage
 //      alone, and its evidence still verifies on the other side.
 //   6. THE BUNDLE. None of the design engine can reach the landing's client code.
-//   7. THE HEADER (W6). Their chrome is captured over the corpus with nothing
-//      executable left in it, each variant draws it in its own policy (keep,
-//      harmonise, rebuild), and the preview's CSP refuses what the sanitiser missed.
+//   7. THE HEADER (W6 → W0). Their chrome is captured over the corpus with nothing
+//      executable left in it; every variant wears the SAME header — theirs when
+//      the capture is faithful, SAFE PANEL (every link they publish) when it is
+//      not, never one we drew — and the preview's CSP refuses what the scrub missed.
 //   8. THE ADOPTION (W6). The carried choice is re-verified (genome, signature,
 //      provenance), stored as the site's active genome with its evidence, and the
 //      render joins its stylesheet only while the tokens carry its stamp.
@@ -45,7 +46,7 @@ import { designReducer, INITIAL_DESIGN_STATE, isUsableUpgrade } from '@/componen
 import { GET as previewGET } from '@/app/api/onboarding/design/preview/route'
 import { POST as upgradePOST } from '@/app/api/onboarding/design/route'
 import {
-  captureChrome, chromeFor, drawnPolicy, frameChrome, FRAME_CSS, harmoniseCss, logoFilter, rebuildChrome,
+  captureChrome, chromeFor, drawnPolicy, frameChrome, FRAME_CSS, logoFilter,
   sanitizeBodyAttrs, sanitizeChromeHtml,
 } from '@/lib/design/chrome'
 import { toneOfPixels } from '@/lib/design/logoTone'
@@ -53,7 +54,9 @@ import { clearDesignMemo, domainOf, getChrome, loadActiveGenome, putChrome, save
 import { planAdoption } from '@/lib/design/adopt'
 import { compileGenome, COMPILER_VERSION } from '@/lib/design/compile'
 import { loadTheme } from '@/lib/render/blogRender'
-import { CAPTURE_VERSION, HARMONY_MARK, stripHarmony } from '@/lib/design/revealTypes'
+import { buildListingPage } from '@/lib/render/theme'
+import { extractLinkTree, treeLinks } from '@/lib/render/safePanel'
+import { CAPTURE_VERSION, HARMONY_MARK } from '@/lib/design/revealTypes'
 
 // The token needs a key; the model must never be called by a test.
 process.env.DESIGN_TOKEN_SECRET ||= 'test-only-design-token-secret'
@@ -458,19 +461,21 @@ const caps = corpus.map(x => ({ ...x, cap: loadCapture(x.c) })).filter(x => x.ca
 
 {
   // THE FAITHFUL GATE — their markup is only shown when the capture read all of it.
+  // W0: what it is NOT shown as is SAFE PANEL — never a header we drew.
   const gate = caps.filter(x => x.cap.faithful).length
-  const g = PRESET_GENOMES.find(p => p.chrome.policy === 'keep') ?? { ...PRESET_GENOMES[0], chrome: { ...PRESET_GENOMES[0].chrome, policy: 'keep' } }
+  const g = PRESET_GENOMES[0]
   const faithful = caps.find(x => x.cap.faithful)?.cap
   const unfaithful = caps.find(x => x.cap.css && !x.cap.faithful)?.cap
-  console.log(`    ${gate}/${caps.length} captures faithful enough to show their markup; the rest are redrawn`)
+  console.log(`    ${gate}/${caps.length} captures faithful enough to show their markup; the rest get SAFE PANEL`)
   ok(gate > 0 && gate < caps.length, 'the gate passes some captures and refuses others', `${gate}/${caps.length}`)
-  ok(!!faithful && drawnPolicy(g, faithful) === 'keep' && !!unfaithful && drawnPolicy(g, unfaithful) === 'rebuild' && drawnPolicy(g, null) === 'rebuild' && drawnPolicy(g, undefined) === 'keep',
-    'keep on a faithful capture · rebuild on an unfaithful or missing one · the genome’s own rung when nothing is known')
+  ok(!!faithful && drawnPolicy(g, faithful) === 'keep' && !!unfaithful && drawnPolicy(g, unfaithful) === 'safe_panel' && drawnPolicy(g, null) === 'ours' && drawnPolicy(g, undefined) === 'keep',
+    'keep on a faithful capture · SAFE PANEL on an unfaithful one · ours only with no website · keep while nothing is known')
   ok(caps.every(x => !x.cap.faithful || (x.cap.css && (x.cap.nav.links.length >= 2 || x.cap.nav.logo))), 'a faithful capture is always styled and always carries their identity')
 }
 
 {
-  // THEIR LOGO ON A NEW GROUND — measured, and re-inked only when it would vanish.
+  // THEIR LOGO ON A NEW GROUND — the tone measurement still stands (the Ø header,
+  // ours, can carry a logo); W0 deleted the rungs that repainted THEIR header.
   const px = (w, h, fill) => { const a = new Uint8Array(w * h * 4); for (let i = 0; i < w * h; i++) a.set(fill(i), i * 4); return a }
   const mark = rgb => px(10, 10, i => (i % 10 > 2 && i % 10 < 7 ? [...rgb, 255] : [0, 0, 0, 0]))
   const tones = [toneOfPixels(mark([255, 255, 255]), 4), toneOfPixels(mark([10, 10, 10]), 4), toneOfPixels(mark([200, 30, 60]), 4),
@@ -480,82 +485,88 @@ const caps = corpus.map(x => ({ ...x, cap: loadCapture(x.c) })).filter(x => x.ca
   ok(logoFilter('light', '#ffffff') === 'brightness(0)' && logoFilter('dark', '#0b0f14') === 'brightness(0) invert(1)' &&
     logoFilter('light', '#0b0f14') === '' && logoFilter('any', '#ffffff') === '' && logoFilter(null, '#ffffff') === '',
     'a white mark on paper is inked, a black mark on ink is whitened — and nothing else is touched')
-  const g = PRESET_GENOMES.find(p => p.palette.ground === 'ink') ?? PRESET_GENOMES[0]
-  const t = compileGenome(g).tokens
-  const nav = { logo: { src: 'https://x.example/img/logo-dark.svg', alt: 'X', tone: 'dark' }, links: [{ label: 'Inici', href: 'https://x.example/' }], cta: null }
-  const rebuilt = JSON.parse(rebuildChrome({ nav, siteName: 'X', genome: g, tokens: t, homeHref: 'https://x.example/' }).header)
-  const harm = harmoniseCss({ ...t, colorSurface: '#0b0f14' }, nav.logo)
-  ok(rebuilt.css.includes(`filter:${logoFilter('dark', t.colorBg)}`) === (logoFilter('dark', t.colorBg) !== '') &&
-    harm.includes('img[src*="logo-dark.svg"]{filter:brightness(0) invert(1)!important}'),
-    'a rebuilt or harmonised header re-inks their logo when its ground would swallow it')
 }
 
-// Every variant, every site: the policy the preview draws is the one the gate allows.
-const byPolicy = { keep: 0, harmonise: 0, rebuild: 0 }
-let policyWrong = 0, labelsLost = 0, rebuiltScripts = 0
+// Every variant, every site (W0): the header is decided by the CAPTURE, identically
+// for the three variants; SAFE PANEL carries every link their header and footer
+// publish (V3 — nothing invented, nothing dropped) and none of their code.
+const byPolicy = { keep: 0, safe_panel: 0, ours: 0 }
+let policyWrong = 0, variantsDisagree = 0, linksLost = 0, linksTotal = 0, panelScripts = 0, harmonyLeft = 0
 for (const { c, ev, cap } of caps) {
   const d = doorDesign(ev, CTX, null, cap)
   if (!d) continue
+  if (new Set(d.variants.map(v => v.chrome)).size !== 1) variantsDisagree++
   for (const v of d.variants) {
     const tokens = compileGenome(v.genome).tokens
     const out = chromeFor({ capture: cap, genome: v.genome, tokens, siteName: 'Demo', homeHref: c.url })
     byPolicy[out.policy]++
     if (out.policy !== v.chrome || out.policy !== drawnPolicy(v.genome, cap)) policyWrong++
     const f = out.fields
-    const framedOk = f.extracted_header === frameChrome(cap.header, 'header') && f.extracted_footer === frameChrome(cap.footer, 'footer')
-    if (out.policy === 'keep' && !(framedOk && f.compiled_chrome_css === `${cap.css}\n${FRAME_CSS}`)) policyWrong++
-    if (out.policy === 'harmonise' && !(framedOk && f.compiled_chrome_css.split(HARMONY_MARK).length === 3 &&
-      f.compiled_chrome_css.includes(tokens.colorAccent) && stripHarmony(f.compiled_chrome_css) === `${cap.css}\n${FRAME_CSS}`.trim())) policyWrong++
-    if (out.policy === 'rebuild') {
-      const h = JSON.parse(f.extracted_header)
-      if (typeof h.html !== 'string' || typeof h.css !== 'string' || f.compiled_chrome_css !== null) policyWrong++
-      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-      if (!cap.nav.links.every(l => h.html.includes(esc(l.label)))) labelsLost++
-      if (dirt(h.html).length) rebuiltScripts++
+    if (out.policy === 'keep' && !(f.extracted_header === frameChrome(cap.header, 'header') && f.compiled_chrome_css === `${cap.css}\n${FRAME_CSS}`)) policyWrong++
+    if (f.compiled_chrome_css?.includes(HARMONY_MARK)) harmonyLeft++
+    if (out.policy === 'safe_panel') {
+      if (!(f.extracted_header === cap.header && f.chrome_compile_stats?.faithful === false && f.compiled_chrome_css === null)) policyWrong++
+      if (v.variant !== 'faithful') continue // the regions are identical across variants: render once
+      const html = buildListingPage({ ...f, design_tokens: tokens, default_locale: 'ca' }, 'Demo', 'preview', [], 'ca')
+      const want = treeLinks(extractLinkTree(cap.header, cap.footer, c.url))
+      const decode = s => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      const hrefs = new Set([...html.matchAll(/data-carma-safe[\s\S]*?(?=<\/template>)/g)].flatMap(m => [...m[0].matchAll(/href="([^"]+)"/g)].map(h => decode(h[1]))))
+      linksTotal += want.length
+      linksLost += want.filter(l => !hrefs.has(l.href)).length
+      const bar = [...html.matchAll(/<div class="carma-safe"[\s\S]*?<\/template><\/div>/g)].map(m => m[0]).join('')
+      // The panel's own declarative shadow root and stylesheet are ours by design;
+      // anything else `dirt` finds (a script, a handler, a javascript: URL) is not.
+      if (dirt(bar).filter(x => !['<template>', '<style>', 'shadowrootmode='].includes(x)).length) panelScripts++
     }
   }
 }
-console.log(`    policies drawn over ${caps.length} sites × 3: keep ${byPolicy.keep} · harmonise ${byPolicy.harmonise} · rebuild ${byPolicy.rebuild}`)
-ok(byPolicy.keep > 0 && byPolicy.harmonise > 0 && byPolicy.rebuild > 0, 'all three rungs of the ladder are drawn somewhere in the corpus')
-ok(policyWrong === 0, 'keep = their header, framed · harmonise = the same + one marked block in this palette · rebuild = our scoped regions — and each variant says which', `${policyWrong} wrong`)
-ok(labelsLost === 0 && rebuiltScripts === 0, 'a rebuilt header keeps every navigation label it lifted, escaped', `${labelsLost} lost, ${rebuiltScripts} unsafe`)
+console.log(`    drawn over ${caps.length} sites × 3: keep ${byPolicy.keep} · safe_panel ${byPolicy.safe_panel} · ours ${byPolicy.ours} — ${linksTotal} links carried into SAFE PANEL`)
+ok(byPolicy.keep > 0 && byPolicy.safe_panel > 0, 'the corpus draws both: their header where faithful, SAFE PANEL elsewhere')
+ok(variantsDisagree === 0, 'the three variants always wear the SAME header — they differ in the body only', `${variantsDisagree} sites disagree`)
+ok(policyWrong === 0 && harmonyLeft === 0, 'keep = their header, framed · SAFE PANEL = their regions, marked unfaithful, none of their CSS · nothing repainted', `${policyWrong} wrong, ${harmonyLeft} repainted`)
+ok(linksTotal > 0 && linksLost === 0, 'SAFE PANEL renders EVERY link of their header and footer (V3)', `${linksLost}/${linksTotal} lost`)
+ok(panelScripts === 0, 'and nothing executable', `${panelScripts} pages with a script`)
 
 {
   // THE PREVIEW, WITH THEIR HEADER. The capture is seeded as the glimpse would.
-  // A faithful capture whose three variants draw three different rungs.
-  const rungs = x => doorDesign(x.ev, CTX, null, x.cap)?.variants.map(v => v.chrome).join(',')
-  const pick = caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2 && rungs(x) === 'keep,harmonise,rebuild')
-    ?? caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2)
-  if (pick) {
-    await putChrome(null, domainOf(pick.c.url), pick.cap)
-    const d = doorDesign(pick.ev, { ...CTX, siteUrl: pick.c.url }, null, pick.cap)
+  // W0: all three variants wear the same header — theirs, framed, for a faithful
+  // capture; SAFE PANEL for an unfaithful one — under a CSP of our hashes only.
+  const pick = caps.find(x => x.cap.faithful && x.cap.nav.links.length >= 2)
+  const unfaithful = caps.find(x => !x.cap.faithful && x.cap.nav.links.length >= 2)
+  if (pick && unfaithful) {
     const seen = []
-    for (const v of d.variants) {
-      const { status, html, headers } = await previewOf(v.preview, '10.2.0.1')
-      const policy = v.chrome
-      const label = pick.cap.nav.links[0].label.replace(/&/g, '&amp;')
-      const drawn = policy === 'rebuild' ? /data-carma-chrome="header"/.test(html) && html.includes('cb-nav')
-        : html.includes('class="carma-door-chrome"') && html.includes(HARMONY_MARK) === (policy === 'harmonise')
-      seen.push(`${v.variant}:${policy}${drawn && html.includes(label) ? '' : '✗'}`)
-      const csp = headers.get('content-security-policy') ?? ''
-      const allowed = new Set(csp.match(/'sha256-[^']+'/g) ?? [])
-      const ours = (await import('@/lib/render/previewGuard')).scriptHashes(html)
-      if (!(status === 200 && drawn && html.includes(label) && ours.every(h => allowed.has(h)) && /object-src 'none'/.test(csp))) seen.push('✗')
+    for (const [x, ip] of [[pick, '10.2.0.1'], [unfaithful, '10.2.0.4']]) {
+      await putChrome(null, domainOf(x.c.url), x.cap)
+      const d = doorDesign(x.ev, { ...CTX, siteUrl: x.c.url }, null, x.cap)
+      for (const v of d.variants) {
+        const { status, html, headers } = await previewOf(v.preview, ip)
+        const policy = v.chrome
+        const label = x.cap.nav.links[0].label.replace(/&/g, '&amp;')
+        const drawn = policy === 'keep'
+          ? html.includes('class="carma-door-chrome"') && !html.includes(HARMONY_MARK)
+          : policy === 'safe_panel' && html.includes('data-carma-safe="header"') && !html.includes('class="carma-door-chrome"')
+        seen.push(`${v.variant}:${policy}${drawn && html.includes(label) ? '' : '✗'}`)
+        const csp = headers.get('content-security-policy') ?? ''
+        const allowed = new Set(csp.match(/'sha256-[^']+'/g) ?? [])
+        const ours = (await import('@/lib/render/previewGuard')).scriptHashes(html)
+        if (!(status === 200 && drawn && html.includes(label) && ours.every(h => allowed.has(h)) && /object-src 'none'/.test(csp))) seen.push('✗')
+      }
     }
-    ok(!seen.join(' ').includes('✗'), 'each variant’s preview draws THEIR header in its own policy, under a CSP that runs all our scripts', seen.join(' · '))
+    ok(!seen.join(' ').includes('✗') && seen.some(s => s.includes(':keep')) && seen.some(s => s.includes(':safe_panel')),
+      'every preview draws THEIR header — framed when faithful, SAFE PANEL otherwise — under a CSP that runs all our scripts', seen.join(' · '))
 
-    // LAYER TWO, proven on its own: a capture that got past the sanitiser still
-    // cannot run, because its script has no hash on the list.
-    const planted = { ...pick.cap, header: `${pick.cap.header}<script>window.__pwned=1</script>` }
+    // A capture that smuggles a script: the render scrubs it out of the page
+    // (W0, layer one), and the CSP would refuse it anyway (layer two).
+    const planted = { ...pick.cap, header: `${pick.cap.header}<script>window.__pwned=1</script><img src=x onerror="window.__pwned=2">` }
     await putChrome(null, 'planted.example', planted)
-    const g = d.variants.find(v => chromeFor({ capture: planted, genome: v.genome, tokens: compileGenome(v.genome).tokens, siteName: '', homeHref: 'https://planted.example/' }).policy === 'keep') ?? d.variants[0]
-    const q = new URL(g.preview, 'http://localhost'); q.searchParams.set('s', 'https://planted.example/')
+    const d = doorDesign(pick.ev, { ...CTX, siteUrl: pick.c.url }, null, pick.cap)
+    const q = new URL(d.variants[0].preview, 'http://localhost'); q.searchParams.set('s', 'https://planted.example/')
     const res = await previewOf(q.pathname + q.search, '10.2.0.2')
     const allowed = new Set((res.headers.get('content-security-policy') ?? '').match(/'sha256-[^']+'/g) ?? [])
     const plantedHash = (await import('@/lib/render/previewGuard')).scriptHashes('<script>window.__pwned=1</script>')[0]
-    ok(res.html.includes('window.__pwned') ? !allowed.has(plantedHash) : true,
-      'a script planted in a capture is in the page but NOT in the CSP — the browser refuses it', res.html.includes('window.__pwned') ? 'planted, refused' : 'not drawn by this policy')
-  } else ok(false, 'a styled capture with navigation exists to preview')
+    ok(!res.html.includes('__pwned') && !allowed.has(plantedHash),
+      'a script and a handler planted in a capture never reach the page — and would have no hash if they did')
+  } else ok(false, 'a faithful and an unfaithful capture with navigation exist to preview')
 
   const unsafe = await previewOf(`${firstDesign.variants[0].preview}&s=${encodeURIComponent('http://169.254.169.254/latest/meta-data/')}`, '10.2.0.3')
   ok(unsafe.status === 200 && !unsafe.html.includes('meta-data'), 'a preview naming a private address renders without fetching it (the SSRF guard)')
@@ -571,36 +582,35 @@ head('8. THE ADOPTION — the Door’s choice becomes the site’s design')
   // The Studio's own capture of the same site, styled.
   const capture = { header: pick.cap.header, baseUrl: pick.c.url, styled: true }
   const carry = v => ({ genomeId: v.id, variant: v.variant, source: 'derived', genome: JSON.parse(JSON.stringify(v.genome)), evidence: d.token, chrome: v.chrome })
-  const plans = d.variants.map(v => ({ v, plan: planAdoption(carry(v), capture, 'Demo') }))
+  const plans = d.variants.map(v => ({ v, plan: planAdoption(carry(v), capture) }))
   ok(plans.every(({ v, plan }) => plan?.derived && plan.genomeId === v.id && plan.tokens.genome === v.id),
     'each Door design, carried through signup, is recognised as ours: same id, provenance re-derived, tokens stamped')
   // The id the Door shows is the id the row is stored under, for EVERY corpus
   // genome — the live run found 25 of 297 where validation reordered the keys.
   let idDrift = 0
   for (const { ev } of corpus) for (const v of doorDesign(ev, CTX, null)?.variants ?? []) {
-    if (planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: JSON.parse(JSON.stringify(v.genome)), evidence: null }, capture, 'x')?.genomeId !== v.id) idDrift++
+    if (planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: JSON.parse(JSON.stringify(v.genome)), evidence: null }, capture)?.genomeId !== v.id) idDrift++
   }
   ok(idDrift === 0, 'the id the Door shows is the id the site stores — over every corpus genome', `${idDrift} drifted`)
   ok(plans.every(({ v, plan }) => plan.chrome.policy === v.chrome),
     'the header adopted is the header the preview drew', plans.map(({ plan }) => plan.chrome.policy).join(' · '))
-  const keepish = d.variants.find(v => v.genome.chrome.policy === 'keep' || v.genome.chrome.policy === 'harmonise')
-  const redrawn = keepish && planAdoption({ ...carry(keepish), chrome: 'rebuild' }, capture, 'Demo')
-  ok(!keepish || redrawn.chrome.policy === 'rebuild',
-    'a Fidel the Door could only redraw is adopted redrawn — never with markup they did not see')
-  const rebuilt = plans.find(({ plan }) => plan.chrome.policy === 'rebuild')?.plan
-  ok(!rebuilt || pick.cap.nav.links.every(l => JSON.parse(rebuilt.chrome.header).html.includes(l.label.replace(/&/g, '&amp;'))),
-    'a rebuilt header carries their navigation into their blog')
+  // W0: the adoption never repaints or redraws — it keeps their header, or shows
+  // SAFE PANEL when the preview did or when the Studio's capture cannot be styled.
+  ok(plans.every(({ plan }) => plan.chrome.policy === 'keep' || plan.chrome.policy === 'safe_panel'),
+    'every adoption is keep or SAFE PANEL — no rung draws their header for them')
+  const shown = planAdoption({ ...carry(d.variants[0]), chrome: 'safe_panel' }, capture)
+  ok(shown.chrome.policy === 'safe_panel', 'a header the Door showed as SAFE PANEL is adopted as SAFE PANEL — never with markup they did not see')
 
   const v = d.variants[1]
   const tampered = JSON.parse(JSON.stringify(v.genome)); tampered.palette.pins = { ...(tampered.palette.pins ?? {}), accent: '#ff00aa' }
-  const t = planAdoption({ genomeId: v.id, variant: v.variant, source: 'directed', genome: tampered, evidence: d.token }, capture, 'Demo')
+  const t = planAdoption({ genomeId: v.id, variant: v.variant, source: 'directed', genome: tampered, evidence: d.token }, capture)
   ok(t && !t.derived && t.genomeId !== v.id, 'an edited genome still applies — but is recorded as what it is, not as ours', t ? `${t.genomeId} ≠ ${v.id}` : 'null')
-  const forged = planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: v.genome, evidence: 'e30.forged' }, capture, 'Demo')
+  const forged = planAdoption({ genomeId: v.id, variant: v.variant, source: 'derived', genome: v.genome, evidence: 'e30.forged' }, capture)
   ok(forged && forged.payload === null && !forged.derived, 'a forged evidence token proves nothing: no evidence stored, no provenance')
-  ok(planAdoption({ variant: 'bespoke', genome: v.genome }, capture, 'x') === null && planAdoption(null, capture, 'x') === null, 'something that is not a choice is refused')
-  const keepV = d.variants.find(x => x.genome.chrome.policy === 'keep') ?? d.variants[0]
-  const naked = planAdoption({ genomeId: keepV.id, variant: keepV.variant, source: 'derived', genome: keepV.genome, evidence: d.token }, { ...capture, styled: false }, 'Demo')
-  ok(naked.chrome.policy === 'rebuild', 'a header the compiler could not style is rebuilt, never rendered naked', naked.chrome.policy)
+  ok(planAdoption({ variant: 'bespoke', genome: v.genome }, capture) === null && planAdoption(null, capture) === null, 'something that is not a choice is refused')
+  const keepV = d.variants[0]
+  const naked = planAdoption({ genomeId: keepV.id, variant: keepV.variant, source: 'derived', genome: keepV.genome, evidence: d.token }, { ...capture, styled: false })
+  ok(naked.chrome.policy === 'safe_panel', 'a header the compiler could not style becomes SAFE PANEL — never rendered naked, never redrawn', naked.chrome.policy)
 }
 
 {

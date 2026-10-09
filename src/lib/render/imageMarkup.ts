@@ -24,6 +24,13 @@ export const DEFAULT_SIZES_FEATURED  = '(min-width: 1024px) 760px, 100vw'
 /** Widths to generate in the srcset. Picked to cover phone → desktop 2× DPR. */
 const SRC_WIDTHS = [400, 640, 960, 1280, 1600] as const
 
+/**
+ * Encoder quality per format (W1). AVIF and WebP do not share a quality scale:
+ * AVIF at 55 is visually on par with WebP at 75 and roughly a third smaller. The
+ * fallback <img> (JPEG for the rare browser with neither) keeps the endpoint's default.
+ */
+const QUALITY: Record<'avif' | 'webp', number> = { avif: 55, webp: 72 }
+
 function escapeAttr(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -42,7 +49,10 @@ function transformUrl(src: string, width: number, fmt?: 'webp' | 'avif'): string
   const u = new URL('/api/img', 'http://x') // base is dummy — we return path+query
   u.searchParams.set('src', src)
   u.searchParams.set('w', String(width))
-  if (fmt) u.searchParams.set('fmt', fmt)
+  if (fmt) {
+    u.searchParams.set('fmt', fmt)
+    u.searchParams.set('q', String(QUALITY[fmt]))
+  }
   return u.pathname + u.search
 }
 
@@ -62,6 +72,12 @@ export type ResponsiveImageOptions = {
   sizes?: string
   /** Disable lazy loading (e.g. above-the-fold hero). */
   eager?: boolean
+  /**
+   * The page's LCP candidate (W1): loaded eagerly AND first — `fetchpriority=high`.
+   * One per page. Without it the browser fetches a hero at "low" until layout
+   * proves it visible, and inside a declarative shadow root that proof comes late.
+   */
+  priority?: boolean
   /** Width/height attrs for CLS protection. If omitted, derived from aspect. */
   width?: number
   height?: number
@@ -80,7 +96,8 @@ const ASPECT_DIMS: Record<Exclude<ResponsiveImageOptions['aspect'], 'none' | und
  * which apply the right sizes for their context.
  */
 export function responsiveImage(opts: ResponsiveImageOptions): string {
-  const { src, alt, className, aspect = 'none', sizes, eager } = opts
+  const { src, alt, className, aspect = 'none', sizes, priority } = opts
+  const eager = opts.eager || priority
   if (!src) return ''
 
   // Blob URLs (only exist in the creating page) and legacy base64 data-URIs are
@@ -110,17 +127,40 @@ export function responsiveImage(opts: ResponsiveImageOptions): string {
     '<picture>',
       `<source type="image/avif" srcset="${escapeAttr(buildSrcset(src, 'avif'))}" sizes="${escapeAttr(sizesAttr)}" />`,
       `<source type="image/webp" srcset="${escapeAttr(buildSrcset(src, 'webp'))}" sizes="${escapeAttr(sizesAttr)}" />`,
-      `<img src="${escapeAttr(fallbackSrc)}" alt="${escapeAttr(alt)}"${className ? ` class="${escapeAttr(className)}"` : ''}${dimAttrs} loading="${eager ? 'eager' : 'lazy'}" decoding="async" />`,
+      `<img src="${escapeAttr(fallbackSrc)}" alt="${escapeAttr(alt)}"${className ? ` class="${escapeAttr(className)}"` : ''}${dimAttrs} loading="${eager ? 'eager' : 'lazy'}"${priority ? ' fetchpriority="high"' : ''} decoding="${priority ? 'sync' : 'async'}" />`,
     '</picture>',
   ].join('')
 }
 
-export function responsiveFeaturedImage(src: string, alt: string): string {
-  return responsiveImage({ src, alt, aspect: '16/9', sizes: DEFAULT_SIZES_FEATURED, eager: true, className: 'carma-article-image' })
+/**
+ * A `<link rel=preload>` for a page's LCP image, for the document <head> (W1).
+ *
+ * The blog renders inside a declarative shadow root, and an image there is found
+ * late: the preload scanner reads the document, not the template's content, so the
+ * hero waited for the parser to reach it — measured, the listing's LCP image was
+ * its first card, lazy-loaded, at 5.0s on a throttled phone. This names the very
+ * AVIF variant set the <picture> will choose from, so the fetch starts with the
+ * HTML. A browser without AVIF skips it (`type`) and loads the WebP as before.
+ */
+export function imagePreloadLink(src: string | null | undefined, sizes: string, high = true): string {
+  if (!src || src.startsWith('blob:') || src.startsWith('data:')) return ''
+  // `high` only where the image IS the LCP (a feed's first card). Where the LCP is
+  // text with the image below it (an article's lede), a high-priority image would
+  // compete with the fonts the text is waiting for.
+  return `<link rel="preload" as="image" type="image/avif" imagesrcset="${escapeAttr(buildSrcset(src, 'avif'))}" imagesizes="${escapeAttr(sizes)}"${high ? ' fetchpriority="high"' : ''} />`
 }
 
-export function responsiveCardImage(src: string, alt: string): string {
-  return responsiveImage({ src, alt, aspect: '16/9', sizes: DEFAULT_SIZES_CARD })
+export function responsiveFeaturedImage(src: string, alt: string): string {
+  return responsiveImage({ src, alt, aspect: '16/9', sizes: DEFAULT_SIZES_FEATURED, priority: true, className: 'carma-article-image' })
+}
+
+/**
+ * A feed card's image. `rank` is the card's place in the feed: the first is the
+ * page's LCP candidate (priority), the next two are above the fold on a desktop
+ * grid (eager), everything after is lazy — the browser fetches it on approach.
+ */
+export function responsiveCardImage(src: string, alt: string, rank = Infinity): string {
+  return responsiveImage({ src, alt, aspect: '16/9', sizes: DEFAULT_SIZES_CARD, priority: rank === 0, eager: rank < 3 })
 }
 
 /**

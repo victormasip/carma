@@ -6,7 +6,7 @@ import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { extractTokens } from '@/lib/scrape/tokens'
 import { detectBlogSignature, findBlogIndexUrl } from '@/lib/scrape/blogDetect'
 import { absolutiseCssUrls, extractFontFaceCss, proxyFontsInCss, proxyUseHref } from '@/lib/scrape/clientCss'
-import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
+import { buildListingPage, buildErrorPage, pageCsp } from '@/lib/render/theme'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { isLocale, type Locale } from '@/lib/i18n/config'
 import { guardPreview } from '@/lib/render/previewGuard'
@@ -218,6 +218,14 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(guarded, {
     status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, max-age=120' },
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'private, max-age=120',
+      // A stranger's header, rendered on OUR origin from a URL anyone can type:
+      // scrubbed by the renderer (W0), and refused by the browser if anything
+      // executable survived — only our own scripts carry a hash.
+      'Content-Security-Policy': [pageCsp(guarded), "form-action 'none'", "frame-src 'none'"].join('; '),
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
   })
 }

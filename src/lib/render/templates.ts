@@ -124,6 +124,9 @@ const editorial: BlogTemplate = {
   <a class="cx-ed-brand" href="#">${esc(s)}</a>
   <nav class="cx-ed-nav">${['Actualitat', 'Cultura', 'Opinió', 'Entrevistes'].map(n => `<a href="#">${esc(n)}</a>`).join('')}</nav>
 </header>`,
+    // On a phone the nav stays ONE line (it scrolls if it must): wrapping, the
+    // swap from the fallback face to Inter pushed the 4th link onto a second row
+    // and moved the whole blog down 32px — CLS 0.143 on a 412px screen (2026-10-09).
     css: `
 .cx-ed-h{background:#faf6ef;border-bottom:2px solid #1c1714;text-align:center;padding:.65rem 1.5rem 0}
 .cx-ed-top{display:flex;align-items:center;justify-content:space-between;max-width:1160px;margin:0 auto;font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#9a8c7d}
@@ -132,7 +135,7 @@ const editorial: BlogTemplate = {
 .cx-ed-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:1.9rem;max-width:1160px;margin:0 auto;border-top:1px solid #e0d4c2;padding:.85rem 0}
 .cx-ed-nav a{font-family:'Inter',system-ui,sans-serif;font-size:.82rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#3f372f;text-decoration:none;transition:color .15s ease}
 .cx-ed-nav a:hover{color:#b5451f}
-@media (max-width:640px){.cx-ed-nav{gap:1.1rem}.cx-ed-top span:first-child{display:none}}`,
+@media (max-width:640px){.cx-ed-nav{gap:1.1rem;flex-wrap:nowrap;justify-content:safe center;overflow-x:auto;scrollbar-width:none}.cx-ed-nav a{flex:none;white-space:nowrap}.cx-ed-top span:first-child{display:none}}`,
   }),
   footer: (s) => ({
     html: `<footer class="cx-ed-f">
@@ -468,7 +471,7 @@ const atelier: BlogTemplate = {
 .cx-at-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2.4rem;border-top:1px solid #e4dfd3;max-width:1200px;margin:0 auto;padding:.9rem 1rem}
 .cx-at-nav a{font-family:'Jost',system-ui,sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:#3d382f;text-decoration:none;transition:color .15s ease}
 .cx-at-nav a:hover{color:#8a6d3b}
-@media (max-width:640px){.cx-at-nav{gap:1.3rem}.cx-at-top span{display:none}}`,
+@media (max-width:640px){.cx-at-nav{gap:1.3rem;flex-wrap:nowrap;justify-content:safe center;overflow-x:auto;scrollbar-width:none}.cx-at-nav a{flex:none;white-space:nowrap}.cx-at-top span{display:none}}`,
   }),
   footer: (s) => ({
     html: `<footer class="cx-at-f"><div class="cx-at-fin">

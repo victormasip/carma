@@ -31,7 +31,11 @@
     "test:canvas": "node tests/canvas-spike.mjs",
     "test:editor-fidelity": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-fidelity.mjs",
     "test:canvas-webkit": "node tests/canvas-webkit.mjs",
-    "test:editor-pixels": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-pixels.mjs"
+    "test:editor-pixels": "node --experimental-strip-types --import ./tests/register.mjs tests/editor-pixels.mjs",
+    "test:chrome-safety": "node --experimental-strip-types --import ./tests/register.mjs tests/chrome-safety.mjs",
+    "test:queries": "node tests/localstack/verify-041.mjs",
+    "localstack": "node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/localstack/stack.mjs",
+    "measure": "node tests/measure/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

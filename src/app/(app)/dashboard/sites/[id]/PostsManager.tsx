@@ -23,6 +23,7 @@ import ArticleCard from './ArticleCard'
 type Filter = 'all' | 'published' | 'draft'
 
 export type PostsMeta = {
+  /** 1-based position of the page on screen (keyset pages have no number of their own). */
   page: number
   pageCount: number
   filteredCount: number
@@ -32,19 +33,27 @@ export type PostsMeta = {
   /** Template starter posts still present (meta.sample) — shows the one-click
    *  "remove all sample articles" banner. */
   samples?: number
+  /** Loads the page after this one (keyset cursor); null on the last page. */
+  next: string | null
 }
 
-const metaFrom = (r: PostListResult): PostsMeta => ({
-  page: r.page, pageCount: r.pageCount, filteredCount: r.filteredCount,
-  total: r.total, published: r.published, drafts: r.drafts, samples: r.samples,
-})
+const PAGE_SIZE = 12
+
+/** A server page → the list's meta. A search's match count arrives on its first
+ *  page only (keyset paging never recounts), so later pages keep the one we have. */
+const metaFrom = (r: PostListResult, page: number, prev?: PostsMeta): PostsMeta => {
+  const filteredCount = r.filteredCount ?? prev?.filteredCount ?? r.posts.length
+  return {
+    page, filteredCount, pageCount: Math.max(1, Math.ceil(filteredCount / PAGE_SIZE)),
+    total: r.total, published: r.published, drafts: r.drafts, samples: r.samples, next: r.next,
+  }
+}
 
 export default function PostsManager({
   siteId,
   subdomain = null,
   siteName,
-  initialPosts,
-  initialMeta,
+  initialPage,
   isSuperAdmin = false,
   onImport,
 }: {
@@ -52,13 +61,13 @@ export default function PostsManager({
   /** sites.subdomain — each card's preview link goes to the live article. */
   subdomain?: string | null
   siteName: string
-  initialPosts: PostListItem[]
-  initialMeta: PostsMeta
+  /** The first page, as the server loaded it (lib/posts/list.ts). */
+  initialPage: PostListResult
   isSuperAdmin?: boolean
   onImport?: () => void
 }) {
-  const [posts, setPosts] = useState<PostListItem[]>(initialPosts)
-  const [meta, setMeta] = useState<PostsMeta>(initialMeta)
+  const [posts, setPosts] = useState<PostListItem[]>(initialPage.posts)
+  const [meta, setMeta] = useState<PostsMeta>(() => metaFrom(initialPage, 1))
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -87,21 +96,24 @@ export default function PostsManager({
   }
 
   // The query currently reflected in `posts`, so the search debounce can skip
-  // redundant fetches and mutations can reload the right page.
-  const applied = useRef<{ q: string; status: Filter; page: number }>({ q: '', status: 'all', page: initialMeta.page })
+  // redundant fetches and mutations can reload the right page. `cursors[i]` is the
+  // keyset cursor that loads page i+1 (page 1 has none) — Previous walks back
+  // through it; there is no OFFSET to jump with, by design (W1).
+  const applied = useRef<{ q: string; status: Filter; page: number; cursors: (string | null)[] }>({ q: '', status: 'all', page: 1, cursors: [null] })
 
-  const load = useCallback((page: number, status: Filter, q: string) => {
+  const load = useCallback((page: number, status: Filter, q: string, cursors: (string | null)[]) => {
     startTransition(async () => {
-      const r = await listPosts(siteId, { page, status, q })
+      const after = cursors[page - 1] ?? null
+      const r = await listPosts(siteId, { after, status, q })
       if (r.error) { toast(r.error, 'error'); return }
-      // If we paged past the end (e.g. after deleting the last item on a page),
-      // snap back to the final valid page.
-      if (r.posts.length === 0 && r.page > 1 && r.filteredCount > 0) {
-        const r2 = await listPosts(siteId, { page: r.pageCount, status, q })
+      // Paged past the end (the last item of a page was just deleted): step back.
+      if (r.posts.length === 0 && page > 1) {
+        const back = page - 1
+        const r2 = await listPosts(siteId, { after: cursors[back - 1] ?? null, status, q })
         if (r2.error) { toast(r2.error, 'error'); return }
-        setPosts(r2.posts); setMeta(metaFrom(r2)); applied.current = { q, status, page: r2.page }
+        setPosts(r2.posts); setMeta(m => metaFrom(r2, back, m)); applied.current = { q, status, page: back, cursors: cursors.slice(0, back) }
       } else {
-        setPosts(r.posts); setMeta(metaFrom(r)); applied.current = { q, status, page: r.page }
+        setPosts(r.posts); setMeta(m => metaFrom(r, page, m)); applied.current = { q, status, page, cursors: cursors.slice(0, page) }
       }
       setSelected(new Set())
     })
@@ -110,39 +122,40 @@ export default function PostsManager({
   // Debounced server-side search.
   useEffect(() => {
     const t = setTimeout(() => {
-      if (search.trim() !== applied.current.q) load(1, filter, search.trim())
+      if (search.trim() !== applied.current.q) load(1, filter, search.trim(), [null])
     }, 350)
     return () => clearTimeout(t)
   }, [search, filter, load])
 
-  const changeFilter = (f: Filter) => { setFilter(f); load(1, f, search.trim()) }
-  const goPage = (p: number) => { if (p >= 1 && p <= meta.pageCount && p !== meta.page) load(p, filter, search.trim()) }
-  const reload = () => load(applied.current.page, applied.current.status, applied.current.q)
+  const changeFilter = (f: Filter) => { setFilter(f); load(1, f, search.trim(), [null]) }
+  const goNext = () => { if (meta.next) load(meta.page + 1, filter, search.trim(), [...applied.current.cursors.slice(0, meta.page), meta.next]) }
+  const goPrev = () => { if (meta.page > 1) load(meta.page - 1, filter, search.trim(), applied.current.cursors) }
+  const reload = () => load(applied.current.page, applied.current.status, applied.current.q, applied.current.cursors)
 
   // ── Live refresh from the server ────────────────────────────────────────────
   // After an import (ImportModal calls router.refresh()) — or any other server
-  // revalidate — fresh data arrives via `initialPosts`/`initialMeta`. React does
-  // NOT re-derive our local `posts` state from props, so the list would silently
-  // stay stale. Adopt the new data explicitly: replace it on the default view, or
-  // re-run the active query when the user is currently searching/filtering/paging.
+  // revalidate — a fresh first page arrives via `initialPage`. React does NOT
+  // re-derive our local `posts` state from props, so the list would silently stay
+  // stale. Adopt the new data explicitly: replace it on the default view, or re-run
+  // the active query when the user is currently searching/filtering/paging.
   const reloadRef = useRef(reload)
   // Keep the ref pointing at the latest `reload` without re-subscribing the
   // refresh effect below. Assigned in an effect (not during render) to satisfy
   // React 19's ref rules.
   useEffect(() => { reloadRef.current = reload })
-  const lastInitialPosts = useRef(initialPosts)
+  const lastInitialPage = useRef(initialPage)
   useEffect(() => {
-    if (initialPosts === lastInitialPosts.current) return
-    lastInitialPosts.current = initialPosts
+    if (initialPage === lastInitialPage.current) return
+    lastInitialPage.current = initialPage
     const a = applied.current
     if (a.page === 1 && a.status === 'all' && a.q === '') {
-      setPosts(initialPosts)
-      setMeta(initialMeta)
+      setPosts(initialPage.posts)
+      setMeta(metaFrom(initialPage, 1))
       setSelected(new Set())
     } else {
       reloadRef.current()
     }
-  }, [initialPosts, initialMeta])
+  }, [initialPage])
 
   // One-click cleanup of the template's starter articles (meta.sample only).
   const [removingSamples, setRemovingSamples] = useState(false)
@@ -205,7 +218,7 @@ export default function PostsManager({
       const result = await deletePost(post.id, siteId)
       if (result.error) { setPosts(prevPosts); setMeta(prevMeta); toast(result.error, 'error'); return }
       toast('Article eliminat')
-      if (willEmptyPage && prevMeta.pageCount > 1) reload()
+      if (willEmptyPage && (prevMeta.page > 1 || prevMeta.next)) reload()
     })
   }
 
@@ -228,7 +241,7 @@ export default function PostsManager({
       const result = await togglePublish(post.id, siteId, next)
       if (result.error) { setPosts(prevPosts); setMeta(prevMeta); toast(result.error, 'error'); return }
       toast(next ? `"${post.title}" publicat` : `"${post.title}" despublicat`)
-      if (willEmptyPage && prevMeta.pageCount > 1) reload()
+      if (willEmptyPage && (prevMeta.page > 1 || prevMeta.next)) reload()
     })
   }
 
@@ -468,12 +481,13 @@ export default function PostsManager({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {posts.map(post => (
+              {posts.map((post, i) => (
                 <ArticleCard
                   key={post.id}
                   post={post}
                   siteId={siteId}
                   subdomain={subdomain}
+                  rank={i}
                   selected={selected.has(post.id)}
                   uploading={uploadingIds.has(post.id)}
                   saveState={save.stateOf(post.id)}
@@ -492,13 +506,15 @@ export default function PostsManager({
           )}
 
           {/* Pagination */}
-          {meta.pageCount > 1 && (
+          {(meta.page > 1 || meta.next) && (
             <Pagination
               page={meta.page}
               pageCount={meta.pageCount}
               filteredCount={meta.filteredCount}
+              hasNext={!!meta.next}
               disabled={isPending}
-              onGo={goPage}
+              onPrev={goPrev}
+              onNext={goNext}
             />
           )}
         </>
@@ -609,49 +625,30 @@ function SelectionBar({
   )
 }
 
+// Previous / next over keyset pages (W1): every page costs what the first costs,
+// at any depth. There are no numbered jumps — search and the filters are how you
+// reach an article, and nobody pages to 74.
 function Pagination({
-  page, pageCount, filteredCount, disabled, onGo,
+  page, pageCount, filteredCount, hasNext, disabled, onPrev, onNext,
 }: {
-  page: number; pageCount: number; filteredCount: number; disabled: boolean; onGo: (p: number) => void
+  page: number; pageCount: number; filteredCount: number; hasNext: boolean; disabled: boolean
+  onPrev: () => void; onNext: () => void
 }) {
-  // Compact window of page numbers around the current page.
-  const pages: (number | '…')[] = []
-  const push = (p: number | '…') => pages.push(p)
-  const window = 1
-  for (let p = 1; p <= pageCount; p++) {
-    if (p === 1 || p === pageCount || (p >= page - window && p <= page + window)) push(p)
-    else if (pages[pages.length - 1] !== '…') push('…')
-  }
-
-  const btn = "cursor-pointer min-w-9 h-9 px-2 flex items-center justify-center rounded-lg text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+  const btn = "cursor-pointer h-9 px-3 flex items-center justify-center gap-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-muted hover:bg-surface-hover"
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-5 border-t border-border">
-      <p className="text-xs font-medium text-subtle">
-        Pàgina {page} de {pageCount} · {filteredCount} article{filteredCount !== 1 ? 's' : ''}
+    <nav aria-label="Paginació" className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-5 border-t border-border">
+      <p className="text-xs font-medium text-subtle" aria-live="polite">
+        Pàgina {page} de {Math.max(page, pageCount)} · {filteredCount} article{filteredCount !== 1 ? 's' : ''}
       </p>
       <div className="flex items-center gap-1">
-        <button onClick={() => onGo(page - 1)} disabled={disabled || page <= 1} className={`${btn} text-muted hover:bg-surface-hover`} title="Anterior">
-          <ChevronLeft className="w-4 h-4" />
+        <button onClick={onPrev} disabled={disabled || page <= 1} className={btn}>
+          <ChevronLeft className="w-4 h-4" /> Anterior
         </button>
-        {pages.map((p, i) =>
-          p === '…' ? (
-            <span key={`gap-${i}`} className="px-1.5 text-subtle text-sm">…</span>
-          ) : (
-            <button
-              key={p}
-              onClick={() => onGo(p)}
-              disabled={disabled}
-              className={`${btn} ${p === page ? 'bg-accent text-white shadow-sm' : 'text-muted hover:bg-surface-hover'}`}
-            >
-              {p}
-            </button>
-          ),
-        )}
-        <button onClick={() => onGo(page + 1)} disabled={disabled || page >= pageCount} className={`${btn} text-muted hover:bg-surface-hover`} title="Següent">
-          <ChevronRight className="w-4 h-4" />
+        <button onClick={onNext} disabled={disabled || !hasNext} className={btn}>
+          Següent <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-    </div>
+    </nav>
   )
 }

@@ -6,7 +6,11 @@
 // a featured image scraped from the site we cloned, a cover on a member's blog.
 // `next/image` would need every one of those hosts in `remotePatterns` — a list
 // nobody can keep complete, and a config file that grows with the customer base.
-// The escape hatch (`unoptimized`) is just an `<img>` with extra steps.
+// The escape hatch (`unoptimized`) is just an `<img>` with extra steps. And its
+// runtime is not free: ~3KB gzip on every route that renders one — measured on the
+// sidebar on 2026-10-09, where it put ten app routes over their JS target. (A custom
+// loader onto /api/img is wired in next.config for the day someone uses it anyway:
+// ./loader.ts.)
 //
 // We already own the answer. `/api/img` is a hardened transform endpoint — SSRF
 // guard, size cap, EXIF rotation, AVIF/WebP by Accept, and

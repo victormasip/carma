@@ -297,27 +297,17 @@ function chooseGround(
 
 // ─── The chrome rung ─────────────────────────────────────────────────────────
 
-const RUNG_ORDER: ChromePolicy[] = ['keep', 'harmonise', 'rebuild', 'replace']
-
 /**
- * The variant asks for a rung; the verdict sets a FLOOR.
- *
- * Fidel would like to keep the customer's header. When `sourceQuality` says
- * `start-fresh`, keeping it means bolting a pristine blog under markup we have just
- * scored 28/100 — the exact seam the founder called grotesque. So the rung is the
- * higher of what the variant wants and what the evidence will allow.
+ * W0 (2026-10-09): the chrome is no longer a design decision. W6 gave each variant
+ * a rung — Fidel kept their header, Elevat repainted it, Reimaginat redrew it —
+ * and the founder's verdict on the redrawn ones was that they had failed: a model's
+ * idea of their header loses their links and their brand. So every variant keeps
+ * THEIR header; whether it can be shown as captured or as SAFE PANEL is decided by
+ * the capture (design/chrome.ts#drawnPolicy), not by the design. The three variants
+ * differ in the blog body alone.
  */
 function chromeRung(variant: VariantName, ev: DesignEvidence): { policy: ChromePolicy; why: string } {
-  const wanted: ChromePolicy = variant === 'faithful' ? 'keep' : variant === 'elevated' ? 'harmonise' : 'rebuild'
-  const floor: ChromePolicy = ev.sourceQuality.verdict === 'inherit' ? 'keep'
-    : ev.sourceQuality.verdict === 'inherit-brand-only' ? 'harmonise' : 'rebuild'
-  const policy = RUNG_ORDER[Math.max(RUNG_ORDER.indexOf(wanted), RUNG_ORDER.indexOf(floor))]
-  return {
-    policy,
-    why: policy === wanted
-      ? `${variant} asks for ${wanted}`
-      : `${variant} asks for ${wanted}, but sourceQuality ${ev.sourceQuality.score}/100 (${ev.sourceQuality.verdict}) floors it at ${floor}`,
-  }
+  return { policy: 'keep', why: `${variant}: their header, as the capture allows (sourceQuality ${ev.sourceQuality.score}/100 shapes the body only)` }
 }
 
 // ─── One variant ─────────────────────────────────────────────────────────────
@@ -468,7 +458,7 @@ function deriveOne(
 
   // ── Chrome ────────────────────────────────────────────────────────────────
   const rung = chromeRung(variant, ev)
-  step('chrome.policy', rung.policy, rung.why, 'variant intent, floored by sourceQuality')
+  step('chrome.policy', rung.policy, rung.why, 'their header, always (W0)')
 
   // ── Assemble ──────────────────────────────────────────────────────────────
   const partial = {
@@ -536,7 +526,7 @@ function deriveOne(
 function presetFloor(register: Register, seed: number, variant: VariantName): Direction {
   const { genome } = applyCohesion(completeGenome({ register, seed, origin: { source: 'derived', seed, variant } }))
   return {
-    variant, register, genome, chrome: 'harmonise',
+    variant, register, genome, chrome: 'keep',
     trace: [{ axis: '*', value: register, from: 'the derivation threw', rule: 'preset floor' }],
     repairs: [],
   }

@@ -1,0 +1,105 @@
+{
+  "label": "after-lat40",
+  "at": "2026-10-09T09:59:45.927Z",
+  "commit": "bb0f40d",
+  "latencyMs": 40,
+  "dashboard": [
+    {
+      "id": "owner·home",
+      "runs": 5,
+      "ttfb": 290.7000000476837,
+      "fcp": 492,
+      "lcp": 492,
+      "content": 652,
+      "streamEnd": 291.7000000476837,
+      "docKB": 53.5,
+      "apiCalls": 7,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "owner·site·articles",
+      "runs": 5,
+      "ttfb": 273.2000000476837,
+      "fcp": 512,
+      "lcp": 512,
+      "content": 980,
+      "streamEnd": 274.40000009536743,
+      "docKB": 191.8,
+      "apiCalls": 8,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "owner·site·resum",
+      "runs": 5,
+      "ttfb": 232.70000004768372,
+      "fcp": 456,
+      "lcp": 468,
+      "content": 668,
+      "streamEnd": 233.70000004768372,
+      "docKB": 91.3,
+      "apiCalls": 8,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "admin·home",
+      "runs": 5,
+      "ttfb": 295.59999990463257,
+      "fcp": 472,
+      "lcp": 472,
+      "content": 1101,
+      "streamEnd": 296.7000000476837,
+      "docKB": 404.4,
+      "apiCalls": 7,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "admin·users",
+      "runs": 5,
+      "ttfb": 331.2999999523163,
+      "fcp": 504,
+      "lcp": 832,
+      "content": 1010,
+      "streamEnd": 332.2999999523163,
+      "docKB": 232.2,
+      "apiCalls": 9,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "admin·site·articles",
+      "runs": 5,
+      "ttfb": 265.2000000476837,
+      "fcp": 528,
+      "lcp": 528,
+      "content": 980,
+      "streamEnd": 266.7999999523163,
+      "docKB": 201.6,
+      "apiCalls": 8,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    }
+  ],
+  "lighthouse": null,
+  "edge": {
+    "hit": 1856,
+    "miss": 175,
+    "stale": 0,
+    "bypass": 248
+  }
+}

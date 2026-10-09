@@ -11,7 +11,7 @@
 // capture modal (client). It is import-safe everywhere: the only non-local
 // dependency is a TYPE-only import that erases at build time.
 
-import type { ChromeCompileStats } from '@/lib/scrape/chromeCompiler'
+import type { ChromeCompileStats, ChromeFidelity } from '@/lib/scrape/chromeCompiler'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 import type { BlogSignature } from '@/lib/scrape/blogDetect'
 
@@ -137,8 +137,9 @@ export type AnalyzeResult = {
    *  existing site changes appearance until it is re-captured. */
   compiled_chrome_css?: string
   /** Rules in/out, bytes saved, selectors that could not be evaluated (and were
-   *  therefore KEPT). Feeds the capture UI and the chrome-fidelity gate. */
-  chrome_compile_stats?: ChromeCompileStats | null
+   *  therefore KEPT) — plus, since W0, the capture's own fidelity verdict, which
+   *  decides whether the blog wears their header or SAFE PANEL. */
+  chrome_compile_stats?: (Partial<ChromeCompileStats> & ChromeFidelity) | null
 }
 
 /** One source feature → registry module mapping (id MUST exist in the registry). */

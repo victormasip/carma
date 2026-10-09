@@ -194,19 +194,19 @@ ok(sameFace === 0, `${sameFace} sites offered two variants set in the same headi
 ok(sameLanes === 0, `${sameLanes} sites offered two variants with the same article lane structure`)
 ok(pct(pairs, 0) >= 0.33, `one site's two closest variants are only ${pct(pairs, 0).toFixed(3)} apart`)
 ok(pct(pairs, 0.5) >= 0.45, `the median closest pair is ${pct(pairs, 0.5).toFixed(3)} — the variants are not spread`)
-note('guaranteed to differ on', 'register · heading face · article lanes · chrome rung · motion')
+note('guaranteed to differ on', 'register · heading face · article lanes · motion')
 
-// The chrome ladder: a variant asks, the verdict floors.
+// W0 (2026-10-09): the chrome is no longer a design decision. Every variant
+// keeps THEIR header — the capture decides whether it is shown as captured or as
+// SAFE PANEL (design/chrome.ts#drawnPolicy); a design never repaints or redraws it.
 const rungs = new Map()
 for (const { d } of runs) for (const v of [d.faithful, d.elevated, d.reimagined]) {
   rungs.set(`${v.variant}:${v.chrome}`, (rungs.get(`${v.variant}:${v.chrome}`) ?? 0) + 1)
 }
 note('chrome rungs chosen', [...rungs.entries()].sort().map(([k, n]) => `${k} ${n}`).join(' · '))
-const floored = runs.filter(r => r.d.faithful.chrome !== 'keep').length
-note('sites where the verdict floored Fidel above `keep`', `${floored}/${runs.length}`)
 ok(
-  runs.every(r => r.ev.sourceQuality.verdict !== 'start-fresh' || r.d.faithful.chrome !== 'keep'),
-  'a `start-fresh` site was still offered its own header verbatim',
+  runs.every(r => [r.d.faithful, r.d.elevated, r.d.reimagined].every(v => v.chrome === 'keep' && v.genome.chrome.policy === 'keep')),
+  'a variant asked to repaint or redraw their header (W0: every variant keeps it)',
 )
 
 // ─── 3. DISTINCTIVENESS, WITHOUT A MODEL ─────────────────────────────────────

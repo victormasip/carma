@@ -158,7 +158,7 @@ function DateEdit({ value, onCommit }: { value: string; onCommit: (iso: string) 
 }
 
 export default function ArticleCard({
-  post, siteId, subdomain = null, selected, uploading, saveState, busy,
+  post, siteId, subdomain = null, rank = Infinity, selected, uploading, saveState, busy,
   onToggleSelect, onCommitTitle, onCommitSlug, onCommitDate, onPickThumbnail, onRemoveThumbnail,
   onTogglePublish, onDelete,
 }: {
@@ -166,6 +166,8 @@ export default function ArticleCard({
   siteId: string
   /** sites.subdomain — the card's "preview" opens the real article URL. */
   subdomain?: string | null
+  /** The card's place in the grid — decides how eagerly its cover loads. */
+  rank?: number
   selected: boolean
   uploading: boolean
   saveState: SaveState
@@ -205,12 +207,16 @@ export default function ArticleCard({
           // Through /api/img with a srcset: the same cover the blog serves
           // responsively should not arrive here at full size for a card. The
           // wrapper already fixes the 16/9 box, so there is no CLS to add.
+          // The blog's rank policy (W1): the first card is the view's likely LCP
+          // (eager + high priority), the rest of the first row is eager, every
+          // card after that is lazy.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            {...optimizedImg(post.featured_image, CARD_WIDTHS, '(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw')}
+            {...optimizedImg(post.featured_image, CARD_WIDTHS, '(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw')}
             alt=""
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-            loading="lazy"
+            loading={rank < 3 ? 'eager' : 'lazy'}
+            fetchPriority={rank === 0 ? 'high' : undefined}
             decoding="async"
           />
         ) : (

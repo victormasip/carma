@@ -5,6 +5,8 @@
 // different timeouts and naming. Centralised here so behaviour is consistent
 // and the SSRF guard lives in one place.
 
+import { lookup as dnsLookup } from 'node:dns/promises'
+
 // Use a real browser User-Agent. A self-identifying "...Bot..." UA gets blocked
 // outright by a large class of sites (WordPress security plugins, naive WAF rules,
 // CDN bot filters), which made legitimate "clone my own site" captures fail with a
@@ -82,6 +84,45 @@ function parseIpv4(host: string): number | null {
   return n >>> 0
 }
 
+/**
+ * Is this address — as a RESOLVER returns it — a public unicast address? IPv4 in
+ * any encoding, IPv6 loopback / unspecified / link-local / unique-local /
+ * multicast, and IPv4 mapped into IPv6 are all refused.
+ */
+export function isPublicIp(addr: string): boolean {
+  const a = addr.trim().toLowerCase().replace(/^\[|\]$/g, '')
+  if (!a) return false
+  if (a.includes(':')) {
+    if (a === '::1' || a === '::') return false
+    if (/^fe[89ab][0-9a-f]:/.test(a)) return false                // fe80::/10 link-local
+    if (/^f[cd][0-9a-f]{0,2}:/.test(a)) return false              // fc00::/7 unique-local
+    if (/^ff[0-9a-f]{0,2}:/.test(a)) return false                 // ff00::/8 multicast
+    const mapped = embeddedIpv4FromIpv6(a)
+    return mapped === null || !isPrivateIpv4(mapped)
+  }
+  const v4 = parseIpv4(a)
+  return v4 !== null && !isPrivateIpv4(v4)
+}
+
+/**
+ * Resolve a hostname and accept it only if EVERY address it resolves to is public.
+ * Closes what isSafeUrl cannot see: a public NAME pointed at a private address
+ * (`*.nip.io`, an attacker's A record to 169.254.169.254). A resolver that can be
+ * flipped between this lookup and the fetch's own (DNS rebinding with TTL 0) is a
+ * narrower window this does not close; pinning the address at connect time would.
+ */
+export async function resolvesPublic(hostname: string): Promise<boolean> {
+  const h = hostname.replace(/^\[|\]$/g, '')
+  if (!h) return false
+  if (h.includes(':') || parseIpv4(h) !== null) return isPublicIp(h)
+  try {
+    const addrs = await dnsLookup(h, { all: true, verbatim: true })
+    return addrs.length > 0 && addrs.every(x => isPublicIp(x.address))
+  } catch {
+    return false
+  }
+}
+
 // Extract an embedded IPv4 from an IPv4-mapped/compatible IPv6 host
 // (::ffff:127.0.0.1 or its hex form ::ffff:7f00:1, and ::a.b.c.d), if present.
 function embeddedIpv4FromIpv6(host: string): number | null {
@@ -110,9 +151,9 @@ function embeddedIpv4FromIpv6(host: string): number | null {
  * could otherwise pivot the server onto internal services or the cloud metadata
  * endpoint (169.254.169.254) by encoding the IP.
  *
- * Note: this is still a literal-host check and does NOT resolve DNS, so a public
- * hostname that resolves to a private IP (DNS rebinding) is not caught here. Full
- * protection would require DNS pinning at fetch time; that remains out of scope.
+ * Note: this is a literal-host check and does NOT resolve DNS, so a public
+ * hostname that resolves to a private IP is not caught here — `resolvesPublic`
+ * (below) is, and safeFetchBinary({ resolveDns: true }) applies it on every hop.
  */
 export function isSafeUrl(raw: string): boolean {
   try {
@@ -307,6 +348,8 @@ export type BinaryFetchOpts = {
   /** Optional exact/suffix host allowlist, checked on the INITIAL url only. */
   allowHosts?: string[]
   maxRedirects?: number
+  /** Also resolve every hop's hostname and refuse private addresses (resolvesPublic). */
+  resolveDns?: boolean
 }
 
 export type BinaryFetchResult = { body: Uint8Array; contentType: string; finalUrl: string }
@@ -335,9 +378,11 @@ export async function safeFetchBinary(
     timeout = DEFAULT_TIMEOUT,
     allowHosts,
     maxRedirects = 4,
+    resolveDns = false,
   } = opts
 
   if (!isValidHttpUrl(url) || !isSafeUrl(url)) return null
+  const publicHop = async (u: string) => !resolveDns || resolvesPublic(new URL(u).hostname)
   if (allowHosts?.length) {
     try {
       if (!hostAllowed(new URL(url).hostname, allowHosts)) return null
@@ -352,6 +397,7 @@ export async function safeFetchBinary(
     let current = url
     let sendHeaders: Record<string, string> | undefined = headers
     for (let hop = 0; hop <= maxRedirects; hop++) {
+      if (!(await publicHop(current))) return null
       const res = await fetch(current, {
         signal: ctrl.signal,
         redirect: 'manual',

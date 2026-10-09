@@ -1,0 +1,460 @@
+{
+  "label": "after",
+  "at": "2026-10-09T09:27:19.351Z",
+  "commit": "bb0f40d",
+  "dashboard": [
+    {
+      "id": "owner·home",
+      "runs": 5,
+      "ttfb": 106.29999995231628,
+      "fcp": 316,
+      "lcp": 532,
+      "content": 632,
+      "streamEnd": 107.60000014305115,
+      "docKB": 54.9,
+      "apiCalls": 7,
+      "authCalls": 8
+    },
+    {
+      "id": "owner·site·articles",
+      "runs": 5,
+      "ttfb": 128.29999995231628,
+      "fcp": 376,
+      "lcp": 392,
+      "content": 852,
+      "streamEnd": 130.09999990463257,
+      "docKB": 191.8,
+      "apiCalls": 8,
+      "authCalls": 16
+    },
+    {
+      "id": "owner·site·resum",
+      "runs": 5,
+      "ttfb": 96.59999990463257,
+      "fcp": 340,
+      "lcp": 648,
+      "content": 813,
+      "streamEnd": 97.89999985694885,
+      "docKB": 91,
+      "apiCalls": 8,
+      "authCalls": 9
+    },
+    {
+      "id": "admin·home",
+      "runs": 5,
+      "ttfb": 135,
+      "fcp": 352,
+      "lcp": 352,
+      "content": 918,
+      "streamEnd": 136.59999990463257,
+      "docKB": 404.4,
+      "apiCalls": 7,
+      "authCalls": 2
+    },
+    {
+      "id": "admin·users",
+      "runs": 5,
+      "ttfb": 102.79999995231628,
+      "fcp": 316,
+      "lcp": 632,
+      "content": 814,
+      "streamEnd": 104.10000014305115,
+      "docKB": 232.2,
+      "apiCalls": 9,
+      "authCalls": 2
+    },
+    {
+      "id": "admin·site·articles",
+      "runs": 5,
+      "ttfb": 88,
+      "fcp": 312,
+      "lcp": 612,
+      "content": 838,
+      "streamEnd": 89.29999995231628,
+      "docKB": 201.6,
+      "apiCalls": 8,
+      "authCalls": 10
+    }
+  ],
+  "lighthouse": [
+    {
+      "id": "blog·template·listing",
+      "form": "mobile",
+      "runs": 3,
+      "score": 71,
+      "fcp": 3318.9465,
+      "lcp": 4593.9465,
+      "tbt": 0,
+      "cls": 0.1431100173286312,
+      "si": 3318.9465,
+      "bytesKB": 853,
+      "imageKB": 636,
+      "lcpElement": "<img src=\"http://localhost:3200/api/img?src=https%3A%2F%2Fpicsum.photos%2Fid%2F10%2F…\" alt=\"Consells família alimentació lesió postura espatlla descans\" width=\"",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.143,
+          "node": "<div class=\"carma-embed-host\">"
+        }
+      ],
+      "blocking": [
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
+          "ms": 855
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+          "ms": 183
+        }
+      ],
+      "scores": [
+        70,
+        71,
+        75
+      ]
+    },
+    {
+      "id": "blog·template·article",
+      "form": "mobile",
+      "runs": 3,
+      "score": 81,
+      "fcp": 3196.4773999999998,
+      "lcp": 3196.4773999999998,
+      "tbt": 0,
+      "cls": 0.1431100173286312,
+      "si": 3196.4773999999998,
+      "bytesKB": 213,
+      "imageKB": 32,
+      "lcpElement": "<p class=\"carma-article-lede\">",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.143,
+          "node": "<div class=\"carma-embed-host\">"
+        }
+      ],
+      "blocking": [
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
+          "ms": 859
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+          "ms": 185
+        }
+      ],
+      "scores": [
+        81,
+        81,
+        85
+      ]
+    },
+    {
+      "id": "blog·captured·listing",
+      "form": "mobile",
+      "runs": 3,
+      "score": 76,
+      "fcp": 2834.99768550733,
+      "lcp": 4284.99537101466,
+      "tbt": 183,
+      "cls": 0.08765655995400667,
+      "si": 2834.99768550733,
+      "bytesKB": 1077,
+      "imageKB": 654,
+      "lcpElement": "<img src=\"http://localhost:3200/api/img?src=https%3A%2F%2Fpicsum.photos%2Fid%2F10%2F…\" alt=\"Consells família alimentació lesió postura espatlla descans\" width=\"",
+      "images": {
+        "unsized-images": {
+          "score": 0.5,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.088,
+          "node": "<main id=\"main\" class=\"clearfix width-100\">"
+        }
+      ],
+      "blocking": [],
+      "scores": [
+        75,
+        76,
+        78
+      ]
+    },
+    {
+      "id": "blog·captured·article",
+      "form": "mobile",
+      "runs": 3,
+      "score": 95,
+      "fcp": 1619.521,
+      "lcp": 2019.042,
+      "tbt": 139,
+      "cls": 0.08765655995400667,
+      "si": 1619.521,
+      "bytesKB": 235,
+      "imageKB": 51,
+      "lcpElement": "<p class=\"carma-article-lede\">",
+      "images": {
+        "unsized-images": {
+          "score": 0.5,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.088,
+          "node": "<main id=\"main\" class=\"clearfix width-100\">"
+        }
+      ],
+      "blocking": [],
+      "scores": [
+        93,
+        95,
+        97
+      ]
+    },
+    {
+      "id": "blog·unfaithful·listing",
+      "form": "mobile",
+      "runs": 3,
+      "score": 70,
+      "fcp": 4193.8098,
+      "lcp": 5134.03404,
+      "tbt": 0,
+      "cls": 0,
+      "si": 4737.524779816549,
+      "bytesKB": 1103,
+      "imageKB": 641,
+      "lcpElement": "<img src=\"http://localhost:3200/api/img?src=https%3A%2F%2Fpicsum.photos%2Fid%2F10%2F…\" alt=\"Consells família alimentació lesió postura espatlla descans\" width=\"",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [],
+      "blocking": [
+        {
+          "url": "https://fonts.googleapis.com/css?family=Raleway:400,700&display=swap",
+          "ms": 834
+        },
+        {
+          "url": "https://fonts.gstatic.com/",
+          "ms": 800
+        },
+        {
+          "url": "https://fonts.googleapis.com/",
+          "ms": 834
+        }
+      ],
+      "scores": [
+        69,
+        70,
+        70
+      ]
+    },
+    {
+      "id": "owner·site·articles",
+      "form": "desktop",
+      "runs": 3,
+      "score": 84,
+      "fcp": 327.6123,
+      "lcp": 1119.5461249999998,
+      "tbt": 122,
+      "cls": 0.238104694046736,
+      "si": 621.5909558739088,
+      "bytesKB": 779,
+      "imageKB": 339,
+      "lcpElement": "<p class=\"mt-1 text-sm leading-relaxed text-muted\">",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.238,
+          "node": "<div class=\"min-w-0\">"
+        }
+      ],
+      "blocking": [
+        {
+          "url": "http://localhost:3200/_next/static/chunks/129._t~h2a1bg.css",
+          "ms": 124
+        },
+        {
+          "url": "http://localhost:3200/_next/static/chunks/17d6itkursok9.css",
+          "ms": 1559
+        }
+      ],
+      "scores": [
+        76,
+        84,
+        84
+      ]
+    },
+    {
+      "id": "owner·site·resum",
+      "form": "desktop",
+      "runs": 3,
+      "score": 89,
+      "fcp": 324.7192,
+      "lcp": 1001.4384,
+      "tbt": 92,
+      "cls": 0.1906491979563371,
+      "si": 532.6572912137929,
+      "bytesKB": 430,
+      "imageKB": 1,
+      "lcpElement": "<p class=\"mt-1 text-sm leading-relaxed text-muted\">",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0.191,
+          "node": "<div class=\"min-w-0\">"
+        }
+      ],
+      "blocking": [
+        {
+          "url": "http://localhost:3200/_next/static/chunks/129._t~h2a1bg.css",
+          "ms": 122
+        },
+        {
+          "url": "http://localhost:3200/_next/static/chunks/17d6itkursok9.css",
+          "ms": 1559
+        }
+      ],
+      "scores": [
+        80,
+        89,
+        89
+      ]
+    },
+    {
+      "id": "admin·home",
+      "form": "desktop",
+      "runs": 3,
+      "score": 98,
+      "fcp": 336.178,
+      "lcp": 528.356,
+      "tbt": 120.99999999999966,
+      "cls": 0.0001384234748771228,
+      "si": 593.5144330446824,
+      "bytesKB": 380,
+      "imageKB": 43,
+      "lcpElement": "<h1 class=\"text-2xl sm:text-[28px] font-bold tracking-tight text-text\">",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [
+        {
+          "score": 0,
+          "node": "<button class=\"group relative inline-flex items-center justify-center font-semibold curso…\">"
+        }
+      ],
+      "blocking": [
+        {
+          "url": "http://localhost:3200/_next/static/chunks/129._t~h2a1bg.css",
+          "ms": 122
+        },
+        {
+          "url": "http://localhost:3200/_next/static/chunks/17d6itkursok9.css",
+          "ms": 1559
+        }
+      ],
+      "scores": [
+        94,
+        98,
+        99
+      ]
+    }
+  ],
+  "edge": {
+    "hit": 3380,
+    "miss": 305,
+    "stale": 0,
+    "bypass": 662
+  }
+}

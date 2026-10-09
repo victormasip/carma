@@ -1,0 +1,103 @@
+{
+  "label": "final-template",
+  "at": "2026-10-09T10:16:51.471Z",
+  "commit": "bb0f40d",
+  "latencyMs": 0,
+  "dashboard": null,
+  "lighthouse": [
+    {
+      "id": "blog·template·listing",
+      "form": "mobile",
+      "runs": 3,
+      "score": 75,
+      "fcp": 3332.9322,
+      "lcp": 4607.9322,
+      "tbt": 0,
+      "cls": 0,
+      "si": 4448.583415888194,
+      "bytesKB": 854,
+      "imageKB": 636,
+      "lcpElement": "<img src=\"http://localhost:3200/api/img?src=https%3A%2F%2Fpicsum.photos%2Fid%2F10%2F…\" alt=\"Consells família alimentació lesió postura espatlla descans\" width=\"",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [],
+      "blocking": [
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+          "ms": 185
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
+          "ms": 860
+        }
+      ],
+      "scores": [
+        75,
+        75,
+        77
+      ]
+    },
+    {
+      "id": "blog·template·article",
+      "form": "mobile",
+      "runs": 3,
+      "score": 85,
+      "fcp": 3178.4554200433886,
+      "lcp": 3178.4554200433886,
+      "tbt": 0,
+      "cls": 0,
+      "si": 4358.646096174209,
+      "bytesKB": 213,
+      "imageKB": 32,
+      "lcpElement": "<p class=\"carma-article-lede\">",
+      "images": {
+        "unsized-images": {
+          "score": 1,
+          "savingsKB": 0
+        },
+        "lcp-discovery-insight": {
+          "score": null,
+          "savingsKB": 0
+        },
+        "image-delivery-insight": {
+          "score": 0.5,
+          "savingsKB": 0
+        }
+      },
+      "shifts": [],
+      "blocking": [
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap",
+          "ms": 868
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+          "ms": 189
+        }
+      ],
+      "scores": [
+        85,
+        85,
+        87
+      ]
+    }
+  ],
+  "edge": {
+    "hit": 128,
+    "miss": 52,
+    "stale": 0,
+    "bypass": 16
+  }
+}

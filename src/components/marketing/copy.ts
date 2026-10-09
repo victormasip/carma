@@ -118,7 +118,7 @@ export type LandingCopy = {
     variants: Record<'faithful' | 'elevated' | 'reimagined', { name: string; line: string }>
     registers: Record<'quiet' | 'classic' | 'contemporary' | 'bold' | 'warm' | 'severe', string>
     /** W6 — what each preview did with THEIR header (design/chrome.ts#drawnPolicy). */
-    chrome: Record<'keep' | 'harmonise' | 'rebuild', string>
+    chrome: Record<'keep' | 'safe_panel' | 'ours', string>
     /** While the art director works in the background, and after. */
     polishing: string
     polished: string
@@ -445,7 +445,7 @@ const ca: LandingCopy = {
       reimagined: { name: 'Reimaginat', line: 'El teu color com a punt de partida. Tota la resta, repensada.' },
     },
     registers: { quiet: 'Serè', classic: 'Clàssic', contemporary: 'Contemporani', bold: 'Atrevit', warm: 'Càlid', severe: 'Sobri' },
-    chrome: { keep: 'La teva capçalera, tal com és', harmonise: 'La teva capçalera, amb aquests colors i aquestes lletres', rebuild: 'La teva capçalera, redibuixada en aquest disseny' },
+    chrome: { keep: 'La teva capçalera, tal com és', safe_panel: 'La teva capçalera: el teu logo i tots els teus enllaços', ours: 'Una capçalera amb el teu nom' },
     polishing: 'L’Art Director està revisant els tres dissenys…',
     polished: 'Revisats per l’Art Director',
     directorSays: 'L’Art Director',
@@ -815,7 +815,7 @@ const es: LandingCopy = {
       reimagined: { name: 'Reimaginado', line: 'Tu color como punto de partida. Todo lo demás, repensado.' },
     },
     registers: { quiet: 'Sereno', classic: 'Clásico', contemporary: 'Contemporáneo', bold: 'Atrevido', warm: 'Cálido', severe: 'Sobrio' },
-    chrome: { keep: 'Tu cabecera, tal cual', harmonise: 'Tu cabecera, con estos colores y estas letras', rebuild: 'Tu cabecera, redibujada en este diseño' },
+    chrome: { keep: 'Tu cabecera, tal cual', safe_panel: 'Tu cabecera: tu logo y todos tus enlaces', ours: 'Una cabecera con tu nombre' },
     polishing: 'El Director de Arte está revisando los tres diseños…',
     polished: 'Revisados por el Director de Arte',
     directorSays: 'El Director de Arte',
@@ -1185,7 +1185,7 @@ const en: LandingCopy = {
       reimagined: { name: 'Reimagined', line: 'Your colour as the starting point. Everything else, rethought.' },
     },
     registers: { quiet: 'Quiet', classic: 'Classic', contemporary: 'Contemporary', bold: 'Bold', warm: 'Warm', severe: 'Severe' },
-    chrome: { keep: 'Your header, as it is', harmonise: 'Your header, in these colours and faces', rebuild: 'Your header, redrawn in this design' },
+    chrome: { keep: 'Your header, as it is', safe_panel: 'Your header: your logo and every link', ours: 'A header with your name' },
     polishing: 'The Art Director is reviewing all three designs…',
     polished: 'Reviewed by the Art Director',
     directorSays: 'The Art Director',

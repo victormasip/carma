@@ -126,7 +126,10 @@ function SiteCard({
         selected ? 'border-accent ring-2 ring-accent/25' : 'border-border',
       )}
     >
-      <Link href={`/dashboard/sites/${site.id}`} aria-label={site.name} className="absolute inset-0 z-0 rounded-2xl" />
+      {/* prefetch={false} on every per-site link of a grid (W1): each prefetch is a
+          request through the auth middleware — 37 Auth round trips per superadmin
+          home were measured. The click still lands on the page's skeleton at once. */}
+      <Link href={`/dashboard/sites/${site.id}`} prefetch={false} aria-label={site.name} className="absolute inset-0 z-0 rounded-2xl" />
 
       <div className="flex items-center gap-3">
         {canManage && (
@@ -187,6 +190,7 @@ function SiteCard({
       <div className="relative z-[1] mt-4 flex items-center gap-1 border-t border-border pt-3">
         <Link
           href={`/dashboard/sites/${site.id}/posts/new`}
+          prefetch={false}
           className="relative z-10 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-muted transition-colors hover:bg-accent-soft hover:text-accent"
         >
           <PenLine className="h-3.5 w-3.5" /> Escriure

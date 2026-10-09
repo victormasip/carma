@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildListingPage, buildListingFragment, buildErrorPage } from '@/lib/render/theme'
+import { buildListingPage, buildListingFragment, buildErrorPage, pageCsp } from '@/lib/render/theme'
 import { adminEditBarScript } from '@/lib/render/adminBar'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
 import { applyParamsToTokens } from '@/lib/render/embedParams'
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!cached) return notFound()
     return new Response(cached.html, {
       status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': BLOG_CACHE_CONTROL },
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': BLOG_CACHE_CONTROL, 'Content-Security-Policy': cached.csp },
     })
   }
 
@@ -127,6 +127,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       'Content-Type': 'text/html; charset=utf-8',
       // A preview carries unsaved/override state — never shared-cached.
       'Cache-Control': isPreview ? PRIVATE_CACHE_CONTROL : BLOG_CACHE_CONTROL,
+      // Also on the dashboard's own preview: it is served on the APP origin, where
+      // a surviving customer script would run with the owner's session.
+      'Content-Security-Policy': pageCsp(withBar),
     },
   })
 }

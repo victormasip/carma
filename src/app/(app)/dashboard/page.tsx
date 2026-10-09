@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { Globe, FileText, Users, CheckCircle2, Eye, Sparkles } from 'lucide-react'
@@ -6,6 +7,7 @@ import { redirect } from 'next/navigation'
 import NewSiteModal from './NewSiteModal'
 import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
+import SectionSkeleton from '@/components/shell/SectionSkeleton'
 import { fetchSitesViewCounts } from '@/lib/analytics/read'
 import { SITE_LIMITS, type KarmaPlan } from '@/lib/karma/config'
 import { formatNumber } from '@/lib/format'
@@ -18,7 +20,6 @@ type SiteRow = { id: string; name: string; created_at: string; logo_url?: string
 export default async function DashboardHome() {
   const { supabase, user, isSuperAdmin } = await getSession()
   if (!user) redirect('/')
-  const admin = createAdminClient()
 
   // ── Client dashboard ─────────────────────────────────────────────────────────
   if (!isSuperAdmin) {
@@ -55,15 +56,12 @@ export default async function DashboardHome() {
       )
     }
 
-    const siteIds = sites.map(s => s.id)
-    const [postCounts, viewMap] = await Promise.all([
-      fetchPostCounts(admin, siteIds),
-      fetchSitesViewCounts(admin, siteIds),
-    ])
-    const sitesWithCounts = withCounts(sites, postCounts, viewMap)
-    const totals = aggregate(sitesWithCounts)
-
-    const isSingle = sitesWithCounts.length === 1
+    const isSingle = sites.length === 1
+    // W1: the numbers and the grid (post counts + 30-day views — counters and
+    // rollups after migration 041) render WITH the header, in the route's one
+    // reveal. A client has a handful of blogs and the header already waited for
+    // them; a boundary of its own here was a second streamed reveal, which React
+    // 19.2 holds 300ms after the first paint (measured: +200ms to content).
     return (
       <div className="space-y-8">
         <PageHeader
@@ -71,91 +69,122 @@ export default async function DashboardHome() {
           description="Tot el teu contingut, en un sol lloc."
           actions={<AddSiteButton canCreate={canCreate} />}
         />
-        <ClientStatBento
-          views={totals.views}
-          sites={sitesWithCounts.length}
-          total={totals.total}
-          published={totals.published}
-        />
-        <SiteGrid sites={sitesWithCounts} canManage={false} />
+        <ClientSites sites={sites} />
       </div>
     )
   }
 
   // ── Superadmin dashboard (bento — no more tabs) ───────────────────────────────
-  // Sites are fetched first (with a 42703-safe retry for the logo_url column),
-  // then the rest in parallel.
-  const sitesSel = (cols: string) => admin.from('sites').select(cols).order('created_at', { ascending: false })
-  let sitesRes = await sitesSel('id, name, created_at, logo_url, subdomain')
-  if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
-  const { data: sites, error } = sitesRes
-  // clientProfiles: only for NewSiteModal's assign-to-client picker — the
-  // clients LIST view moved to /admin/users (founder directive 2026-07-06).
-  const [{ data: clientProfiles }, postCounts] = await Promise.all([
-    admin.from('profiles').select('id, email').eq('role', 'client').order('email'),
-    fetchPostCounts(admin, null),
-  ])
-
-  const siteList = (sites ?? []) as unknown as SiteRow[]
-  const viewMap = await fetchSitesViewCounts(admin, siteList.map(s => s.id))
-  const sitesWithCounts = withCounts(siteList, postCounts, viewMap)
-  const totals = aggregate(sitesWithCounts)
-  const clients = (clientProfiles ?? []) as { id: string; email: string }[]
-
+  // W1: the header (and the "new site" button, whose client picker now loads when
+  // it opens) needs no data, so it streams first; every site, its counts and its
+  // views follow behind their own boundary — the one place on the home where a
+  // second reveal pays: the grid grows with the customer base, and the header
+  // (the view's LCP) no longer waits for it (LCP 700 → 352ms measured). The client
+  // list is no longer fetched here at all.
   return (
     <div className="space-y-8">
       <PageHeader
         title="Panell d'Administració"
         description="Gestiona la infraestructura i els llocs web dels clients."
-        actions={<NewSiteModal clients={clients} />}
+        actions={<NewSiteModal />}
       />
-
-      {error ? (
-        <div className="p-4 bg-danger-soft border border-danger/20 rounded-xl text-danger text-sm font-medium">
-          Error carregant les dades: {error.message}
-        </div>
-      ) : (
-        <>
-          <StatHero items={[
-            { icon: <Eye className="w-4 h-4" />, label: 'Vistes · 30 dies', value: totals.views, tone: 'accent' },
-            { icon: <Globe className="w-4 h-4" />, label: 'Llocs', value: sitesWithCounts.length },
-            { icon: <FileText className="w-4 h-4" />, label: 'Articles', value: totals.total },
-            { icon: <CheckCircle2 className="w-4 h-4" />, label: 'Publicats', value: totals.published, tone: 'success' },
-          ]} />
-
-          <section className="space-y-4">
-            <SectionTitle icon={<Globe className="w-4 h-4" />} title="Llocs web" count={sitesWithCounts.length} />
-            {sitesWithCounts.length === 0 ? (
-              <EmptyState
-                icon={<Globe className="w-7 h-7" />}
-                title="Cap lloc web creat"
-                description="Afegeix el teu primer lloc per començar a generar contingut."
-              />
-            ) : (
-              <SiteGrid sites={sitesWithCounts} canManage={true} />
-            )}
-          </section>
-
-          {/* La llista de clients viu a /admin/users (cerca, plans, punts,
-              accions) — aquí només un accés directe, no una segona còpia. */}
-          <Link
-            href="/admin/users"
-            className="group flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 no-underline transition-colors hover:border-accent/40 hover:bg-surface-hover"
-          >
-            <span className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                <Users className="h-4.5 w-4.5" />
-              </span>
-              <span>
-                <span className="block text-sm font-bold text-text">Gestió d&apos;usuaris</span>
-                <span className="block text-xs text-muted">{clients.length} client{clients.length !== 1 ? 's' : ''} · plans, punts i accions a /admin/users</span>
-              </span>
-            </span>
-            <span className="text-xs font-bold text-subtle transition-colors group-hover:text-accent">Obrir →</span>
-          </Link>
-        </>
-      )}
+      <Suspense fallback={<SectionSkeleton header={false} variant="bento" />}>
+        <AdminSites />
+      </Suspense>
     </div>
+  )
+}
+
+/** The client's blogs with their numbers (counters + rollups, 041). */
+async function ClientSites({ sites }: { sites: SiteRow[] }) {
+  const admin = createAdminClient()
+  const siteIds = sites.map(s => s.id)
+  const [postCounts, viewMap] = await Promise.all([
+    fetchPostCounts(admin, siteIds),
+    fetchSitesViewCounts(admin, siteIds),
+  ])
+  const sitesWithCounts = withCounts(sites, postCounts, viewMap)
+  const totals = aggregate(sitesWithCounts)
+  return (
+    <>
+      <ClientStatBento
+        views={totals.views}
+        sites={sitesWithCounts.length}
+        total={totals.total}
+        published={totals.published}
+      />
+      <SiteGrid sites={sitesWithCounts} canManage={false} />
+    </>
+  )
+}
+
+/** Every site with its numbers, for the superadmin — streamed behind the header. */
+async function AdminSites() {
+  const admin = createAdminClient()
+  // Sites first (with a 42703-safe retry for the logo_url column), then the rest
+  // in parallel. The client COUNT replaces the whole client list this page used to
+  // load for the "new site" picker (which now asks for it when opened).
+  const sitesSel = (cols: string) => admin.from('sites').select(cols).order('created_at', { ascending: false })
+  let sitesRes = await sitesSel('id, name, created_at, logo_url, subdomain')
+  if (sitesRes.error?.code === '42703') sitesRes = await sitesSel('id, name, created_at')
+  const { data: sites, error } = sitesRes
+  const siteList = (sites ?? []) as unknown as SiteRow[]
+  const [postCounts, viewMap, clientsRes] = await Promise.all([
+    fetchPostCounts(admin, null),
+    fetchSitesViewCounts(admin, siteList.map(s => s.id)),
+    admin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
+  ])
+  const sitesWithCounts = withCounts(siteList, postCounts, viewMap)
+  const totals = aggregate(sitesWithCounts)
+  const clientCount = clientsRes.count ?? 0
+
+  if (error) {
+    return (
+      <div className="p-4 bg-danger-soft border border-danger/20 rounded-xl text-danger text-sm font-medium">
+        Error carregant les dades: {error.message}
+      </div>
+    )
+  }
+  return (
+    <>
+      <StatHero items={[
+        { icon: <Eye className="w-4 h-4" />, label: 'Vistes · 30 dies', value: totals.views, tone: 'accent' },
+        { icon: <Globe className="w-4 h-4" />, label: 'Llocs', value: sitesWithCounts.length },
+        { icon: <FileText className="w-4 h-4" />, label: 'Articles', value: totals.total },
+        { icon: <CheckCircle2 className="w-4 h-4" />, label: 'Publicats', value: totals.published, tone: 'success' },
+      ]} />
+
+      <section className="space-y-4">
+        <SectionTitle icon={<Globe className="w-4 h-4" />} title="Llocs web" count={sitesWithCounts.length} />
+        {sitesWithCounts.length === 0 ? (
+          <EmptyState
+            icon={<Globe className="w-7 h-7" />}
+            title="Cap lloc web creat"
+            description="Afegeix el teu primer lloc per començar a generar contingut."
+          />
+        ) : (
+          <SiteGrid sites={sitesWithCounts} canManage={true} />
+        )}
+      </section>
+
+      {/* La llista de clients viu a /admin/users (cerca, plans, punts,
+          accions) — aquí només un accés directe, no una segona còpia. */}
+      <Link
+        href="/admin/users"
+        className="group flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-5 py-4 no-underline transition-colors hover:border-accent/40 hover:bg-surface-hover"
+      >
+        <span className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+            <Users className="h-4.5 w-4.5" />
+          </span>
+          <span>
+            <span className="block text-sm font-bold text-text">Gestió d&apos;usuaris</span>
+            <span className="block text-xs text-muted">{clientCount} client{clientCount !== 1 ? 's' : ''} · plans, punts i accions a /admin/users</span>
+          </span>
+        </span>
+        <span className="text-xs font-bold text-subtle transition-colors group-hover:text-accent">Obrir →</span>
+      </Link>
+    </>
   )
 }
 

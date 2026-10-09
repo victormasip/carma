@@ -23,6 +23,22 @@ async function assertSuperAdmin() {
   return createAdminClient()
 }
 
+/**
+ * The clients a new site can be assigned to — for the "new site" modal, asked for
+ * when it OPENS (W1): the superadmin home used to fetch every client profile on
+ * every visit for a picker most visits never open.
+ */
+export async function listAssignableClients(): Promise<ActionResult & { clients?: { id: string; email: string }[] }> {
+  try {
+    const admin = await assertSuperAdmin()
+    const { data, error } = await admin.from('profiles').select('id, email').eq('role', 'client').order('email').limit(1000)
+    if (error) return { error: error.message }
+    return { clients: (data ?? []) as { id: string; email: string }[] }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconegut' }
+  }
+}
+
 export async function createSite(name: string, userIds: string[]): Promise<ActionResult & { id?: string }> {
   try {
     const admin = await assertSuperAdmin()

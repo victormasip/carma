@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { buildListingPage } from '@/lib/render/theme'
+import { buildListingPage, pageCsp } from '@/lib/render/theme'
 import { getDummyPosts, LAB_SITE_ID, LAB_SITE_NAME } from '@/lib/grabber-lab/dummy'
 import { normalizeLocale } from '@/lib/i18n/config'
 import type { DesignTokens } from '@/lib/scrape/tokens'
@@ -20,10 +20,12 @@ function stripTracking(html: string): string {
   )
 }
 
+// A stranger's header, rendered on the app origin for a SUPERADMIN — the session
+// most worth stealing. Only our own scripts carry a hash (W0).
 function htmlResponse(html: string): Response {
   return new Response(html, {
     status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': pageCsp(html) },
   })
 }
 

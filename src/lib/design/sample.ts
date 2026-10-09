@@ -214,10 +214,10 @@ export function completeGenome(input: PartialGenome, recent: RecentUse = {}): Ge
       fit: input.imagery?.fit ?? 'cover',
     },
     chrome: {
-      // `harmonise` is the only defensible fallback rung: `keep` would bolt our blog
-      // under markup nobody has judged, and `rebuild` would discard a header we have
-      // no reason to distrust. The director overrides this from the verdict.
-      policy: input.chrome?.policy ?? 'harmonise',
+      // W0: their header is never repainted or redrawn, so `keep` is the only
+      // policy a site with a website gets; the capture decides whether it is shown
+      // as captured or as SAFE PANEL (design/chrome.ts#drawnPolicy).
+      policy: input.chrome?.policy ?? 'keep',
       header: input.chrome?.header ?? pickAvoiding(rng, ['masthead', 'split', 'stack', 'rail', 'minimal'] as const, R('chrome.header')),
       footer: input.chrome?.footer ?? pickAvoiding(rng, ['columns', 'bar', 'statement'] as const, R('chrome.footer')),
       sticky: input.chrome?.sticky ?? rng() < 0.7,

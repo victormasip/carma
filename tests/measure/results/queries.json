@@ -1,0 +1,373 @@
+{
+  "at": "2026-10-09T11:00:14.069Z",
+  "checks": [
+    {
+      "ok": true,
+      "name": "posts.published_at is a generated column",
+      "detail": "\nCASE\n    WHEN is_published THEN created_at\n    ELSE NULL::timestamp with time zone\nEND"
+    },
+    {
+      "ok": true,
+      "name": "index posts_feed_idx",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "index posts_site_created_id_idx",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "index posts_search_idx",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "index posts_title_trgm",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "index posts_slug_trgm",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "table site_counters",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "table page_views_daily",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "table page_views_daily_posts",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "table page_view_daily_visitors",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function site_stats()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function site_view_counts()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function posts_counts_by_site()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function search_posts()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function reconcile_site_counters()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function prune_analytics()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function carma_fold()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "function carma_ts_config()",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "published_at = created_at while published, NULL while a draft",
+      "detail": "0 mismatches"
+    },
+    {
+      "ok": true,
+      "name": "site_counters matches count(*) for every site",
+      "detail": "0 sites drift"
+    },
+    {
+      "ok": true,
+      "name": "the 10k blog counts 10,000",
+      "detail": "{\"posts_total\":10000,\"posts_published\":9200}"
+    },
+    {
+      "ok": true,
+      "name": "a 3-row INSERT moves total +3, published +1, samples +1 (one statement trigger)",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "publishing two drafts moves published +2, total unchanged",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "an edit that publishes nothing changes nothing",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "a bulk DELETE returns every counter to where it was",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "posts kept their updated_at through the backfills (checked by sample)",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "deleting a site (cascading to its posts) succeeds",
+      "detail": "ok"
+    },
+    {
+      "ok": true,
+      "name": "and leaves no counter row behind",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "likes_count equals the sum of post_likes for every post",
+      "detail": "0 drift"
+    },
+    {
+      "ok": true,
+      "name": "a new reader clapping 3 adds 3",
+      "detail": "35 → 38"
+    },
+    {
+      "ok": true,
+      "name": "raising their tally to 7 adds 4 more",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "deleting their row takes it all back",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "site_stats views = raw count over the same 30 UTC days",
+      "detail": "20313 vs 20313"
+    },
+    {
+      "ok": true,
+      "name": "site_stats visitors = sum of daily distinct hashes",
+      "detail": "6709 vs 6709"
+    },
+    {
+      "ok": true,
+      "name": "a 30-point series and the 6 most read",
+      "detail": "30 points, 6 top"
+    },
+    {
+      "ok": true,
+      "name": "more than the 1,000 rows the API caps a raw select at — the old path could not have shown this",
+      "detail": "20313"
+    },
+    {
+      "ok": true,
+      "name": "three new views add three views today",
+      "detail": "26 → 29"
+    },
+    {
+      "ok": true,
+      "name": "two new visitors add two (the repeat is the same visitor)",
+      "detail": "1 → 3"
+    },
+    {
+      "ok": true,
+      "name": "a view naming ANOTHER site's post never enters this site's ranking",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "no accent finds both the Catalan and the Spanish article",
+      "detail": "verify-search-ca, verify-search-es"
+    },
+    {
+      "ok": true,
+      "name": "a draft is not found by the public search",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "…and is found when drafts are asked for",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "body text is searchable, accents folded (\"protesi titanica\" finds \"pròtesi titànica\")",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "a Spanish stem matches its plural",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "an owner sees exactly their own site's counters (RLS)",
+      "detail": "1 rows"
+    },
+    {
+      "ok": true,
+      "name": "site_stats() is refused to a signed-in user (server only)",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "anon sees no rollup rows",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "search_posts() is refused to anon",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "041 runs a second time without an error",
+      "detail": "ok"
+    },
+    {
+      "ok": true,
+      "name": "…and changes no number",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "the deep keyset page uses posts_site_created_id_idx",
+      "detail": ""
+    },
+    {
+      "ok": true,
+      "name": "site_stats() beats the raw 30-day scan",
+      "detail": "109.97 → 6.06ms"
+    }
+  ],
+  "plans": [
+    {
+      "label": "dashboard list, page 751 (row 9,000)",
+      "before": {
+        "label": "dashboard list, page 751 (row 9,000)",
+        "ms": 28.19,
+        "buffers": 3640,
+        "nodes": [
+          "Limit",
+          "Sort",
+          "Seq Scan"
+        ]
+      },
+      "after": {
+        "label": "dashboard list, page 751 (row 9,000)",
+        "ms": 7.46,
+        "buffers": 2051,
+        "nodes": [
+          "Limit",
+          "Index Scan posts_site_created_id_idx"
+        ]
+      }
+    },
+    {
+      "label": "dashboard list totals",
+      "before": {
+        "label": "dashboard list totals",
+        "ms": 23.47,
+        "buffers": 10920,
+        "nodes": [
+          "Result",
+          "Aggregate",
+          "Seq Scan"
+        ]
+      },
+      "after": {
+        "label": "dashboard list totals",
+        "ms": 0.18,
+        "buffers": 1,
+        "nodes": [
+          "Seq Scan"
+        ]
+      }
+    },
+    {
+      "label": "dashboard search \"genoll\"",
+      "before": {
+        "label": "dashboard search \"genoll\"",
+        "ms": 0.95,
+        "buffers": 10,
+        "nodes": [
+          "Limit",
+          "Index Scan posts_site_created_idx"
+        ]
+      },
+      "after": {
+        "label": "dashboard search \"genoll\"",
+        "ms": 0.78,
+        "buffers": 10,
+        "nodes": [
+          "Limit",
+          "Index Scan posts_site_created_id_idx"
+        ]
+      }
+    },
+    {
+      "label": "site analytics, 30 days",
+      "before": {
+        "label": "site analytics, 30 days",
+        "ms": 109.97,
+        "buffers": 2090,
+        "nodes": [
+          "Sort",
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan page_views_site_created_idx"
+        ]
+      },
+      "after": {
+        "label": "site analytics, 30 days",
+        "ms": 6.06,
+        "buffers": 354,
+        "nodes": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "label": "public feed, newest 12",
+      "before": {
+        "label": "public feed, newest 12",
+        "ms": 0.5,
+        "buffers": 22,
+        "nodes": [
+          "Limit",
+          "Index Scan posts_site_created_idx"
+        ]
+      },
+      "after": {
+        "label": "public feed, newest 12",
+        "ms": 0.39,
+        "buffers": 7,
+        "nodes": [
+          "Limit",
+          "Index Only Scan posts_feed_idx"
+        ]
+      }
+    }
+  ]
+}

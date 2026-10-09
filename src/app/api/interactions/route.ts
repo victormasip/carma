@@ -58,6 +58,22 @@ function sumCounts(rows: unknown[] | null | undefined): number {
   return (rows ?? []).reduce<number>((n, r) => n + (Number((r as { count?: number }).count) || 0), 0)
 }
 
+const UNDEFINED_COLUMN = '42703'
+
+/**
+ * A post's applause total. W1: one column (`posts.likes_count`, kept by a trigger
+ * in the same transaction as the reader's row — migration 041) instead of summing
+ * every like row of the post on every article view. Before 041 the column does
+ * not exist (42703) and the old sum answers.
+ */
+async function likeTotal(admin: ReturnType<typeof createAdminClient>, postId: string): Promise<number> {
+  const { data, error } = await admin.from('posts').select('likes_count').eq('id', postId).maybeSingle()
+  if (!error) return Number((data as { likes_count?: number } | null)?.likes_count ?? 0)
+  if (error.code !== UNDEFINED_COLUMN) return 0
+  const { data: rows } = await admin.from('post_likes').select('count').eq('post_id', postId)
+  return sumCounts(rows)
+}
+
 // ─── GET: everything the article's interaction modules need, in one round trip ─
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
@@ -68,8 +84,8 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   const key = readerKey(request, siteId)
 
-  const [likesRes, mineRes, commentsRes] = await Promise.all([
-    admin.from('post_likes').select('count').eq('post_id', postId),
+  const [likes, mineRes, commentsRes] = await Promise.all([
+    likeTotal(admin, postId),
     admin.from('post_likes').select('count').eq('post_id', postId).eq('reader_key', key).maybeSingle(),
     // NOTE the column list: no `email`. Ever.
     admin.from('post_comments')
@@ -80,13 +96,13 @@ export async function GET(request: NextRequest) {
   ])
 
   // Migration 036 not applied → an empty, working section.
-  if (likesRes.error?.code === MISSING_TABLE || commentsRes.error?.code === MISSING_TABLE) {
+  if (mineRes.error?.code === MISSING_TABLE || commentsRes.error?.code === MISSING_TABLE) {
     return json({ ok: true, likes: 0, mine: 0, comments: [] })
   }
 
   return json({
     ok: true,
-    likes: sumCounts(likesRes.data),
+    likes,
     mine: Number((mineRes.data as { count?: number } | null)?.count ?? 0),
     comments: (commentsRes.data ?? []) as unknown as { id: string; author: string; body: string; created_at: string }[],
   })
@@ -136,8 +152,7 @@ export async function POST(request: NextRequest) {
     if (error?.code === MISSING_TABLE) return json({ ok: true, likes: 0, mine: 0 })
     if (error) return json({ ok: false, error: 'No s’ha pogut registrar' }, 503)
 
-    const { data: all } = await admin.from('post_likes').select('count').eq('post_id', postId)
-    return json({ ok: true, likes: sumCounts(all), mine })
+    return json({ ok: true, likes: await likeTotal(admin, postId), mine })
   }
 
   if (body.action === 'comment') {

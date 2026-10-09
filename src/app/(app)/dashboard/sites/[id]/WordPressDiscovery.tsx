@@ -25,18 +25,7 @@ import {
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
-
-
-const DISMISS_KEY = (siteId: string) => `carma_wp_discovery_${siteId}`
-
-/** Per-viewer, per-site. A dismissal is a UI preference, not shared state — and it
- *  must survive a reload, which is all localStorage is being asked to do here. */
-export function wpDiscoveryDismissed(siteId: string): boolean {
-  try { return localStorage.getItem(DISMISS_KEY(siteId)) === '1' } catch { return false }
-}
-function rememberDismissal(siteId: string) {
-  try { localStorage.setItem(DISMISS_KEY(siteId), '1') } catch { /* private window — it just reappears */ }
-}
+import { rememberDismissal, wpDiscoveryCookie } from './dismissals'
 
 export default function WordPressDiscovery({
   siteId, originUrl, onImport, onOpenGuide, onDismiss,
@@ -65,7 +54,9 @@ export default function WordPressDiscovery({
     return next
   })
 
-  const dismiss = () => { rememberDismissal(siteId); onDismiss() }
+  // A cookie, not localStorage: the server reads it and renders the page without
+  // the panel, instead of the client adding it after hydration (dismissals.ts).
+  const dismiss = () => { rememberDismissal(wpDiscoveryCookie(siteId)); onDismiss() }
   const host = (() => {
     try { return originUrl ? new URL(originUrl).hostname.replace(/^www\./, '') : null } catch { return null }
   })()

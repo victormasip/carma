@@ -1,0 +1,105 @@
+{
+  "label": "baseline-lat40",
+  "at": "2026-10-09T09:57:05.117Z",
+  "commit": "bb0f40d",
+  "latencyMs": 40,
+  "dashboard": [
+    {
+      "id": "owner·home",
+      "runs": 5,
+      "ttfb": 302.7999999523163,
+      "fcp": 524,
+      "lcp": 524,
+      "content": 665,
+      "streamEnd": 304.09999990463257,
+      "docKB": 53.3,
+      "apiCalls": 7,
+      "authCalls": 18,
+      "authBy": {
+        "server GET /user": 18
+      }
+    },
+    {
+      "id": "owner·site·articles",
+      "runs": 5,
+      "ttfb": 454.5,
+      "fcp": 688,
+      "lcp": 1044,
+      "content": 1201,
+      "streamEnd": 455.7999999523163,
+      "docKB": 341.3,
+      "apiCalls": 19,
+      "authCalls": 27,
+      "authBy": {
+        "server GET /user": 27
+      }
+    },
+    {
+      "id": "owner·site·resum",
+      "runs": 5,
+      "ttfb": 420.39999985694885,
+      "fcp": 624,
+      "lcp": 960,
+      "content": 790,
+      "streamEnd": 421.7999999523163,
+      "docKB": 242.3,
+      "apiCalls": 19,
+      "authCalls": 10,
+      "authBy": {
+        "server GET /user": 10
+      }
+    },
+    {
+      "id": "admin·home",
+      "runs": 5,
+      "ttfb": 358.5,
+      "fcp": 532,
+      "lcp": 932,
+      "content": 1111,
+      "streamEnd": 359.5,
+      "docKB": 405.6,
+      "apiCalls": 7,
+      "authCalls": 20,
+      "authBy": {
+        "server GET /user": 22
+      }
+    },
+    {
+      "id": "admin·users",
+      "runs": 5,
+      "ttfb": 328.7000000476837,
+      "fcp": 492,
+      "lcp": 828,
+      "content": 986,
+      "streamEnd": 329.90000009536743,
+      "docKB": 232.2,
+      "apiCalls": 9,
+      "authCalls": 2,
+      "authBy": {
+        "server GET /user": 2
+      }
+    },
+    {
+      "id": "admin·site·articles",
+      "runs": 5,
+      "ttfb": 391.5,
+      "fcp": 576,
+      "lcp": 992,
+      "content": 1144,
+      "streamEnd": 393,
+      "docKB": 353.8,
+      "apiCalls": 19,
+      "authCalls": 20,
+      "authBy": {
+        "server GET /user": 17
+      }
+    }
+  ],
+  "lighthouse": null,
+  "edge": {
+    "hit": 1798,
+    "miss": 178,
+    "stale": 0,
+    "bypass": 454
+  }
+}

@@ -52,6 +52,21 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // ── Images (W1 — one policy for the whole product) ──────────────────────────
+  // Any next/image goes through src/lib/images/loader.ts → /api/img (our
+  // transform: SSRF-hardened, AVIF/WebP by Accept, a year at the edge) — a custom
+  // loader, not Next's optimizer, because the images are other people's and their
+  // hosts cannot be listed. None is used today (its runtime would ride on every app
+  // route — see loader.ts); the product renders through lib/images/url.ts, the
+  // zero-runtime path to the same endpoint. The widths are the blog renderer's
+  // (imageMarkup.ts SRC_WIDTHS), so one ladder of variants serves both.
+  images: {
+    loader: "custom",
+    loaderFile: "./src/lib/images/loader.ts",
+    deviceSizes: [400, 640, 960, 1280, 1600],
+    imageSizes: [32, 48, 64, 96, 128, 256],
+  },
+
   // Production hardening.
   poweredByHeader: false,
   reactStrictMode: true,

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildArticlePage, buildArticleFragment, buildListingPage, buildErrorPage } from '@/lib/render/theme'
+import { buildArticlePage, buildArticleFragment, buildListingPage, buildErrorPage, pageCsp } from '@/lib/render/theme'
 import { adminEditBarScript } from '@/lib/render/adminBar'
 import { applyParamsToTokens } from '@/lib/render/embedParams'
 import { FRAGMENT_CORS } from '@/lib/render/cors'
@@ -39,10 +39,12 @@ export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: FRAGMENT_CORS })
 }
 
-function htmlResponse(html: string, cacheControl: string, status = 200) {
+// Every HTML answer carries the page's CSP (W0): our own scripts by hash, nothing
+// else — including the dashboard previews, which are served on the APP origin.
+function htmlResponse(html: string, cacheControl: string, status = 200, csp = pageCsp(html)) {
   return new Response(html, {
     status,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': cacheControl },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': cacheControl, 'Content-Security-Policy': csp },
   })
 }
 

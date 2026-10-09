@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { rateLimit, clientIp } from '@/lib/ratelimit'
 import { validateGenome } from '@/lib/design/validate'
 import { compileGenome } from '@/lib/design/compile'
-import { buildListingPage, buildErrorPage } from '@/lib/render/theme'
+import { buildListingPage, buildErrorPage, pageCsp } from '@/lib/render/theme'
 import { buildSamplePosts } from '@/lib/render/samplePosts'
-import { guardPreview, scriptHashes } from '@/lib/render/previewGuard'
+import { guardPreview } from '@/lib/render/previewGuard'
 import { isLocale, type Locale } from '@/lib/i18n/config'
 import { isSafeUrl, isValidHttpUrl } from '@/lib/scrape/http'
 import { chromeFor, type ChromeCapture } from '@/lib/design/chrome'
@@ -27,13 +27,13 @@ export const maxDuration = 30
  * business (decision 2): their articles, on their blog, in their colours. With no
  * pitches, the neutral sample posts `no-invented-proof` already mandates.
  *
- * W6 — THEIR HEADER, IN THIS VARIANT'S POLICY. With `s` (their site), the
- * preview renders the captured header the way the genome's chrome policy says:
- * Fidel KEEPS it, Elevat HARMONISES it (their markup, this palette and these
- * faces), Reimaginat REBUILDS it (their logo, nav labels and links in an archetype
- * this design drew). See design/chrome.ts. The capture comes from the glimpse,
- * remembered per domain (memo → migration-039 table); failing both it is taken
- * again, once, under its own rate limit.
+ * THEIR HEADER (W0). With `s` (their site), the preview wears the captured header
+ * as it is when the capture is faithful, and SAFE PANEL — their logo and every link
+ * they publish, in a frame we own — when it is not; identical in all three variants,
+ * which now differ in the body alone (W6's harmonise/rebuild rungs are deleted).
+ * See design/chrome.ts. The capture comes from the glimpse, remembered per domain
+ * (memo → migration-039 table); failing both it is taken again, once, under its own
+ * rate limit.
  *
  * THREAT MODEL. Public and unauthenticated. The genome arrives in a URL anyone can
  * write, so it goes through `validateGenome` — the engine's untrusted-input
@@ -166,20 +166,17 @@ export async function GET(request: NextRequest) {
     default_locale: locale,
   }
 
-  const render = (t: object) => guardPreview(buildListingPage(
-    t as Parameters<typeof buildListingPage>[0],
+  const page = guardPreview(buildListingPage(
+    theme as Parameters<typeof buildListingPage>[0],
     siteName || 'Blog',
     'preview',
     posts as Parameters<typeof buildListingPage>[3],
     locale,
   ))
-  const page = render(theme)
-  // Our scripts are the ones a page WITHOUT their chrome runs (see THREAT MODEL).
-  const ours = chrome ? render({ ...theme, ...Object.fromEntries(Object.keys(chrome).map(k => [k, null])), font_links: theme.font_links }) : page
-  const csp = [
-    `script-src ${scriptHashes(ours).join(' ') || "'none'"}`,
-    "object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-src 'none'",
-  ].join('; ')
+  // Our scripts are exactly the ones after the renderer's SCRIPTS_MARK — their
+  // chrome sits before it, scrubbed, and anything that survived the scrub gets no
+  // hash (see THREAT MODEL). One render, not two: W0 made the boundary explicit.
+  const csp = [pageCsp(page), "form-action 'none'", "frame-src 'none'"].join('; ')
 
   return new NextResponse(page, {
     status: 200,

@@ -5,7 +5,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { buildListingPage } from '@/lib/render/theme'
+import { buildListingPage, pageCsp } from '@/lib/render/theme'
 import { getTemplate, templateChromeJson } from '@/lib/render/templates'
 import { DEFAULT_LOCALE } from '@/lib/i18n/config'
 
@@ -55,6 +55,6 @@ export async function GET(request: NextRequest) {
   const html = buildListingPage(theme, name, 'preview', posts, DEFAULT_LOCALE)
   return new Response(html, {
     status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, max-age=120' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, max-age=120', 'Content-Security-Policy': pageCsp(html) },
   })
 }

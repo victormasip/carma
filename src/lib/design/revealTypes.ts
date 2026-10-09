@@ -32,16 +32,22 @@ export type RevealVariant = {
   /** The art director's one line on WHY, in the site's language. W3 has none. */
   why: string | null
   /**
-   * The rung their header is drawn on in this variant's preview (W6): their markup
-   * as it is, their markup in this palette, or their logo and links redrawn. What
-   * the preview shows is what the hand-off applies — it rides in the carry.
+   * What this variant's preview did with their header (W0): their markup as it is,
+   * or SAFE PANEL (their logo and every link, in a frame we own). `ours` only when
+   * there is no website to read a header from. What the preview shows is what the
+   * hand-off applies — it rides in the carry. Since W0 it is the same for all three
+   * variants: they differ in the BODY only.
    */
   chrome: RevealChrome
 }
 
-/** A header rung a preview can draw (design/chrome.ts#drawnPolicy). */
-export type RevealChrome = 'keep' | 'harmonise' | 'rebuild'
-export const REVEAL_CHROME: readonly RevealChrome[] = ['keep', 'harmonise', 'rebuild']
+/**
+ * What a preview can do with their header (design/chrome.ts#drawnPolicy). The
+ * W6 rungs `harmonise` (their header repainted) and `rebuild` (their header
+ * redrawn by us) are gone for every site with a website (reboot plan §3.8).
+ */
+export type RevealChrome = 'keep' | 'safe_panel' | 'ours'
+export const REVEAL_CHROME: readonly RevealChrome[] = ['keep', 'safe_panel', 'ours']
 
 /** A number we can quote instead of an opinion — see `preferredFor` in reveal.ts. */
 export type RevealAdvice = { kind: 'body' | 'link'; ratio: number }
@@ -69,9 +75,9 @@ export type DesignUpgradeResponse =
   | { source: 'derived' }
 
 /**
- * Brackets a harmonised-chrome block inside a site's chrome CSS (W6), so applying
- * a design twice replaces the block instead of stacking two. Lives here, not in
- * design/chrome.ts, because the Studio (a client component) strips it too.
+ * Brackets a harmonised-chrome block inside a site's chrome CSS (W6). Nothing
+ * writes one any more (W0); sites that adopted one before carry it in their stored
+ * CSS, and the render cuts it out (stripHarmony) so their header is theirs again.
  */
 export const HARMONY_MARK = '/*carma:harmonise*/'
 
@@ -85,10 +91,12 @@ export const HARMONY_MARK = '/*carma:harmonise*/'
  */
 export const CAPTURE_VERSION = 2
 
-/** A chrome CSS string with any previous harmonised block removed. */
+/** A chrome CSS string with every harmonised block removed (a design applied twice left two). */
 export function stripHarmony(css: string): string {
-  const a = css.indexOf(HARMONY_MARK)
-  if (a < 0) return css
-  const b = css.indexOf(HARMONY_MARK, a + HARMONY_MARK.length)
-  return (css.slice(0, a) + (b < 0 ? '' : css.slice(b + HARMONY_MARK.length))).trim()
+  let out = css
+  for (let a = out.indexOf(HARMONY_MARK); a >= 0; a = out.indexOf(HARMONY_MARK)) {
+    const b = out.indexOf(HARMONY_MARK, a + HARMONY_MARK.length)
+    out = out.slice(0, a) + (b < 0 ? '' : out.slice(b + HARMONY_MARK.length))
+  }
+  return out.trim()
 }

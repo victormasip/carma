@@ -3,15 +3,21 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Globe, Search, Check } from 'lucide-react'
-import { createSite } from '@/lib/actions/sites'
+import { createSite, listAssignableClients } from '@/lib/actions/sites'
 import { Modal, ModalClose } from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { Input } from '@/components/ui/input'
 
 type Client = { id: string; email: string }
 
-export default function NewSiteModal({ clients }: { clients: Client[] }) {
+export default function NewSiteModal() {
   const [isOpen, setIsOpen] = useState(false)
+  // Loaded when the modal OPENS (W1), not on every visit to the home page.
+  const [clients, setClients] = useState<Client[] | null>(null)
+  const open = () => {
+    setIsOpen(true)
+    if (clients === null) void listAssignableClients().then(r => setClients(r.clients ?? []))
+  }
   const [siteName, setSiteName] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [clientSearch, setClientSearch] = useState('')
@@ -21,9 +27,10 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
   const router = useRouter()
 
   const filteredClients = useMemo(() => {
+    const all = clients ?? []
     const q = clientSearch.trim().toLowerCase()
-    if (!q) return clients
-    return clients.filter(c => c.email.toLowerCase().includes(q))
+    if (!q) return all
+    return all.filter(c => c.email.toLowerCase().includes(q))
   }, [clients, clientSearch])
 
   const toggleClient = (id: string) => {
@@ -60,7 +67,7 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
 
   return (
     <>
-      <Button glow onClick={() => setIsOpen(true)} iconLeft={<Plus className="w-4 h-4" />}>
+      <Button glow onClick={open} iconLeft={<Plus className="w-4 h-4" />}>
         Nou Lloc
       </Button>
 
@@ -106,7 +113,12 @@ export default function NewSiteModal({ clients }: { clients: Client[] }) {
                 )}
               </div>
 
-              {clients.length === 0 ? (
+              {clients === null ? (
+                <div className="space-y-1.5" aria-busy="true">
+                  <div className="skeleton h-9 rounded-lg" aria-hidden />
+                  <div className="skeleton h-9 rounded-lg" aria-hidden />
+                </div>
+              ) : clients.length === 0 ? (
                 <p className="text-xs text-subtle">
                   No hi ha clients disponibles. Crea usuaris amb rol &quot;client&quot; des de Supabase.
                 </p>

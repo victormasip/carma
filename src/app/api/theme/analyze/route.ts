@@ -4,7 +4,9 @@ import { parse, HTMLElement } from 'node-html-parser'
 import { isValidHttpUrl, isSafeUrl, safeFetch, safeFetchText, decodeEntities } from '@/lib/scrape/http'
 import { extractTokens } from '@/lib/scrape/tokens'
 import { absolutiseCssUrls as cssAbsUrls, splitImports, extractFontFaceCss, proxyFontsInCss } from '@/lib/scrape/clientCss'
-import { compileChromeCss, compileSavings } from '@/lib/scrape/chromeCompiler'
+import { compileChromeCss, compileSavings, type ChromeFidelity } from '@/lib/scrape/chromeCompiler'
+import { extractNav, FAITHFUL_MAX_SHEETS } from '@/lib/design/chrome'
+import { scrubHeadAssets } from '@/lib/render/chromeSafety'
 import { auditChromeContrast, extractGround, buildChromeRepairCss } from '@/lib/scrape/chromeContrast'
 import { absolutise, buildExtractedHead } from '@/lib/scrape/headerFooter'
 import { splitPageChrome } from '@/lib/scrape/pageSplit'
@@ -173,7 +175,7 @@ async function mapWithConcurrency<T, R>(
 // fetched in PARALLEL (bounded) so a single slow/broken sheet is skipped, never
 // fatal — graceful degradation over an all-or-nothing serial wait. Stops at a
 // byte budget when concatenating.
-async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> {
+async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<{ css: string; read: number }> {
   const seen = new Set<string>()
 
   async function pullUrl(url: string, depth: number): Promise<string> {
@@ -207,6 +209,9 @@ async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> 
   })
 
   const resolved = await mapWithConcurrency(tasks, CSS_CONCURRENCY, t => t())
+  // How many of the page's own (non-font) stylesheets actually came back — the
+  // fidelity gate needs to know whether the capture saw ALL of them (W0).
+  const read = sources.reduce((n, src, i) => n + (src.kind === 'url' && !FONT_SHEET_RE.test(src.url) && resolved[i] ? 1 : 0), 0)
 
   // Concatenate in cascade order under the byte budget. When a sheet must be
   // truncated, cut at the last COMPLETE rule (`}`) — a mid-rule slice leaves an
@@ -224,7 +229,7 @@ async function fetchAllCss(sources: CssSource[], pageUrl: URL): Promise<string> 
     budget -= slice.length
     if (slice) parts.push(slice)
   }
-  return parts.join('\n')
+  return { css: parts.join('\n'), read }
 }
 
 function extractScripts(root: HTMLElement, base: URL): {
@@ -486,15 +491,23 @@ export async function POST(request: NextRequest) {
         const siteName = extractSiteName(root, baseUrl)
         const logoUrl = extractLogo(root, baseUrl)
 
-        let extractedHead = buildExtractedHead(root, baseUrl)
+        let extractedHead = scrubHeadAssets(buildExtractedHead(root, baseUrl))
         // The Top/Bottom sandwich: parse5 splits the page around its main content,
         // capturing EVERYTHING before it (wrappers + header) and EVERYTHING after
         // it down to </body> (footer + wrapper closers + late scripts), repairing
         // malformed markup so it can't swallow the page. The blog renders between
         // them; body attrs reapply the source's global background/typography.
         const split = splitPageChrome(pageBody, baseUrl)
-        const extractedHeader = split.top
-        const extractedFooter = split.bottom
+        // W0: none of their scripts is STORED either (the render scrubs every
+        // region again over a spec parse — that is the wall; this is a smaller row
+        // and a second line). The halves must not be parsed and re-serialised here:
+        // the Top opens wrappers the Bottom closes, and a parse would close them.
+        // A script element ends at the first `</script`, exactly what this matches.
+        const stripScripts = (h: string) => h
+          .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+          .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*>/gi, '')
+        const extractedHeader = stripScripts(split.top)
+        const extractedFooter = stripScripts(split.bottom)
         const extractedBodyAttrs = split.bodyAttrs
         const regionDetail =
           split.strategy === 'content' ? 'contingut aïllat · wrappers intactes'
@@ -511,10 +524,16 @@ export async function POST(request: NextRequest) {
         running('styles')
         let rawCss = ''
         let tokens
+        // The page's own stylesheets (fonts stay <link>s): how many it declares, how
+        // many came back. Feeds the W0 fidelity gate below.
+        const sheetsDeclared = sources.filter(s => s.kind === 'url' && !FONT_SHEET_RE.test(s.url)).length
+        let sheetsRead = 0
         try {
           let urlCount = 0
           const cappedSources = sources.filter(s => s.kind === 'inline' || ++urlCount <= MAX_STYLESHEETS)
-          rawCss = await fetchAllCss(cappedSources, baseUrl)
+          const fetchedCss = await fetchAllCss(cappedSources, baseUrl)
+          rawCss = fetchedCss.css
+          sheetsRead = fetchedCss.read
           tokens = extractTokens({ root, cssTexts: [rawCss], fontLinks })
           done('styles', `${externalStyles.length} fulls CSS · ${fontLinks.length} tipografies`)
         } catch {
@@ -656,6 +675,34 @@ export async function POST(request: NextRequest) {
             })
           }
         } catch { /* a readability miss must never fail a capture */ }
+
+        // ── 5c. FIDELITY (W0 — reboot plan §6) ─────────────────────────────────
+        //
+        // Can their markup be SHOWN as they drew it, from a static capture, with
+        // none of their scripts? The gate calibrated on the corpus for the Door
+        // (design/chrome.ts FAITHFUL_MAX_SHEETS): the compiler understood their CSS,
+        // the page declares few enough stylesheets that we read EVERY one of them,
+        // and their identity (a logo or navigation) is there. Everyone else gets
+        // SAFE PANEL — their logo and every link they publish — instead of a header
+        // rendered broken (44 of 86 in the live lab) or one we draw for them (never
+        // again). The verdict is recorded with the compile stats; the render reads it.
+        const fidelityNav = extractNav(extractedHeader, baseUrl)
+        const fidelity: ChromeFidelity = (() => {
+          const sheets = { declared: sheetsDeclared, read: sheetsRead }
+          if (split.strategy === 'none' || !extractedHeader.trim()) return { faithful: false, reason: 'no-chrome', sheets }
+          if (!compiledChromeCss) return { faithful: false, reason: 'unstyled', sheets }
+          if (sheetsDeclared > FAITHFUL_MAX_SHEETS) return { faithful: false, reason: 'sheets', sheets }
+          if (sheetsRead < sheetsDeclared) return { faithful: false, reason: 'unread', sheets }
+          if (!logoUrl && fidelityNav.links.length < 2) return { faithful: false, reason: 'identity', sheets }
+          return { faithful: true, reason: null, sheets }
+        })()
+        chromeCompileStats = { ...(chromeCompileStats ?? {}), ...fidelity }
+        if (!fidelity.faithful && fidelity.reason !== 'no-chrome') {
+          send({
+            type: 'notice', severity: 'info', code: 'chrome_safe_panel',
+            message: 'La teva capçalera depèn del JavaScript del teu lloc, i per seguretat no l’executem al teu blog: hi posarem el teu logo i tots els teus enllaços, també els legals, en una capçalera neta.',
+          })
+        }
 
         // ── 6. FINALIZE (packaging) ────────────────────────────────────────────
         running('finalize')

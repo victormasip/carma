@@ -38,11 +38,17 @@ import { contrastRatio, parseColor } from '@/lib/scrape/chromeContrast'
 import { stripCompiledHead } from '@/lib/scrape/chromeCompiler'
 import { BCP47, DEFAULT_LOCALE, LOCALES, LOCALE_META, isLocale, normalizeLocale, uiLocale, type Locale, type UiLocale } from '@/lib/i18n/config'
 import { parse } from 'node-html-parser'
-import { responsiveCardImage, responsiveFeaturedImage, transformContentImages } from './image'
+import { responsiveCardImage, responsiveFeaturedImage, transformContentImages, DEFAULT_SIZES_CARD, DEFAULT_SIZES_FEATURED } from './image'
+import { imagePreloadLink } from './imageMarkup'
 import { embedInnerHtml, tocInnerHtml } from './blockMarkup'
 import { buildArticleJsonLd, buildBlogJsonLd, buildBreadcrumbJsonLd, maybeBuildFaqJsonLd } from './seo'
 import { normalizeFragment } from '@/lib/scrape/headerFooter'
 import { FEED_PATH, type FeedPost } from '@/lib/render/feed'
+import { scrubHeadAssets, scrubTree, type P5Node } from '@/lib/render/chromeSafety'
+import { extractLinkTree, isRebuiltRegion, safePanelBar, safePanelDrawer, SAFE_PANEL_JS, treeLinks, type LinkTree, type SafeTokens } from '@/lib/render/safePanel'
+import { stripHarmony } from '@/lib/design/revealTypes'
+import { parseFragment, serialize } from 'parse5'
+import { createHash } from 'node:crypto'
 
 export { unlayerCss, UNLAYER_SHIM_MARK } from '@/lib/render/blogCss'
 
@@ -63,7 +69,13 @@ type Theme = {
   modules?: SiteModules | null // Smart Modules config (migration 024); absent ⇒ no modules
   // ── Chrome Compiler (migration 032) ──
   compiled_chrome_css?: string | null    // critical CSS for the chrome; null ⇒ raw-injection fallback
-  chrome_scripts_enabled?: boolean | null // opt back in to the source's scripts (deferred)
+  /** IGNORED since W0: no customer script runs on a Carma page, whatever this says. */
+  chrome_scripts_enabled?: boolean | null
+  /** `faithful: false` (set at capture, W0) ⇒ their markup is not shown: SAFE PANEL bar. */
+  chrome_compile_stats?: { faithful?: boolean } | Record<string, unknown> | null
+  /** The page their chrome was captured from — links in it resolve against this. */
+  base_url?: string | null
+  reference_url?: string | null
   // ── Design genome (W5) ──
   // The compiler's EXTRA stylesheet — only what tokens cannot carry (lanes, drop
   // caps, motion…). It rides in the `overrides` layer after the feed layout, so a
@@ -539,30 +551,22 @@ function buildFontLinks(theme: Theme): string {
 // ─── Injected client <head> (the 1:1 clone's styling) ───────────────────────────
 //
 // extracted_head is the target's real head assets (stylesheets / inline <style> /
-// font links / scripts), already absolutised + filtered (title/meta/canonical/base
-// stripped) at capture time. Injecting it makes the target's own CSS style the
-// light-DOM header/footer exactly as on the source. We add a render-time
-// defense-in-depth pass for OLD stored data and hand edits: strip <base> (would
-// rewrite our blog URLs), <title>/<meta> (ours win), and the http-equiv refresh /
-// CSP metas (would navigate away or block our inline styles). Scripts are KEPT —
-// the client's own site JS powers its native menus.
-function sanitizeInjectedHead(html: string): string {
-  if (!html?.trim()) return ''
-  return html
-    .replace(/<base\b[^>]*\/?>/gi, '')
-    .replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, '')
-    .replace(/<meta\b[^>]*\/?>/gi, '')
-    // Stray </head>/<body> can't appear mid-fragment, but neutralise just in case.
-    .replace(/<\/?(head|body|html)\b[^>]*>/gi, '')
-}
+// font links), absolutised at capture time. Injecting it makes the target's own CSS
+// style the light-DOM header/footer as on the source. W0: their SCRIPTS no longer
+// come with it — on any path, for any site, whatever `chrome_scripts_enabled` says.
+// What survives is what styles a page (scrubHeadAssets): stylesheets, <style>,
+// connection hints. Their menus run on OUR runtime (safePanel.ts) instead.
 
-function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: HeadSeo, feedHref?: string): string {
+function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: HeadSeo, feedHref?: string, chrome?: ResolvedChrome, preload = ''): string {
   const ogTitle = seo?.ogTitle ?? title
   const parts: string[] = [
     `<meta charset="utf-8" />`,
     `<meta name="viewport" content="width=device-width, initial-scale=1" />`,
     `<title>${escapeHtml(title)}</title>`,
   ]
+  // The LCP image, requested with the document (imageMarkup.ts#imagePreloadLink) —
+  // before any stylesheet, so nothing queues in front of it.
+  if (preload) parts.push(preload)
   // RSS AUTODISCOVERY. Without this line the feed exists and nothing finds it:
   // readers, "follow" buttons and aggregators all look for exactly this tag.
   if (feedHref) {
@@ -603,18 +607,22 @@ function buildHead(theme: Theme, title: string, tokens: DesignTokens, seo?: Head
   //     the fallback for every site captured BEFORE the compiler existed, so no
   //     live blog changes appearance until its owner re-captures.
   //
-  // `compiled_chrome_css` being non-null is the switch. A site whose menu genuinely
-  // needs JS sets `chrome_scripts_enabled` and gets its scripts back, deferred.
-  const compiled = (theme?.compiled_chrome_css ?? '').trim()
-  if (compiled) {
-    parts.push(`<style>${compiled}</style>`)
-    const residualHead = stripCompiledHead(theme?.extracted_head ?? '', {
-      keepScripts: theme?.chrome_scripts_enabled === true,
-    })
-    if (residualHead) parts.push(residualHead)
-  } else {
-    const clientHead = sanitizeInjectedHead(theme?.extracted_head ?? '')
-    if (clientHead) parts.push(clientHead)
+  // `compiled_chrome_css` being non-null is the switch. W0: a `harmonise` block (their
+  // header repainted in a design's palette — deleted for every site with a website)
+  // is cut out of stored CSS here, so their header renders as theirs again.
+  //
+  // In SAFE PANEL's BAR mode none of their markup is on the page, so none of their
+  // CSS is either: the bar is ours, in their tokens, in its own shadow root.
+  if (chrome?.mode !== 'bar') {
+    const compiled = stripHarmony(theme?.compiled_chrome_css ?? '').trim()
+    if (compiled) {
+      parts.push(`<style>${compiled}</style>`)
+      const residualHead = scrubHeadAssets(stripCompiledHead(theme?.extracted_head ?? '', { keepScripts: false }))
+      if (residualHead) parts.push(residualHead)
+    } else {
+      const clientHead = scrubHeadAssets(theme?.extracted_head ?? '')
+      if (clientHead) parts.push(clientHead)
+    }
   }
   // Host box-guard — emitted LAST so it ALWAYS wins: the blog's shadow host stays a
   // normal full-width block wherever the source's wrappers drop it. (The blog's own
@@ -785,37 +793,127 @@ function localizedSectionTitle(theme: Theme, locale: Locale): string {
   return theme?.section_title?.trim() || RENDER_STRINGS[uiLocale(locale)].articles
 }
 
-// Strip <script> tags from a markup fragment. Used only for the SCOPED
-// starter-template path (those are our own templates, scriptless by design — this
-// is pure defense-in-depth for hand edits). RAW chrome KEEPS the client's scripts.
-function stripScriptTags(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
-    .replace(/<script\b[^>]*\/>/gi, '')
+// ─── W0: the chrome a page wears ──────────────────────────────────────────────
+//
+// One decision per page, made here and nowhere else (reboot plan §3.2, W0):
+//
+//   none    no chrome stored.
+//   scoped  one of OUR starter templates — a business with no website (Ø). The
+//           only place generated chrome survives.
+//   keep    THEIR captured markup, scrubbed of every script (chromeSafety.ts);
+//           their dead burger opens SAFE PANEL's drawer.
+//   bar     SAFE PANEL instead of their markup: a capture marked unfaithful, or a
+//           header W6 DREW for them (`rebuild` — deleted: it kept a median 35% of
+//           their links and none of their legal ones). Their logo + every link.
+//
+// `harmonise` has no mode: its CSS block is cut out of their stored CSS in
+// buildHead, which leaves their header exactly as captured.
+
+export type ChromeMode = 'none' | 'scoped' | 'keep' | 'bar'
+type ResolvedChrome = {
+  mode: ChromeMode
+  /** keep / scoped: the Top region · bar: the SAFE PANEL header host. */
+  before: string
+  /** keep / scoped: the Bottom region · bar: the SAFE PANEL footer host. */
+  after: string
+  /** Their navigation, for SAFE PANEL (keep: the drawer · bar: already drawn). */
+  tree: LinkTree | null
 }
 
-// The HTML for ONE chrome region (the "Top" = header column, the "Bottom" =
-// footer column), BEFORE stitching. We do NOT balance it here — stitchChrome
-// balances the whole assembly server-side.
-//   · SCOPED → a self-contained starter-template component: its CSS is forced
-//     under [data-carma-chrome="…"] + an all:initial reset (zero bleed). Balanced.
-//   · RAW    → the client's real markup (a sandwich half, or a legacy region).
-//     Returned verbatim; stitchChrome makes the final document well-formed.
-function regionHtml(theme: Theme, region: 'header' | 'footer', locale: Locale): string {
-  const data = parseRegion(chromeRegionRaw(theme, region, locale))
-  if (!data) return ''
-  if (data.kind === 'scoped') {
-    const css = scopeChromeCss(data.css.replace(/<\/style/gi, '<\\/style'), region)
-    return `<div class="cx-host cx-host-${region}" data-carma-chrome="${region}"><style>${css}</style>
-${stripScriptTags(data.html)}
-</div>`
+const SAFE_STRINGS: Record<UiLocale, { menu: string; close: string }> = {
+  ca: { menu: 'Menú', close: 'Tanca el menú' },
+  es: { menu: 'Menú', close: 'Cerrar el menú' },
+  en: { menu: 'Menu', close: 'Close the menu' },
+}
+
+function safeTokens(theme: Theme, tokens: DesignTokens): SafeTokens {
+  return {
+    bg: pageBackground(theme, tokens), surface: tokens.colorSurface, text: tokens.colorText, muted: tokens.colorMuted,
+    border: tokens.colorBorder, accent: tokens.colorAccent, fontBody: tokens.fontBody, fontHeading: tokens.fontHeading,
+    maxWidth: tokens.maxWidth,
   }
-  return data.html
+}
+
+/** Where their logo links to: their homepage, as their own header does. */
+function homeOf(base: string | null, tree: LinkTree): string {
+  try { if (base) return `${new URL(base).origin}/` } catch { /* fall through */ }
+  const first = treeLinks(tree).find(l => /^https?:/i.test(l.href))
+  try { if (first) return `${new URL(first.href).origin}/` } catch { /* fall through */ }
+  return '/'
+}
+
+// A starter template's header is STORED when the template is applied (site_themes),
+// so a fix to templates.ts only reaches new sites. Their navs must not wrap on a
+// phone: the swap from the fallback face to the web font wrapped a link and moved
+// the whole blog down 32px (CLS 0.143 on a 412px screen, 2026-10-09). Patched here,
+// where every stored copy passes; the classes are ours and exist nowhere else.
+const TEMPLATE_HEADER_PATCH = '@media (max-width:640px){.cx-ed-nav,.cx-at-nav{flex-wrap:nowrap;justify-content:safe center;overflow-x:auto;scrollbar-width:none}.cx-ed-nav a,.cx-at-nav a{flex:none;white-space:nowrap}}'
+
+// A starter template's region: self-contained CSS forced under
+// [data-carma-chrome="…"] behind an all:initial wall (zero bleed either way).
+function scopedRegion(data: ChromeRegion | null, region: 'header' | 'footer'): string {
+  if (!data) return ''
+  const own = region === 'header' ? `${data.css}\n${TEMPLATE_HEADER_PATCH}` : data.css
+  const css = scopeChromeCss(own.replace(/<\/style/gi, '<\\/style'), region)
+  return `<div class="cx-host cx-host-${region}" data-carma-chrome="${region}"><style>${css}</style>
+${data.html}
+</div>`
+}
+
+function resolveChrome(theme: Theme, siteName: string, locale: Locale): ResolvedChrome {
+  const head = parseRegion(chromeRegionRaw(theme, 'header', locale))
+  const foot = parseRegion(chromeRegionRaw(theme, 'footer', locale))
+  if (!head && !foot) return { mode: 'none', before: '', after: '', tree: null }
+
+  const base = theme?.base_url || theme?.reference_url || null
+  const rebuilt = (head?.kind === 'scoped' && isRebuiltRegion(head.html)) || (foot?.kind === 'scoped' && isRebuiltRegion(foot.html))
+  const unfaithful = (theme?.chrome_compile_stats as { faithful?: boolean } | null | undefined)?.faithful === false
+  if (rebuilt || unfaithful) {
+    const tree = extractLinkTree(head?.html ?? '', foot?.html ?? '', base)
+    const tokens = tokensOf(theme)
+    const bar = safePanelBar(tree, {
+      siteName, home: homeOf(base, tree), tokens: safeTokens(theme, tokens), menuLabel: SAFE_STRINGS[uiLocale(locale)].menu,
+    })
+    return { mode: 'bar', before: bar.header, after: bar.footer, tree }
+  }
+  if (head?.kind === 'scoped' || foot?.kind === 'scoped') {
+    return { mode: 'scoped', before: scopedRegion(head, 'header'), after: scopedRegion(foot, 'footer'), tree: null }
+  }
+  return {
+    mode: 'keep', before: head?.html ?? '', after: foot?.html ?? '',
+    tree: extractLinkTree(head?.html ?? '', foot?.html ?? '', base),
+  }
 }
 
 // The single marker we stitch the blog into. A comment is inert markup, survives a
 // spec-compliant parse round-trip, and is trivially located for the final swap.
 const BLOG_SLOT = '<!--CARMA_BLOG_SLOT-->'
+
+/**
+ * Everything after this comment is a script WE wrote. The page's CSP lists the
+ * hashes of the scripts after the LAST occurrence (ours is always the last: it is
+ * appended after their chrome) — so a script that slipped through the scrub, which
+ * can only sit before it, has no hash and does not run. See pageCsp.
+ */
+export const SCRIPTS_MARK = '<!--carma:scripts-->'
+
+/**
+ * The Content-Security-Policy of a rendered blog page: our scripts by hash, no
+ * plugins, no <base>. Their CSS, fonts and images load as before — what the
+ * policy refuses is code we did not write.
+ */
+export function pageCsp(html: string): string {
+  const i = html.lastIndexOf(SCRIPTS_MARK)
+  const hashes = new Set<string>()
+  if (i >= 0) {
+    for (const m of html.slice(i).matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+      const type = (/\btype\s*=\s*["']?([^"'\s>]+)/i.exec(m[1] ?? '')?.[1] ?? '').toLowerCase()
+      if (type && !/javascript|module/.test(type)) continue
+      hashes.add(`'sha256-${createHash('sha256').update(m[2] ?? '', 'utf8').digest('base64')}'`)
+    }
+  }
+  return [`script-src ${hashes.size ? [...hashes].join(' ') : "'none'"}`, "object-src 'none'", "base-uri 'none'"].join('; ')
+}
 
 // ── Server-side DOM stitching (the bulletproof assembly) ──────────────────────
 //
@@ -832,26 +930,72 @@ const BLOG_SLOT = '<!--CARMA_BLOG_SLOT-->'
 // replacer (so `$&`-style sequences in the blog HTML are never reinterpreted). The
 // result is a fully balanced body: the client's wrappers wrap our blog, and the
 // browser receives valid HTML it can never mis-parse.
-function stitchChrome(before: string, after: string, blogHostHtml: string): string {
-  const shell = normalizeFragment(`${before}\n${BLOG_SLOT}\n${after}`)
-  if (shell.includes(BLOG_SLOT)) {
-    return shell.replace(BLOG_SLOT, () => `\n${blogHostHtml}\n`)
-  }
+//
+// W0: the SAME parse is where their chrome loses every script (scrubTree) — one
+// walk, on every render, so every site already stored is clean without a data
+// migration. A parse that fails serves no chrome at all, never the raw markup.
+function stitchChrome(before: string, after: string, slot: (burgers: number) => string): { html: string; burgers: number } {
+  let shell = ''
+  let burgers = 0
+  try {
+    const frag = parseFragment(`${before}\n${BLOG_SLOT}\n${after}`) as unknown as P5Node
+    burgers = scrubTree(frag).burgers
+    shell = serialize(frag as never)
+  } catch { shell = '' }
+  const inner = slot(burgers)
+  if (shell.includes(BLOG_SLOT)) return { html: shell.replace(BLOG_SLOT, () => `\n${inner}\n`), burgers }
   // Defensive: if the parser ever dropped the slot (it shouldn't), fall back to a
   // balanced concatenation so we still serve a valid document with the blog.
-  return `${shell}\n${blogHostHtml}`
+  return { html: `${shell}\n${inner}`, burgers }
+}
+
+/**
+ * The page body around OUR blog host: their chrome (scrubbed) or SAFE PANEL's bar,
+ * plus — when their header is kept and we recognised its burger — the drawer that
+ * burger now opens. `script` says whether SAFE_PANEL_JS must ship with the page.
+ *
+ * No burger recognised → no drawer and nothing added to their page: our own
+ * control would also appear on headers whose navigation is visible on phones, and
+ * fidelity comes first. (W2's browser capture can see visibility; then it can.)
+ */
+function chromeBody(theme: Theme, chrome: ResolvedChrome, blogHostHtml: string, siteName: string, locale: Locale): { html: string; script: boolean } {
+  if (chrome.mode === 'bar') return { html: `${chrome.before}\n${blogHostHtml}\n${chrome.after}`, script: true }
+  const tree = chrome.mode === 'keep' ? chrome.tree : null
+  const menu = !!tree && treeLinks(tree).length >= 2
+  const stitched = stitchChrome(chrome.before, chrome.after, () => blogHostHtml)
+  if (!menu || stitched.burgers === 0) return { html: stitched.html, script: false }
+  const s = SAFE_STRINGS[uiLocale(locale)]
+  const drawer = safePanelDrawer(tree!, {
+    siteName, tokens: safeTokens(theme, tokensOf(theme)), menuLabel: s.menu, closeLabel: s.close,
+  })
+  return { html: `${stitched.html}\n${drawer}`, script: true }
 }
 
 // The <body> opening tag carrying the source's attributes (so its global
 // background / typography rules match). on*-handlers are stripped defensively.
+// SAFE PANEL's bar wears none of their markup, so none of their body classes.
 function sanitizeBodyAttrs(attrs: string | null | undefined): string {
   const s = (attrs ?? '').trim()
   if (!s) return ''
   return s.replace(/\son[a-z-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '').trim()
 }
-function bodyOpenTag(theme: Theme): string {
+function bodyOpenTag(theme: Theme, chrome: ResolvedChrome): string {
+  if (chrome.mode === 'bar') return '<body>'
   const attrs = sanitizeBodyAttrs(theme?.extracted_body_attrs)
   return attrs ? `<body ${attrs}>` : '<body>'
+}
+
+/** The scripts every page ends with — after SCRIPTS_MARK, so the CSP can hash exactly these. */
+function pageScripts(theme: Theme, siteId: string, postId: string | null, kind: 'article' | 'listing', chrome: ResolvedChrome, safePanel: boolean): string {
+  return [
+    SCRIPTS_MARK,
+    runtimeScript(),
+    modulesRuntimeScript(theme?.modules ?? null, siteId, postId ?? undefined),
+    // The readability guard repairs THEIR light-DOM chrome; the bar is ours.
+    chrome.mode === 'keep' ? contrastGuardScript() : '',
+    safePanel ? `<script>${SAFE_PANEL_JS}</script>` : '',
+    trackingScript(siteId, postId, kind),
+  ].filter(Boolean).join('\n')
 }
 
 // Localized label for demo/sample cards (preview-only). See Post.demo + buildCard.
@@ -894,14 +1038,16 @@ function buildDemoBanner(locale: Locale): string {
 </div>`
 }
 
-function buildCard(post: Post, link: LinkCtx, locale: Locale): string {
+// `rank` = the card's place in the feed: the first card's image is the listing's
+// LCP candidate, the next two are above the fold on a desktop grid (imageMarkup.ts).
+function buildCard(post: Post, link: LinkCtx, locale: Locale, rank = Infinity): string {
   const loc = localizePost(post, locale)
   // Each card links to THIS post's slug in the listing's current language. The
   // localized slug (if any) becomes the URL — that's the canonical address of
   // the post in that language.
   const href = articleUrl(link, post, locale)
   const media = loc.featured_image
-    ? `<div class="carma-card-media">${responsiveCardImage(loc.featured_image, loc.title)}</div>`
+    ? `<div class="carma-card-media">${responsiveCardImage(loc.featured_image, loc.title, rank)}</div>`
     : ''
   const excerpt = loc.excerpt ? `<p class="carma-card-excerpt">${escapeHtml(loc.excerpt)}</p>` : ''
   const cat = loc.categories?.[0] ? `<span class="carma-cat">${escapeHtml(loc.categories[0])}</span><span>·</span>` : ''
@@ -1050,17 +1196,22 @@ function articleOverrides(theme: Theme, modulesCss: string): string {
 // OUR blog markup for the listing (the .carma-root <main>). Returned WITHOUT the
 // shadow host wrapper so it can be reused both inside renderBlogHost (full page)
 // and inside the embed loader's own shadow root (fragment).
+// STRICT locale filtering (founder directive 2026-06-30): the feed shows ONLY the
+// posts that actually have content in the active language — a Spanish-only article
+// must never appear under the Catalan tab. If the active locale has no content but
+// other languages do (rare: a site default with no posts in it), fall back to the
+// first language that does, so a real catalogue never renders as an empty feed.
+// Shared by the feed and by the <head> (which preloads the first card's image).
+function feedPosts(posts: Post[], locale: Locale): { available: Locale[]; feedLocale: Locale; visiblePosts: Post[] } {
+  const available = LOCALES.filter(l => posts.some(p => postLocales(p).includes(l)))
+  const feedLocale = available.includes(locale) ? locale : (available[0] ?? locale)
+  return { available, feedLocale, visiblePosts: posts.filter(p => postLocales(p).includes(feedLocale)) }
+}
+
 function listingBlogInner(theme: Theme, siteName: string, link: LinkCtx, posts: Post[], locale: Locale, parts: ListingModuleParts): string {
   const tokens = tokensOf(theme)
-  const available = LOCALES.filter(l => posts.some(p => postLocales(p).includes(l)))
   const urlForLocale = (l: Locale) => listingUrl(link, l)
-  // STRICT locale filtering (founder directive 2026-06-30): the feed shows ONLY the
-  // posts that actually have content in the active language — a Spanish-only article
-  // must never appear under the Catalan tab. If the active locale has no content but
-  // other languages do (rare: a site default with no posts in it), fall back to the
-  // first language that does, so a real catalogue never renders as an empty feed.
-  const feedLocale = available.includes(locale) ? locale : (available[0] ?? locale)
-  const visiblePosts = posts.filter(p => postLocales(p).includes(feedLocale))
+  const { available, feedLocale, visiblePosts } = feedPosts(posts, locale)
   // The language switcher lives on OUR navigation surface (clicking the client's
   // own nav navigates to the source site, so it can't host our switcher).
   const bodySwitcher = buildLangSwitcher(available, feedLocale, urlForLocale)
@@ -1073,7 +1224,7 @@ function listingBlogInner(theme: Theme, siteName: string, link: LinkCtx, posts: 
   const demoBanner = isDemoFeed ? buildDemoBanner(locale) : ''
   const feed = visiblePosts.length === 0
     ? buildEmptyState(siteName, locale)
-    : `<div class="carma-grid">\n${visiblePosts.map(p => buildCard(p, link, feedLocale)).join('\n')}\n</div>`
+    : `<div class="carma-grid">\n${visiblePosts.map((p, i) => buildCard(p, link, feedLocale, i)).join('\n')}\n</div>`
 
   const crumb = tokens.showBreadcrumb
     ? `<nav class="carma-breadcrumb"><a href="${escapeAttr(urlForLocale(locale))}">${escapeHtml(RENDER_STRINGS[uiLocale(locale)].home)}</a><span>›</span><span>${escapeHtml(sectionTitle)}</span></nav>`
@@ -1096,7 +1247,7 @@ ${parts.overlays}`
 
 // Full render body: the client's shell (LIGHT DOM) STITCHED around the blog
 // (SHADOW DOM) into one well-formed document, server-side.
-function listingBodyHtml(theme: Theme, siteName: string, siteId: string, link: LinkCtx, posts: Post[], locale: Locale): string {
+function listingBodyHtml(theme: Theme, siteName: string, siteId: string, link: LinkCtx, posts: Post[], locale: Locale, chrome: ResolvedChrome): { html: string; script: boolean } {
   const tokens = tokensOf(theme)
   const parts = listingModuleParts(theme, siteId, link, posts, locale)
   const blog = renderBlogHost(
@@ -1105,7 +1256,7 @@ function listingBodyHtml(theme: Theme, siteName: string, siteId: string, link: L
     listingOverrides(theme, tokens, parts.css),
     theme?.blog_signature?.card,
   )
-  return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
+  return chromeBody(theme, chrome, blog, siteName, locale)
 }
 
 // OUR blog markup for the article view (the .carma-root <main>), sans shadow host.
@@ -1184,10 +1335,10 @@ export function articleCanvasParts(
   }
 }
 
-function articleBodyHtml(theme: Theme, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts): string {
+function articleBodyHtml(theme: Theme, siteName: string, link: LinkCtx, post: Post, locale: Locale, parts: ArticleModuleParts, chrome: ResolvedChrome): { html: string; script: boolean } {
   const tokens = tokensOf(theme)
   const blog = renderBlogHost(articleBlogInner(theme, link, post, locale, parts), tokens, articleOverrides(theme, parts.css))
-  return stitchChrome(regionHtml(theme, 'header', locale), regionHtml(theme, 'footer', locale), blog)
+  return chromeBody(theme, chrome, blog, siteName, locale)
 }
 
 // ─── Full standalone documents (used by the iframe embed + direct visit) ──────
@@ -1195,23 +1346,26 @@ function articleBodyHtml(theme: Theme, link: LinkCtx, post: Post, locale: Locale
 export function buildListingPage(theme: Theme, siteName: string, siteId: string, posts: Post[], locale: Locale = DEFAULT_LOCALE, link?: LinkCtx): string {
   const tokens = tokensOf(theme)
   const ctx = link ?? defaultLink(siteId, theme)
+  const chrome = resolveChrome(theme, siteName, locale)
   const jsonLd = buildBlogJsonLd({
     url: listingUrl(ctx, locale),
     name: siteName,
     locale,
   })
+  const body = listingBodyHtml(theme, siteName, siteId, ctx, posts, locale, chrome)
+  // The first card is the listing's LCP candidate: when it has an image, fetch it
+  // with the document instead of after the shadow root's parse.
+  const { feedLocale, visiblePosts } = feedPosts(posts, locale)
+  const lead = visiblePosts[0] ? localizePost(visiblePosts[0], feedLocale).featured_image : null
   return `<!doctype html>
 <html lang="${locale}">
 <head>
-${buildHead(theme, siteName, tokens, undefined, feedUrl(ctx, locale))}
+${buildHead(theme, siteName, tokens, undefined, feedUrl(ctx, locale), chrome, imagePreloadLink(lead, DEFAULT_SIZES_CARD))}
 ${jsonLd}
 </head>
-${bodyOpenTag(theme)}
-${listingBodyHtml(theme, siteName, siteId, ctx, posts, locale)}
-${runtimeScript()}
-${modulesRuntimeScript(theme?.modules ?? null, siteId)}
-${contrastGuardScript()}
-${trackingScript(siteId, null, 'listing')}
+${bodyOpenTag(theme, chrome)}
+${body.html}
+${pageScripts(theme, siteId, null, 'listing', chrome, body.script)}
 </body>
 </html>`
 }
@@ -1220,6 +1374,7 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
   const tokens = tokensOf(theme)
   const ctx = link ?? defaultLink(siteId, theme)
   const loc = localizePost(post, locale)
+  const chrome = resolveChrome(theme, siteName, locale)
   // Compute the module parts ONCE here so the structured data uses the VISIBLE
   // (post-paywall) content — a locked article must never leak its hidden body via
   // JSON-LD / FAQ schema. When unlocked, parts.content is the full article.
@@ -1269,18 +1424,16 @@ export function buildArticlePage(theme: Theme, siteName: string, siteId: string,
     maybeBuildFaqJsonLd(visibleContent),
   ].filter(Boolean).join('\n')
 
+  const body = articleBodyHtml(theme, siteName, ctx, post, locale, parts, chrome)
   return `<!doctype html>
 <html lang="${locale}">
 <head>
-${buildHead(theme, `${seoTitle} · ${siteName}`, tokens, seo, feedUrl(ctx, locale))}
+${buildHead(theme, `${seoTitle} · ${siteName}`, tokens, seo, feedUrl(ctx, locale), chrome, imagePreloadLink(loc.featured_image, DEFAULT_SIZES_FEATURED, false))}
 ${jsonLd}
 </head>
-${bodyOpenTag(theme)}
-${articleBodyHtml(theme, ctx, post, locale, parts)}
-${runtimeScript()}
-${modulesRuntimeScript(theme?.modules ?? null, siteId, post.id)}
-${contrastGuardScript()}
-${trackingScript(siteId, post.id, 'article')}
+${bodyOpenTag(theme, chrome)}
+${body.html}
+${pageScripts(theme, siteId, post.id, 'article', chrome, body.script)}
 </body>
 </html>`
 }

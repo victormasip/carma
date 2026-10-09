@@ -50,3 +50,11 @@ next-env.d.ts
 # nothing but churn in the history.
 tests/grabber/report.json
 tests/grabber/fidelity.json
+
+# Local Supabase stand-in (tests/localstack): binaries + a throwaway cluster
+.localstack/
+
+# Measurement scratch (tests/measure): Lighthouse header files carry a stand-in
+# session cookie, and build logs are churn. The results/<label>.json stay.
+tests/measure/results/.lh/
+tests/measure/results/*.build.log

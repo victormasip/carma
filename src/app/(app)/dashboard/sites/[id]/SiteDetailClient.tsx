@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useSyncExternalStore, lazy, Suspense } from 'react'
+import { useState, useRef, use, lazy, Suspense, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, FileText, Plug, Users, Sparkles, Palette, ExternalLink, LayoutDashboard, Puzzle, Rocket, MessageCircle, ArrowUpRight, X } from 'lucide-react'
@@ -9,10 +9,11 @@ import PostsManager from './PostsManager'
 import LiveEmbedCard from './LiveEmbedCard'
 import ThemeCaptureModal from './ThemeCaptureModal'
 import SiteOnboarding from './SiteOnboarding'
-// A three-line localStorage read — not worth a lazy chunk of its own, and it
-// has to resolve before we decide whether to load the panel at all.
-import { wpDiscoveryDismissed } from './WordPressDiscovery'
 import { LockBadge, PremiumPanel } from './PremiumGate'
+import { WA_BANNER_COOKIE, rememberDismissal } from './dismissals'
+import { loadSiteTabAction } from '@/lib/actions/siteTabs'
+import type { SiteTabData } from '@/lib/dashboard/siteTabs'
+import type { ThemeSummary } from '@/lib/dashboard/siteTabs'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
@@ -33,8 +34,6 @@ import { formatDate } from '@/lib/format'
 // /edit/[siteId] — the Tema tab is a launcher, not an embed.)
 const OverviewPanel = lazy(() => import('./OverviewPanel'))
 const ImportModal = lazy(() => import('./ImportModal'))
-// The WordPress moment (Fase 2). Lazy: it renders once, for WordPress sites only.
-const WordPressDiscovery = lazy(() => import('./WordPressDiscovery'))
 const ModulesManager = lazy(() => import('./ModulesManager'))
 // The Connexió/Publicar tab: ApiDocsCard alone drags in the (huge) static
 // IntegrationGuide, and none of it renders on the default Articles tab.
@@ -45,31 +44,27 @@ const PublishGuide = lazy(() => import('./PublishGuide'))
 // default path, so it stays out of the initial bundle like its siblings above.
 const ConnectAgentStep = lazy(() => import('./ConnectAgentStep'))
 import { ThemeStudioProvider, useThemeStudio, type Theme } from './ThemeStudioContext'
-import type { PostsMeta } from './PostsManager'
-import type { PostListItem } from '@/lib/actions/posts'
-import type { SiteStats } from '@/lib/analytics/read'
-import type { SiteModules, ModuleTier } from '@/lib/modules/registry'
+// The WordPress moment (Fase 2). NOT lazy, though it shows for WordPress sites
+// only: it is server-rendered ABOVE the tabs, and as a lazy chunk an early
+// re-render during hydration re-suspended it — React hid the 616px panel and
+// showed it again a moment later, moving the whole tab twice (CLS 0.24 per move,
+// measured 2026-10-09). ~2–3KB gzip is the price of a page that stays still.
+import WordPressDiscovery from './WordPressDiscovery'
 
-type Post = PostListItem
-type AssignedUser = { user_id: string; email: string }
-type Client = { id: string; email: string }
 type TabKey = 'resum' | 'articles' | 'tema' | 'moduls' | 'connexio' | 'usuaris'
 
 type Props = {
   siteId: string
   siteName: string
   siteCreatedAt: string
-  apiKey: string
   subdomain?: string
   isSuperAdmin: boolean
   isNewSite: boolean
-  initialPosts: Post[]
-  initialPostsMeta: PostsMeta
-  assignedUsers: AssignedUser[]
-  availableClients: Client[]
-  initialTheme: Theme | null
-  initialStats: SiteStats | null
+  /** A SUMMARY of the theme (lib/dashboard/siteTabs.ts) — never the captured chrome. */
+  initialTheme: ThemeSummary | null
   defaultTab: TabKey
+  /** The opened tab's data, loaded with the page (a rejected promise if it failed). */
+  initialTabData: TabSource
   /** When present (self-serve funnel), auto-starts the Magic Wand on this URL. */
   autoCloneUrl?: string
   /** Arrived via "encara no tinc web" (?nova=1): open the onboarding on the
@@ -80,16 +75,28 @@ type Props = {
   originUrl?: string | null
   /** False when this user has no ACTIVE WhatsApp identity → show the connect step. */
   waConnected?: boolean
+  /** Read from cookies by the server (dismissals.ts), so neither nudge appears late. */
+  waBannerDismissed?: boolean
+  wpDiscoveryDismissed?: boolean
   siteDefaultLocale?: string
   /** Re-captures already consumed (freemium regeneration quota). */
   regenCount?: number
-  /** Smart Modules config (site_themes.modules). */
-  initialModules?: SiteModules | null
-  /** The account's real plan — decides which modules/archetypes are reachable. */
-  plan?: ModuleTier
-  /** First published post slug, for the Modules tab's article preview. */
-  previewPostSlug?: string
 }
+
+/** The provider's view of a summary: every field it does not carry is UNKNOWN. */
+function summaryTheme(s: ThemeSummary | null): Theme | null {
+  if (!s) return null
+  return {
+    reference_url: s.reference_url, reference_url_home: s.reference_url_home, base_url: s.base_url,
+    detected_framework: s.detected_framework, detected_hosting: s.detected_hosting,
+    design_tokens: s.design_tokens, default_locale: s.default_locale,
+    blog_signature: s.blog_url ? ({ blogUrl: s.blog_url } as Theme['blog_signature']) : null,
+  }
+}
+
+// Tabs whose numbers can change while you are elsewhere (an import, a publish):
+// on return they show what they had at once and refresh behind it.
+const REFRESH_ON_RETURN = new Set<TabKey>(['articles', 'resum'])
 
 type SectionDef = { key: TabKey; label: string; desc: string; icon: typeof FileText; premium?: boolean }
 // Order: content first, then design (Tema), then stats (Resum) — per the launch
@@ -111,10 +118,10 @@ const SECTION_DEFS: SectionDef[] = [
 const CLIENT_MODULES_ENABLED = true
 
 export default function SiteDetailClient({
-  siteId, siteName, siteCreatedAt, apiKey, subdomain,
-  isSuperAdmin, isNewSite, initialPosts, initialPostsMeta, assignedUsers, availableClients, initialTheme,
-  initialStats, defaultTab, autoCloneUrl, startWithoutSite = false, originUrl, waConnected = true, siteDefaultLocale, regenCount = 0,
-  initialModules = null, plan = 'free', previewPostSlug,
+  siteId, siteName, siteCreatedAt, subdomain,
+  isSuperAdmin, isNewSite, initialTheme, initialTabData,
+  defaultTab, autoCloneUrl, startWithoutSite = false, originUrl, waConnected = true,
+  waBannerDismissed = false, wpDiscoveryDismissed = false, siteDefaultLocale, regenCount = 0,
 }: Props) {
   const { toast } = useToast()
   const router = useRouter()
@@ -123,11 +130,17 @@ export default function SiteDetailClient({
   const hideModules = !isSuperAdmin && !CLIENT_MODULES_ENABLED
   const coerceTab = (t: TabKey): TabKey => (hideModules && t === 'moduls' ? 'articles' : t)
   const [activeTab, setActiveTab] = useState<TabKey>(coerceTab(defaultTab))
+  // ONE TAB, ONE PAYLOAD (W1). The opened tab's data came with the page; the others
+  // are asked for when first opened, as promises their boundary waits on. A promise
+  // kept here is resolved state — returning to a tab is instant.
+  const [tabData, setTabData] = useState<Partial<Record<TabKey, TabSource>>>(
+    () => ({ [coerceTab(defaultTab)]: initialTabData }),
+  )
+  const [, startTabTransition] = useTransition()
   const [showImport, setShowImport] = useState(false)
-  // Shown on the first dashboard visit after a WordPress clone. Starts true and is
-  // narrowed by the framework check + the remembered dismissal inside the panel's
-  // host below, so a non-WordPress site never pays for the check.
-  const [wpDiscoveryOpen, setWpDiscoveryOpen] = useState(true)
+  // The WordPress moment: shown for a WordPress site until this viewer dismisses it
+  // (a cookie the server already read — see dismissals.ts).
+  const [wpDiscoveryOpen, setWpDiscoveryOpen] = useState(!wpDiscoveryDismissed)
   const [importUrl, setImportUrl] = useState<string | null>(null)
   const [onboardingDone, setOnboardingDone] = useState(false)
   /** True while the running capture is the continuation of a brand read. */
@@ -162,12 +175,14 @@ export default function SiteDetailClient({
   // later "proceed" click (NOT a timer) can open the right next step.
   const captureInfo = useRef<{ url: string; framework: string | null }>({ url: '', framework: null })
 
-  // Resync the active tab when the server-provided defaultTab changes (e.g.
-  // navigating via a <Link> to ?tab=connexio). Render-time state sync.
-  const [syncedDefault, setSyncedDefault] = useState(defaultTab)
-  if (defaultTab !== syncedDefault) {
-    setSyncedDefault(defaultTab)
+  // Resync when the server sends fresh data (a <Link> to ?tab=connexio, or a
+  // router.refresh() after an import): adopt its tab and its data. Render-time
+  // state sync — what the server sent replaces whatever this tab had.
+  const [syncedData, setSyncedData] = useState(initialTabData)
+  if (initialTabData !== syncedData) {
+    setSyncedData(initialTabData)
     setActiveTab(coerceTab(defaultTab))
+    setTabData(d => ({ ...d, [coerceTab(defaultTab)]: initialTabData }))
   }
 
   const isLocked = (s: SectionDef) => !isSuperAdmin && !!s.premium
@@ -175,6 +190,14 @@ export default function SiteDetailClient({
   const switchTab = (rawTab: TabKey) => {
     const tab = coerceTab(rawTab)
     setActiveTab(tab)
+    if (!tabData[tab]) {
+      // First visit: the tab's skeleton shows while its data loads.
+      setTabData(d => ({ ...d, [tab]: loadSiteTabAction(siteId, tab) }))
+    } else if (REFRESH_ON_RETURN.has(tab) && tab !== activeTab) {
+      // A return: what it had renders at once; the refresh replaces it when it lands
+      // (a transition keeps the old content on screen instead of the skeleton).
+      startTabTransition(() => setTabData(d => ({ ...d, [tab]: loadSiteTabAction(siteId, tab) })))
+    }
     // Articles is the default workspace, so it owns the clean URL; the rest carry ?tab=.
     const url = tab === 'articles'
       ? `/dashboard/sites/${siteId}`
@@ -284,11 +307,16 @@ export default function SiteDetailClient({
         </Button>
       </div>
 
-      {/* Section workspace: a left nav rail + the active section's content. */}
+      {/* Section workspace: a left nav rail + the active section's content. The
+          provider gets a SUMMARY of the theme (partial): it reads what this page
+          shows and runs the onboarding capture, but cannot save a theme it was
+          never given whole — only a capture or a template, which replace all of
+          it, re-enable its autosave. */}
       <ThemeStudioProvider
         siteId={siteId}
         subdomain={subdomain ?? null}
-        initialTheme={initialTheme}
+        initialTheme={summaryTheme(initialTheme)}
+        partial
         defaultLocale={siteDefaultLocale}
         canTranslate={isSuperAdmin}
         isPremium={isSuperAdmin}
@@ -333,80 +361,40 @@ export default function SiteDetailClient({
           <SiteSectionCards active={activeTab} onSelect={switchTab} isLocked={isLocked} isSuperAdmin={isSuperAdmin} />
 
           {/* Suggeriment discret (descartable) per connectar l'agent de WhatsApp. */}
-          {!waConnected && !showOnboarding && <ConnectAgentBanner />}
+          {!waConnected && !showOnboarding && !waBannerDismissed && <ConnectAgentBanner />}
 
           {/* The WordPress moment: only for a site we detected as WordPress, only
               once, and only after onboarding is out of the way. */}
           {wpDiscoveryOpen && !showOnboarding && !agentStepVisible && (
-            <Suspense fallback={null}>
-              <WordPressDiscoveryHost
-                siteId={siteId}
-                onImport={() => { setShowImport(true); setWpDiscoveryOpen(false) }}
-                onOpenGuide={() => { switchTab('connexio'); setWpDiscoveryOpen(false) }}
-                onDismiss={() => setWpDiscoveryOpen(false)}
-              />
-            </Suspense>
+            <WordPressDiscoveryHost
+              siteId={siteId}
+              onImport={() => { setShowImport(true); setWpDiscoveryOpen(false) }}
+              onOpenGuide={() => { switchTab('connexio'); setWpDiscoveryOpen(false) }}
+              onDismiss={() => setWpDiscoveryOpen(false)}
+            />
           )}
 
           <div className="min-w-0">
-            {activeTab === 'resum' && (
-              <Suspense fallback={<SectionSkeleton />}>
-                <OverviewPanel
-                  siteId={siteId}
-                  subdomain={subdomain ?? null}
-                  totalArticles={initialPostsMeta.total}
-                  publishedArticles={initialPostsMeta.published}
-                  initialStats={initialStats}
-                />
-              </Suspense>
-            )}
-
-            {activeTab === 'articles' && (
-              <PostsManager
-                siteId={siteId}
-                subdomain={subdomain ?? null}
-                siteName={siteName}
-                initialPosts={initialPosts}
-                initialMeta={initialPostsMeta}
-                isSuperAdmin={isSuperAdmin}
-                onImport={() => setShowImport(true)}
-              />
-            )}
-
-            {activeTab === 'tema' && <StudioLaunchPanel siteId={siteId} />}
-
-            {activeTab === 'moduls' && !hideModules && (
-              <ErrorBoundary label="El panell de mòduls ha tingut un error">
-                <Suspense fallback={<SectionSkeleton />}>
-                  <ModulesManager
+            {/* Each tab has its OWN boundary (keyed): a tab opened for the first time
+                shows a skeleton the shape of the page while its data loads (the
+                header and the tab cards stay on screen), and a tab that fails shows
+                its error, never a blank page. The tab the page opened on arrives
+                with the page and never suspends. */}
+            <ErrorBoundary key={`eb-${activeTab}`} label="Aquesta secció no s'ha pogut carregar">
+              <Suspense key={activeTab} fallback={<SectionSkeleton />}>
+                {tabData[activeTab] && (
+                  <TabBody
+                    data={tabData[activeTab]!}
                     siteId={siteId}
-                    subdomain={subdomain ?? null}
-                    isPremium={isSuperAdmin}
-                    initialModules={initialModules}
-                    plan={plan}
-                    previewPostSlug={previewPostSlug}
+                    siteName={siteName}
+                    subdomain={subdomain}
+                    isSuperAdmin={isSuperAdmin}
+                    hideModules={hideModules}
+                    onImport={() => setShowImport(true)}
                   />
-                </Suspense>
-              </ErrorBoundary>
-            )}
-
-            {activeTab === 'connexio' && (
-              <Suspense fallback={<SectionSkeleton />}>
-                {isSuperAdmin
-                  ? <ConnexioTab siteId={siteId} apiKey={apiKey} subdomain={subdomain} />
-                  : <ClientPublishTab siteId={siteId} subdomain={subdomain} />}
+                )}
               </Suspense>
-            )}
-
-            {activeTab === 'usuaris' && (
-              isSuperAdmin
-                ? <SiteUsersManager siteId={siteId} assignedUsers={assignedUsers} availableClients={availableClients} />
-                : <PremiumPanel
-                    feature="Usuaris assignats"
-                    description="Convida companys d’equip perquè gestionin aquest lloc amb tu. Disponible al pla Premium."
-                    perks={['Múltiples editors per lloc', 'Rols i permisos', 'Activitat de l’equip']}
-                  />
-            )}
+            </ErrorBoundary>
           </div>
         </div>
       </ThemeStudioProvider>
@@ -438,6 +426,77 @@ export default function SiteDetailClient({
       )}
     </div>
   )
+}
+
+/** A tab's data: in hand (it came with the page), or on its way (a tab switch). */
+type TabSource = SiteTabData | Promise<SiteTabData>
+
+/**
+ * One tab, from its data. A promise suspends the tab's own boundary until it
+ * resolves (`use` may be called conditionally); data already in hand renders at
+ * once. The panels inside are the ones the page always had; only where their data
+ * comes from changed.
+ */
+function TabBody({
+  data, siteId, siteName, subdomain, isSuperAdmin, hideModules, onImport,
+}: {
+  data: TabSource
+  siteId: string
+  siteName: string
+  subdomain?: string
+  isSuperAdmin: boolean
+  hideModules: boolean
+  onImport: () => void
+}) {
+  const d = data instanceof Promise ? use(data) : data
+  switch (d.tab) {
+    case 'articles':
+      return (
+        <PostsManager
+          siteId={siteId}
+          subdomain={subdomain ?? null}
+          siteName={siteName}
+          initialPage={d.page}
+          isSuperAdmin={isSuperAdmin}
+          onImport={onImport}
+        />
+      )
+    case 'resum':
+      return (
+        <OverviewPanel
+          siteId={siteId}
+          subdomain={subdomain ?? null}
+          totalArticles={d.total}
+          publishedArticles={d.published}
+          initialStats={d.stats}
+        />
+      )
+    case 'tema':
+      return <StudioLaunchPanel siteId={siteId} />
+    case 'moduls':
+      return hideModules ? null : (
+        <ModulesManager
+          siteId={siteId}
+          subdomain={subdomain ?? null}
+          isPremium={isSuperAdmin}
+          initialModules={d.modules}
+          plan={d.plan}
+          previewPostSlug={d.previewPostSlug ?? undefined}
+        />
+      )
+    case 'connexio':
+      return isSuperAdmin && d.apiKey
+        ? <ConnexioTab siteId={siteId} apiKey={d.apiKey} subdomain={subdomain} />
+        : <ClientPublishTab siteId={siteId} subdomain={subdomain} />
+    case 'usuaris':
+      return isSuperAdmin
+        ? <SiteUsersManager siteId={siteId} assignedUsers={d.assignedUsers} availableClients={d.availableClients} />
+        : <PremiumPanel
+            feature="Usuaris assignats"
+            description="Convida companys d’equip perquè gestionin aquest lloc amb tu. Disponible al pla Premium."
+            perks={['Múltiples editors per lloc', 'Rols i permisos', 'Activitat de l’equip']}
+          />
+  }
 }
 
 // Section switcher — proper CARDS (icon block + label + description). On sm+
@@ -511,24 +570,16 @@ function SiteSectionCards({
 
 // ── Suggeriment discret: connecta l'agent de WhatsApp ─────────────────────────
 // Una sola línia, descartable per sempre (founder 2026-07-06: útil, mai pesat —
-// la configuració de debò viu, ben visible, a /dashboard/agent).
-const WA_BANNER_DISMISS_KEY = 'carma:wa-banner-dismissed'
-const emptySubscribe = () => () => {}
-
+// la configuració de debò viu, ben visible, a /dashboard/agent). El descart viu
+// en una galeta (dismissals.ts): el servidor ja el sap, i el bàner no apareix tard
+// empenyent la pàgina avall (CLS).
 function ConnectAgentBanner() {
-  // localStorage és un magatzem extern → useSyncExternalStore (hydration-safe:
-  // el servidor el considera descartat i el client corregeix al primer render).
-  const initiallyDismissed = useSyncExternalStore(
-    emptySubscribe,
-    () => { try { return localStorage.getItem(WA_BANNER_DISMISS_KEY) === '1' } catch { return false } },
-    () => true,
-  )
   const [hiddenNow, setHiddenNow] = useState(false)
-  if (initiallyDismissed || hiddenNow) return null
+  if (hiddenNow) return null
 
   const dismiss = () => {
     setHiddenNow(true)
-    try { localStorage.setItem(WA_BANNER_DISMISS_KEY, '1') } catch { /* cosmètic */ }
+    rememberDismissal(WA_BANNER_COOKIE)
   }
 
   return (
@@ -633,13 +684,9 @@ function StudioLaunchPanel({ siteId }: { siteId: string }) {
 }
 
 /**
- * Gate for the WordPress moment.
- *
- * Split out so the panel itself stays a dumb presentational component and the
- * three conditions that decide whether it appears live in one readable place:
- * the capture detected WordPress, this viewer has not dismissed it for this site,
- * and we are past the mount (the dismissal lives in localStorage, which a server
- * render cannot see — reading it during render would hydrate mismatched).
+ * Gate for the WordPress moment: the capture detected WordPress (the viewer's
+ * dismissal was already applied by the page, from its cookie — see dismissals.ts).
+ * Rendered by the server like the rest of the page, so it never arrives late.
  */
 function WordPressDiscoveryHost({
   siteId, onImport, onOpenGuide, onDismiss,
@@ -650,19 +697,8 @@ function WordPressDiscoveryHost({
   onDismiss: () => void
 }) {
   const { detectedFramework, url } = useThemeStudio()
-  // localStorage is external state, so it is SUBSCRIBED to, not copied into state
-  // by an effect (a synchronous setState in an effect body is a cascading render —
-  // react-hooks v6 flags it and this repo runs at zero). The server snapshot is
-  // `true` = hidden, so the markup matches on both sides and the panel appears
-  // after hydration rather than flashing and disappearing.
-  const dismissed = useSyncExternalStore(
-    () => () => {},
-    () => wpDiscoveryDismissed(siteId),
-    () => true,
-  )
-
   const isWordPress = (detectedFramework ?? '').toLowerCase().includes('wordpress')
-  if (dismissed || !isWordPress) return null
+  if (!isWordPress) return null
 
   return (
     <WordPressDiscovery

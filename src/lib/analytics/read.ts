@@ -1,11 +1,9 @@
-// Analytics read model — aggregation over page_views.
+// Analytics read model — the daily rollups of migration 041, with the raw
+// page_views scan as the pre-migration fallback.
 //
 // Plain server utilities (NOT server actions) that take an admin Supabase client,
 // so they're reusable from both server components (dashboard) and access-checked
-// server actions (the site Overview). Aggregation is done in JS over a bounded
-// window fetch: simple, index-backed, and correct for early-stage volumes. At
-// scale this is the natural place to swap in a SQL rollup/RPC without touching
-// callers.
+// server actions (the site Overview). Callers never learn which path answered.
 
 import type { createAdminClient } from '@/lib/supabase/admin'
 
@@ -43,7 +41,36 @@ function emptyStats(days: number): SiteStats {
 
 type ViewRow = { created_at: string; post_id: string | null; visitor_hash: string | null }
 
+/**
+ * A site's stats for the last `days` days.
+ *
+ * W1 (L'INSTANT): from the daily rollups of migration 041, in ONE call that reads
+ * O(days) rows — the series, both totals, the previous period and the six most
+ * read articles with their titles. Before 041 exists (PGRST202 / 42883) it falls
+ * back to the raw scan below, which has a flaw worth knowing: Supabase's API
+ * answers any select with at most 1,000 rows by default (Max rows), so on a site
+ * with more than 1,000 views in the window the old path silently reported 1,000.
+ * The rollup has no such ceiling.
+ */
 export async function fetchSiteStats(admin: Admin, siteId: string, days = 30): Promise<SiteStats> {
+  const rolled = await admin.rpc('site_stats', { p_site_id: siteId, p_days: days })
+  if (!rolled.error && rolled.data && typeof rolled.data === 'object') {
+    const d = rolled.data as {
+      days: number; totalViews: number; uniqueVisitors: number; prevViews: number
+      series: StatPoint[] | null; topPosts: TopPost[] | null
+    }
+    return {
+      days: d.days, totalViews: Number(d.totalViews) || 0, uniqueVisitors: Number(d.uniqueVisitors) || 0,
+      prevViews: Number(d.prevViews) || 0, series: d.series ?? emptyStats(days).series,
+      topPosts: (d.topPosts ?? []).map(p => ({ postId: p.postId, title: p.title ?? '(article eliminat)', slug: p.slug ?? '', views: Number(p.views) || 0 })),
+      capped: false,
+    }
+  }
+  return fetchSiteStatsFromRaw(admin, siteId, days)
+}
+
+/** The pre-041 path: aggregate raw page_views in JS (see fetchSiteStats for its ceiling). */
+async function fetchSiteStatsFromRaw(admin: Admin, siteId: string, days: number): Promise<SiteStats> {
   const since = sinceIso(days)
   const prevSince = sinceIso(days * 2)
 
@@ -88,11 +115,12 @@ export async function fetchSiteStats(admin: Admin, siteId: string, days = 30): P
   base.prevViews = prevCount.count ?? 0
   base.capped = rows.length >= ROW_CAP
 
-  // Resolve titles/slugs for the most-viewed posts.
+  // Resolve titles/slugs for the most-viewed posts — of THIS site only: the beacon
+  // is public and a view can name any post id.
   const topIds = [...postViews.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
   if (topIds.length) {
     const { data: postRows } = await admin
-      .from('posts').select('id, title, slug').in('id', topIds.map(([id]) => id))
+      .from('posts').select('id, title, slug').eq('site_id', siteId).in('id', topIds.map(([id]) => id))
     const meta = new Map((postRows ?? []).map(p => [p.id as string, p as { title: string; slug: string }]))
     base.topPosts = topIds.map(([postId, views]) => ({
       postId,

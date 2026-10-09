@@ -23,7 +23,6 @@ import {
 import { templateChromeJson, type BlogTemplate } from '@/lib/render/templates'
 import { archetypeForTemplate } from '@/lib/render/archetypes'
 import { adoptDoorDesign } from '@/lib/actions/design'
-import { stripHarmony } from '@/lib/design/revealTypes'
 import type { DoorDesignChoice } from '@/lib/onboarding/glimpse'
 
 type ChromeI18n = Record<string, { header?: string; footer?: string; section_title?: string }>
@@ -213,7 +212,7 @@ const AUTOSAVE_MS = 700
 const FREE_REGENS = 1
 
 export function ThemeStudioProvider({
-  siteId, subdomain = null, initialTheme, children, defaultLocale: defaultLocaleProp, canTranslate = false,
+  siteId, subdomain = null, initialTheme, partial = false, children, defaultLocale: defaultLocaleProp, canTranslate = false,
   isPremium = false, initialRegenCount = 0,
   onCaptureSuccess, onCaptureProceed,
 }: {
@@ -221,6 +220,14 @@ export function ThemeStudioProvider({
   /** sites.subdomain — the blog's public address. */
   subdomain?: string | null
   initialTheme: Theme | null
+  /**
+   * W1 — `initialTheme` is a SUMMARY (the site page: detection, URL, tokens), not
+   * the stored row. saveTheme writes the WHOLE row, so autosaving from a summary
+   * would null their captured chrome. A partial provider therefore never autosaves
+   * until a capture or a template has replaced every field (they always do); and it
+   * skips the Studio's article lookup, which only the Studio's canvas reads.
+   */
+  partial?: boolean
   children: ReactNode
   defaultLocale?: string
   canTranslate?: boolean
@@ -246,15 +253,20 @@ export function ThemeStudioProvider({
   const [active, setActive] = useState(!!initialTheme)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [savedAt, setSavedAt] = useState(0)
+  // False while this provider holds only a summary (see `partial`): the state is
+  // not a theme yet, so there is nothing it may save. A capture or a template —
+  // each sets every field — makes it whole.
+  const whole = useRef(!partial)
 
   // ── Canvas view + inline article editing ──
   const [view, setView] = useState<'feed' | 'article'>('feed')
   const [editableArticle, setEditableArticle] = useState<{ id: string; slug: string; title: string } | null>(null)
   useEffect(() => {
+    if (partial) return // the site page: no canvas, no article to edit
     let alive = true
     void getStudioArticle(siteId).then((a) => { if (alive) setEditableArticle(a) }).catch(() => {})
     return () => { alive = false }
-  }, [siteId])
+  }, [siteId, partial])
   const saveArticleField = useCallback(async (field: 'title' | 'excerpt', value: string) => {
     const art = editableArticle
     if (!art) return // sample preview — nothing to persist
@@ -395,7 +407,7 @@ export function ThemeStudioProvider({
   const reqId = useRef(0)
 
   useEffect(() => {
-    if (!active) return
+    if (!active || !whole.current) return
     if (serialized === lastSavedRef.current) return
 
     setSaveStatus('saving')
@@ -478,6 +490,8 @@ export function ThemeStudioProvider({
   // Apply a finished capture to the live theme state (identical to the old
   // single-response handler — just driven by the streamed `result` event).
   const applyResult = useCallback((data: AnalyzeResult) => {
+    // Every field below is set: the state is now a whole theme (see `partial`).
+    whole.current = true
     setExtractedHead(data.extracted_head)
     setExtractedHeader(data.extracted_header)
     setExtractedFooter(data.extracted_footer)
@@ -541,7 +555,7 @@ export function ThemeStudioProvider({
       header: data.extracted_header || null,
       baseUrl: data.base_url || null,
       styled: !!data.compiled_chrome_css,
-    }, data.site_name ?? '')
+    })
     if (res.error || !res.tokens || !res.chrome) {
       // The capture already applied: they keep their own site's look, which is
       // what onboarding did before W6. Never an error screen for this.
@@ -550,33 +564,19 @@ export function ThemeStudioProvider({
     }
     // What they chose is what they get — the preview drew exactly this: the
     // genome's tokens whole (its feed rhythm is part of the design), OUR cards
-    // (no preview ever drew their captured card), and the header by its policy.
-    // The autosave persists all of it, like any other edit; the tokens carry the
-    // genome's id, which is what lets the render add the genome's own stylesheet.
+    // (no preview ever drew their captured card), and THEIR header — as captured,
+    // or as SAFE PANEL (W0: never repainted, never redrawn). The autosave persists
+    // all of it, like any other edit; the tokens carry the genome's id, which is
+    // what lets the render add the genome's own stylesheet.
     setTokens({ ...DEFAULT_TOKENS, ...res.tokens })
     setExtractedCard('')
     setBlogSignature(s => (s?.card ? { ...s, card: null } : s))
-    const chrome = res.chrome
-    const genomeFonts = res.fontLinks ?? []
-    if (chrome.policy === 'rebuild') {
-      // A header we drew from their logo and links: self-contained, scoped JSON
-      // regions, like a starter template's — none of their page's CSS or scripts.
-      setExtractedHeader(chrome.header)
-      setExtractedFooter(chrome.footer)
-      setExtractedHead(''); setExtractedBodyAttrs(''); setExtractedScripts('')
-      setCompiledChromeCss(''); setChromeCompileStats(null)
-      setExternalStyles([]); setExternalScripts([])
-      setFontLinks(genomeFonts)
-    } else {
-      // Keep: their header exactly as captured. Harmonise: the same markup, with
-      // this design's palette and faces laid over it (a marked block, replaced
-      // rather than stacked if a design is ever applied twice).
-      if (chrome.policy === 'harmonise') {
-        const css = chrome.css
-        setCompiledChromeCss(prev => `${stripHarmony(prev)}\n${css}`.trim())
-      }
-      setFontLinks([...new Set([...genomeFonts, ...(data.font_links ?? [])])])
+    if (res.chrome.policy === 'safe_panel') {
+      // Their regions stay stored (they are where SAFE PANEL reads every link
+      // from); the verdict tells the render not to show their markup.
+      setChromeCompileStats((s: unknown) => ({ ...((s as Record<string, unknown> | null) ?? {}), faithful: false }))
     }
+    setFontLinks([...new Set([...(res.fontLinks ?? []), ...(data.font_links ?? [])])])
   }, [siteId])
 
   // Stream the capture pipeline over SSE, surfacing every step to the modal.
@@ -740,6 +740,8 @@ export function ThemeStudioProvider({
   // persists it, exactly like a capture — no LLM, no server round-trip here.
   const applyTemplate = useCallback(async (tpl: BlogTemplate, name: string) => {
     const { header, footer } = templateChromeJson(tpl, name)
+    // A template sets every field: the state is a whole theme (see `partial`).
+    whole.current = true
     setExtractedHead('')
     // A starter template ships its own scoped CSS — there is no captured chrome to
     // compile, so any blob from a previous capture must go.

@@ -1,17 +1,17 @@
-// W6 — THE CHROME LADDER, rendered.
+// THE CHROME LADDER, rendered — W0 (2026-10-09) replaced W6's generative rungs.
 //
-// The plan's rule (§9.1): what is sacred about a customer's header is NOT the
-// markup, it is the navigation and the identity — where the links go, what they
-// are called, the logo. So the three variants treat the header three ways:
+// W6 treated a header three ways, one per variant: keep it, `harmonise` it (repaint
+// their markup in our palette) or `rebuild` it (redraw their logo and first six
+// links in an archetype). Measured over the corpus, rebuild kept a median 35% of a
+// header's links and none of the footer's legal ones, and harmonise rewrote their
+// brand by design — the founder's criterion is fidelity, so both are gone for every
+// business with a website (reboot plan §3.8). What remains:
 //
-//   keep       their markup, their CSS, verbatim. Fidel — the source is fine.
-//   harmonise  their markup and their navigation, RE-TOKENISED: this design's
-//              palette and faces laid over their structure. Nothing moves; every
-//              link still works; the seam between a 2011 header and a new blog
-//              disappears. Elevat.
-//   rebuild    their CONTENT — logo, nav labels, hrefs, CTA — re-laid into a
-//              generated archetype in this design. Their navigation survives;
-//              their markup does not. Reimaginat.
+//   keep        their markup, their CSS — when the capture is faithful.
+//   safe_panel  their logo and EVERY link, in a frame we own (render/safePanel.ts)
+//               — when it is not. Nothing invented, nothing dropped.
+//   ours        an archetype header carrying their NAME — only when there is no
+//               website at all (nothing to be faithful to).
 //
 // Pure functions, no I/O. The Door's preview and the post-signup adoption call the
 // same ones, so what the visitor was shown is what their blog gets.
@@ -32,7 +32,7 @@ import { splitPageChrome } from '@/lib/scrape/pageSplit'
 import { ratio } from '@/lib/design/color'
 import type { FooterArchetype, Genome, HeaderArchetype } from '@/lib/design/genome'
 import type { DesignTokens } from '@/lib/scrape/tokens'
-import { CAPTURE_VERSION, HARMONY_MARK } from '@/lib/design/revealTypes'
+import { CAPTURE_VERSION } from '@/lib/design/revealTypes'
 
 export type NavLink = { label: string; href: string }
 
@@ -368,46 +368,18 @@ export function captureChrome(opts: {
   }
 }
 
-// ─── Harmonise ───────────────────────────────────────────────────────────────
-
 /** The colour that reads on the accent: whichever of ink or white contrasts more. */
 function onColour(bg: string): string {
   return ratio('#ffffff', bg) >= ratio('#111111', bg) ? '#ffffff' : '#111111'
 }
 
-/**
- * Their header in this design's palette and faces, without moving a pixel of
- * layout. This CSS is LIGHT DOM — it sits in the customer's own document next to
- * their compiled chrome CSS, with no shadow boundary to protect it — which is the
- * one place `!important` is still load-bearing. The blog is in a shadow root,
- * so these rules cannot reach it; the host is excluded by name.
- *
- * Icons are left alone: icon fonts live in font-family, so re-facing an `<i>` or a
- * `[class*=icon]` would turn it into a letter.
- *
- * Their logo sat on THEIR header's colour; it now sits on this surface. A one-colour
- * mark that would vanish there (Verne's white logo on a paper bar) is re-inked —
- * found by its file name, the one thing the markup and the capture share.
- */
-export function harmoniseCss(t: DesignTokens, logo?: ChromeNav['logo']): string {
-  const ground = t.colorBg, surface = t.colorSurface, ink = t.colorText, accent = t.colorAccent
-  const filter = logo ? logoFilter(logo.tone, surface) : ''
-  const file = logo ? (logo.src.split(/[?#]/)[0]?.split('/').pop() ?? '').replace(/[^\w.-]/g, '') : ''
-  const logoRule = filter && file.length >= 3 ? `\nbody img[src*="${file}"]{filter:${filter}!important}` : ''
-  const notIcon = ':not(.carma-embed-host):not(i):not([class*="icon"]):not([class*="fa-"]):not([class*="dashicons"]):not(svg):not(svg *)'
-  const chromeBoxes = 'header,footer,nav,[role="banner"],[role="contentinfo"],[class*="header"],[class*="footer"],[class*="navbar"],[class*="menu"],[id*="header"],[id*="footer"]'
-  return `${HARMONY_MARK}
-body{background:${ground}!important}
-body :is(${chromeBoxes}):not(.carma-embed-host){background-color:${surface}!important;border-color:${t.colorBorder}!important;box-shadow:none!important}
-body *${notIcon}{font-family:${t.fontBody}!important;color:${ink}!important}
-body :is(h1,h2,h3,h4,.site-title,.logo,[class*="brand"],[class*="title"])${notIcon}{font-family:${t.fontHeading}!important}
-body a${notIcon}{color:${ink}!important;text-decoration-color:${accent}!important}
-body a:hover${notIcon}{color:${accent}!important}
-body :is(button,[class*="btn"],[class*="button"],[class*="cta"])${notIcon}{background-color:${accent}!important;color:${onColour(accent)}!important;border-color:${accent}!important}${logoRule}
-${HARMONY_MARK}`
-}
-
-// ─── Rebuild ─────────────────────────────────────────────────────────────────
+// ─── Ours — only where there is no website ───────────────────────────────────
+//
+// W0 (reboot plan §3.8): this archetype header is NEVER drawn for a business that
+// has a website — that was `rebuild`, which kept a median 35% of their links and
+// none of their legal ones. It survives for the one case with nothing to be
+// faithful to: a business with no site at all (the Door's text / PDF / voice path,
+// `?nova=1`), where the header carries their name and no links.
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
@@ -485,7 +457,7 @@ ${footLayout[foot]}`
   }
 }
 
-// ─── The ladder, applied ─────────────────────────────────────────────────────
+// ─── The residency ladder, as a preview draws it (W0) ────────────────────────
 
 /** The theme fields a chrome treatment sets — the renderer's own vocabulary. */
 export type ChromeFields = {
@@ -495,28 +467,33 @@ export type ChromeFields = {
   extracted_head: string | null
   compiled_chrome_css: string | null
   font_links: string[]
+  /** `{ faithful: false }` → the renderer draws SAFE PANEL from the regions above. */
+  chrome_compile_stats?: { faithful: boolean } | null
+  /** What relative links in the regions resolve against. */
+  base_url?: string | null
 }
 
-/** The rungs a header can actually be DRAWN on (`replace` draws as `rebuild`). */
-export type DrawnPolicy = 'keep' | 'harmonise' | 'rebuild'
+/** What a header can be drawn as. Generation (`ours`) only without a website. */
+export type DrawnPolicy = 'keep' | 'safe_panel' | 'ours'
 
 /**
- * The rung a genome's header is drawn on, given what was captured. Keep and
- * harmonise show THEIR markup, so they need a faithful capture (see FAITHFUL);
- * without one both fall to rebuild — a header we drew from their logo and links
- * beats their markup rendered broken. With no capture known yet (`undefined`), the
- * genome's own rung stands: whoever draws it decides.
+ * Their header as it is when the capture is faithful (FAITHFUL above); SAFE PANEL —
+ * their logo and every link they publish — when it is not; ours only when there is
+ * no capture because there is no website. The genome's `chrome.policy` no longer
+ * decides anything here: Fidel, Elevat and Reimaginat differ in the body alone.
+ * `undefined` = not captured yet: what will be drawn is decided by the capture.
  */
-export function drawnPolicy(genome: Genome, capture: ChromeCapture | null | undefined): DrawnPolicy {
-  const p = genome.chrome.policy
-  if (p !== 'keep' && p !== 'harmonise') return 'rebuild'
-  if (capture === undefined) return p
-  return capture && capture.css && capture.faithful ? p : 'rebuild'
+export function drawnPolicy(_genome: Genome, capture: ChromeCapture | null | undefined): DrawnPolicy {
+  if (capture === undefined) return 'keep'
+  if (capture === null) return 'ours'
+  return capture.css && capture.faithful ? 'keep' : 'safe_panel'
 }
 
 /**
- * The header a genome's policy asks for, from a capture — as the Door's PREVIEW
- * draws it: their markup framed (see frameChrome), on the rung drawnPolicy allows.
+ * The header of a Door PREVIEW, from a capture: their markup framed (see
+ * frameChrome) when it is faithful; otherwise the regions as captured, marked so
+ * the renderer draws SAFE PANEL from them (their markup is not shown, their links
+ * all are); our archetype only for a business with no website.
  */
 export function chromeFor(opts: {
   capture: ChromeCapture | null
@@ -528,7 +505,7 @@ export function chromeFor(opts: {
   const { capture, genome, tokens } = opts
   const policy = drawnPolicy(genome, capture)
 
-  if (policy === 'keep' || policy === 'harmonise') {
+  if (policy === 'keep') {
     const c = capture!
     return {
       policy,
@@ -537,20 +514,38 @@ export function chromeFor(opts: {
         extracted_footer: frameChrome(c.footer, 'footer'),
         extracted_body_attrs: c.bodyAttrs,
         extracted_head: null,
-        compiled_chrome_css: `${c.css}\n${FRAME_CSS}${policy === 'harmonise' ? `\n${harmoniseCss(tokens, c.nav.logo)}` : ''}`,
+        compiled_chrome_css: `${c.css}\n${FRAME_CSS}`,
         font_links: c.fontLinks,
+        chrome_compile_stats: { faithful: true },
+        base_url: opts.homeHref,
       },
     }
   }
-  const rebuilt = rebuildChrome({
-    nav: capture?.nav ?? { logo: null, links: [], cta: null },
+  if (policy === 'safe_panel') {
+    const c = capture!
+    return {
+      policy,
+      fields: {
+        extracted_header: c.header,
+        extracted_footer: c.footer,
+        extracted_body_attrs: null,
+        extracted_head: null,
+        compiled_chrome_css: null,
+        font_links: c.fontLinks,
+        chrome_compile_stats: { faithful: false },
+        base_url: opts.homeHref,
+      },
+    }
+  }
+  const drawn = rebuildChrome({
+    nav: { logo: null, links: [], cta: null },
     siteName: opts.siteName, genome, tokens, homeHref: opts.homeHref,
   })
   return {
-    policy: 'rebuild',
+    policy: 'ours',
     fields: {
-      extracted_header: rebuilt.header,
-      extracted_footer: rebuilt.footer,
+      extracted_header: drawn.header,
+      extracted_footer: drawn.footer,
       extracted_body_attrs: null,
       extracted_head: null,
       compiled_chrome_css: null,

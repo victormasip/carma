@@ -17,8 +17,8 @@
 //     for that domain holds it, honestly `edited` otherwise;
 //   · it STORES the genome with its evidence and brief as the site's active design
 //     (migration 039). Without 039 it says so and stores nothing;
-//   · it RETURNS the theme the genome compiles to — tokens, fonts, and the header
-//     treatment its chrome policy asks for. It does NOT write site_themes: the
+//   · it RETURNS the theme the genome compiles to — tokens, fonts, and whether
+//     their header is shown as captured or as SAFE PANEL. It does NOT write site_themes: the
 //     Theme Studio owns that row through a debounced autosave, and a server-side
 //     write would be overwritten by the Studio's next save a second later. The
 //     Studio applies what this returns and its autosave persists it — the one
@@ -29,8 +29,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { updateTag } from 'next/cache'
 import { siteTag } from '@/lib/render/cache'
 import { COMPILER_VERSION } from '@/lib/design/compile'
-import { logoSrcOf, planAdoption, validatedId, type AdoptCapture, type AdoptChrome } from '@/lib/design/adopt'
-import { logoTone } from '@/lib/design/logoTone'
+import { planAdoption, validatedId, type AdoptCapture, type AdoptChrome } from '@/lib/design/adopt'
 import { directedFor, domainOf, saveActiveGenome } from '@/lib/design/store'
 import type { RevealVariantName } from '@/lib/design/revealTypes'
 import type { DesignTokens } from '@/lib/scrape/tokens'
@@ -40,7 +39,7 @@ export type AdoptResult = {
   error?: string
   /** The genome's tokens, stamped with its id (see DesignTokens.genome). */
   tokens?: DesignTokens
-  /** The genome's own font stylesheets. The Studio adds the header's for keep/harmonise. */
+  /** The genome's own font stylesheets. The Studio adds the header's own. */
   fontLinks?: string[]
   chrome?: AdoptChrome
   genomeId?: string
@@ -68,20 +67,17 @@ async function assertSiteAccess(siteId: string) {
 
 /**
  * The chosen design, adopted. Called once, from the onboarding capture's `result`
- * handler; `siteName` is the captured site's name (the rebuilt header's wordmark
- * when their logo could not be read and the Door's token carried none).
+ * handler. (W0: no logo is fetched to be re-inked any more — their header is never
+ * repainted or redrawn, so there is nothing to re-ink.)
  */
 export async function adoptDoorDesign(
   siteId: string,
   choice: DoorDesignChoice,
   capture: AdoptCapture,
-  siteName: string,
 ): Promise<AdoptResult> {
   try {
     const { admin, userId } = await assertSiteAccess(siteId)
-    // The one piece of I/O the plan needs: how their logo reads on a new ground.
-    const logo = logoSrcOf(capture)
-    const plan = planAdoption(choice, { ...capture, logoTone: logo ? await logoTone(logo) : null }, siteName)
+    const plan = planAdoption(choice, capture)
     if (!plan) return { error: 'Disseny no vàlid' }
 
     let source: NonNullable<AdoptResult['source']> = plan.derived ? 'derived' : 'edited'

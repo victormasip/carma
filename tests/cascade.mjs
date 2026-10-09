@@ -200,9 +200,10 @@ function fixtures() {
 
 /* ══ Helpers ═════════════════════════════════════════════════════════════════ */
 
-/** The blog's own stylesheet: the first <style> inside the shadow template. */
+/** The blog's own stylesheet: the first <style> inside the BLOG HOST's shadow
+ *  template (W0: SAFE PANEL's own shadow hosts may come before it). */
 function shadowCss(html) {
-  const m = /<template shadowrootmode="open"><style>([\s\S]*?)<\/style>/.exec(html)
+  const m = /<div class="carma-embed-host"><template shadowrootmode="open"><style>([\s\S]*?)<\/style>/.exec(html)
   return m ? m[1] : ''
 }
 
@@ -704,7 +705,7 @@ await withBrowser(async (b) => {
     let then = null
     if (existsSync(oldPath)) {
       const oldHtml = readFileSync(oldPath, 'utf8')
-        .replace(/(<template shadowrootmode="open"><style>[\s\S]*?)(<\/style>)/, (_m, a, z) => `${a}\n${c.css}${z}`)
+        .replace(/(<div class="carma-embed-host"><template shadowrootmode="open"><style>[\s\S]*?)(<\/style>)/, (_m, a, z) => `${a}\n${c.css}${z}`)
       then = await readIn(oldHtml)
     }
     const isLive = now !== null && expect(now)

@@ -7,13 +7,16 @@
 // Usage:
 //   /api/img?src=<absolute-url-or-dataURI>&w=640&fmt=webp&q=78
 //
-// Hardened: SSRF-safe URL validation, sane size cap, no path traversal, no
-// arbitrary CDN access. Failures stream the original src as a redirect (graceful
-// degrade — the article never breaks because of an image transform error).
+// Hardened: SSRF-safe URL validation on EVERY redirect hop and on the address the
+// name resolves to (W1 — before, only the first URL was checked and `fetch` then
+// followed redirects anywhere, and a public name pointing at a private address
+// passed), a size cap while streaming, no path traversal, no arbitrary CDN
+// access. Failures redirect to the original src (graceful degrade — the article
+// never breaks because of an image transform error).
 
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
-import { isSafeUrl } from '@/lib/scrape/http'
+import { safeFetchBinary } from '@/lib/scrape/http'
 
 const MAX_WIDTH = 2400
 const MAX_BYTES_IN = 12 * 1024 * 1024   // refuse to fetch > 12 MB
@@ -60,19 +63,16 @@ export async function GET(request: NextRequest) {
       if (data.buf.length > MAX_BYTES_IN) throw new Error('source too large')
       buf = data.buf
     } else {
-      if (!isSafeUrl(src)) throw new Error('unsafe src')
-      const res = await fetch(src, {
-        signal: AbortSignal.timeout(10_000),
+      const res = await safeFetchBinary(src, {
+        maxBytes: MAX_BYTES_IN, timeout: 10_000, maxRedirects: 3, resolveDns: true,
         headers: { 'User-Agent': 'Carma-Image/1.0' },
       })
-      if (!res.ok) throw new Error(`upstream ${res.status}`)
-      const ct = res.headers.get('content-type') ?? ''
+      if (!res) throw new Error('unsafe or unavailable src')
+      const ct = res.contentType
       if (!ct.startsWith('image/') && !ct.startsWith('application/octet-stream')) {
         throw new Error(`unexpected content-type ${ct}`)
       }
-      const ab = await res.arrayBuffer()
-      if (ab.byteLength > MAX_BYTES_IN) throw new Error('source too large')
-      buf = Buffer.from(ab)
+      buf = Buffer.from(res.body)
     }
   } catch {
     // Graceful degrade — redirect to the original src so the article still renders.
@@ -90,7 +90,10 @@ export async function GET(request: NextRequest) {
       .resize({ width, withoutEnlargement: true, fastShrinkOnLoad: true })
 
     if (fmt === 'avif') {
-      out = await pipeline.avif({ quality, effort: 4 }).toBuffer()
+      // effort 2, not the default 4: the first visitor of a variant waits for this
+      // encode (the CDN serves everyone after them), and on a hero image that wait
+      // IS their LCP. Roughly twice as fast for a few percent more bytes.
+      out = await pipeline.avif({ quality, effort: 2 }).toBuffer()
       outMime = 'image/avif'
     } else if (fmt === 'jpeg') {
       out = await pipeline.jpeg({ quality, mozjpeg: true }).toBuffer()

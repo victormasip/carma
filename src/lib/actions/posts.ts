@@ -11,6 +11,7 @@ import { rewriteSelection, type RewriteMode } from '@/lib/writing/rewrite'
 import { harvestSiteBrief, generateArticle, sanitizeHtml, type GeneratedArticle } from '@/lib/writing/generate'
 import { ARTICLE_POST_COLS, resolveRenderTheme } from '@/lib/render/blogRender'
 import { buildCanvasSpec, type CanvasSpec } from '@/lib/render/canvas'
+import { loadPostsPage, type PostListPage, type PostStatusFilter } from '@/lib/posts/list'
 import type { DesignTokens } from '@/lib/scrape/tokens'
 
 type ActionResult = { error?: string }
@@ -175,73 +176,28 @@ async function assertPremiumAccess(siteId: string): Promise<{ admin: ReturnType<
   return { admin, isPremium }
 }
 
-const POSTS_PAGE_SIZE = 12
-
-export type PostListItem = { id: string; title: string; slug: string; is_published: boolean; created_at: string; featured_image: string | null }
-export type PostListResult = {
-  posts: PostListItem[]
-  page: number
-  pageCount: number
-  filteredCount: number
-  total: number
-  published: number
-  drafts: number
-  /** How many are template STARTER posts (meta.sample) — drives the one-click
-   *  "remove all sample articles" affordance after onboarding. */
-  samples: number
-  error?: string
-}
-
-const EMPTY_LIST: PostListResult = { posts: [], page: 1, pageCount: 1, filteredCount: 0, total: 0, published: 0, drafts: 0, samples: 0 }
+export type { PostListItem } from '@/lib/posts/list'
 
 /**
- * Paginated, server-side post listing. Never returns more than
- * POSTS_PAGE_SIZE rows; search + status filtering happen in the database so
- * the full table is never loaded into the client.
+ * One page of the dashboard list (W1): a keyset page after `after`, the site's
+ * totals from its counter row. See lib/posts/list.ts.
+ */
+export type PostListResult = PostListPage & { error?: string }
+
+const EMPTY_LIST: PostListResult = { posts: [], next: null, filteredCount: 0, total: 0, published: 0, drafts: 0, samples: 0 }
+
+/**
+ * Paginated, server-side post listing. Never returns more than a page of rows;
+ * search, status and paging all happen in the database (keyset, not OFFSET), so
+ * page 400 costs what page 1 costs and the table is never loaded into the client.
  */
 export async function listPosts(
   siteId: string,
-  opts: { page?: number; q?: string; status?: 'all' | 'published' | 'draft' } = {},
+  opts: { after?: string | null; q?: string; status?: PostStatusFilter } = {},
 ): Promise<PostListResult> {
   try {
     const admin = await assertSiteAccess(siteId)
-    const page = Math.max(1, Math.floor(opts.page ?? 1))
-    const from = (page - 1) * POSTS_PAGE_SIZE
-    const to = from + POSTS_PAGE_SIZE - 1
-
-    let query = admin
-      .from('posts')
-      .select('id, title, slug, is_published, created_at, featured_image', { count: 'exact' })
-      .eq('site_id', siteId)
-
-    if (opts.status === 'published') query = query.eq('is_published', true)
-    if (opts.status === 'draft') query = query.eq('is_published', false)
-
-    const term = opts.q?.trim().replace(/[,%()\\*]/g, '')
-    if (term) query = query.or(`title.ilike.%${term}%,slug.ilike.%${term}%`)
-
-    const [{ data, count, error }, totalRes, publishedRes, samplesRes] = await Promise.all([
-      query.order('created_at', { ascending: false }).range(from, to),
-      admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId),
-      admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId).eq('is_published', true),
-      admin.from('posts').select('id', { count: 'exact', head: true }).eq('site_id', siteId).contains('meta', { sample: true }),
-    ])
-
-    if (error) return { ...EMPTY_LIST, page, error: error.message }
-
-    const filteredCount = count ?? 0
-    const total = totalRes.count ?? 0
-    const published = publishedRes.count ?? 0
-    return {
-      posts: (data ?? []) as PostListItem[],
-      page,
-      pageCount: Math.max(1, Math.ceil(filteredCount / POSTS_PAGE_SIZE)),
-      filteredCount,
-      total,
-      published,
-      drafts: total - published,
-      samples: samplesRes.count ?? 0,
-    }
+    return await loadPostsPage(admin, siteId, opts)
   } catch (err) {
     return { ...EMPTY_LIST, error: err instanceof Error ? err.message : 'Error desconegut' }
   }
